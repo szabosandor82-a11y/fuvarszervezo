@@ -1,29 +1,17 @@
-FUVAR-SZERVEZŐ V11 – GITHUB PAGES
+FUVAR-SZERVEZŐ V12 – JAVÍTOTT GITHUB PAGES VERZIÓ
 
-Fő újítások:
-- dinamikus járműkezelés, hozzáadás, szerkesztés, ki-/bekapcsolás;
-- szerkeszthető sofőrnevek;
-- 3,5 / 7,5 / 12 / 24 tonnás járműtípusok;
-- csak a Martin-fuvarokat kell megjelölni az Excelben, a többit az aktív autók között osztja szét;
-- 4–6 méteres szálanyag automatikusan platós/KCR/kamion típusú aktív autóra kerül;
-- import előtti, egymás utáni javító varázsló piros mezőkkel;
-- üres adatokkal is enged menteni;
-- a kézi párosításokat helyben megjegyzi;
-- központi beszállítói telephely beállítható;
-- felvétel dátuma rendelésenként módosítható;
-- 16:00 után, az alkalmazás megnyitásakor a nem teljesített aznapi fuvar másnapra kerül;
-- rendelésenként nagy zöld teljesítésgomb;
-- tételek külön pipálhatók;
-- kameraikon közvetlenül megnyitja a telefon kameráját;
-- gyors fehér pluszgomb új úticélhoz;
-- törzsadatok mindhárom fülön hozzáadhatók;
-- telefonra átvihető JSON-adatmentés.
+Javítások:
+- Fuvar szétosztása gomb visszaállítva.
+- Külön Útvonal optimalizálása gomb.
+- Szigetszentmiklós, Kereskedő utca 2. alap indulási cím.
+- A szétosztás figyelembe veszi a sofőrök indulási települését és a terhelést.
+- Projekt kiválasztásakor a hibajavító ablak automatikusan kitölti a címet.
+- Beszállító kiválasztásakor a központi cím automatikusan bekerül, de átírható.
+- SERPA projekt- és beszállítónevek bekerültek a törzsadatokba; a Gienger neve Gienger Hungária Kft.
+- Valós közúti útvonal megjelenítése OSRM alapján.
+- Excel és PDF export visszaállítva tétellistával.
+- Felvételi és lerakási időablakok visszaállítva.
+- Hangrögzítés visszaállítva a kamera/jelentés ablakban.
+- Telefonos mentés mellett visszatöltés is van, összevonás vagy csere lehetőségével.
 
-GitHub feltöltés:
-A ZIP fájljait közvetlenül a repository gyökerébe töltsd. Ne tölts fel külön szerver- vagy public mappát.
-
-Fontos:
-A GitHub Pages nem biztosít automatikus, eszközök közötti élő szinkront. A 16:00 utáni áthelyezés az alkalmazás megnyitásakor vagy frissítésekor fut.
-
-Kötelező véglegesítési emlékeztető:
-Ha késznek érzed a rendszert, vissza kell térni az admin/sofőr bejelentkezéshez, a csak saját aznapi feladatokhoz, a feladatátadás naplózásához és a valódi telefonos szinkronhoz.
+A többfelhasználós belépés és automatikus telefonos szinkron továbbra is a véglegesítés előtt kötelező feladat.
