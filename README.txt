@@ -1,64 +1,86 @@
-FUVAR-SZERVEZŐ V7
+FUVAR-SZERVEZŐ V8
+==================
 
-A V7 fő javítása
-A hangrögzítés és a szállítólevél-fotózás most külön, jól látható SOFŐR MÓD menüpontból érhető el.
+A V8 már valódi, többfelhasználós rendszer:
 
-HOL TALÁLHATÓ?
-1. Nyisd meg az alkalmazást telefonon.
-2. Az alsó menüben nyomd meg a lila mikrofonos „Sofőr mód” gombot.
-3. Válaszd ki:
-   - Márió
-   - Patrik
-   - Martin
-4. Válaszd ki a fuvarnapot.
-5. A rendelésnél nyomd meg:
-   „📷 🎤 Fotó / hang / jelentés”
+ADMIN
+- csak az admin látja a teljes fuvarszervező felületet;
+- látja mindhárom sofőr feladatait, térképeit, importot és törzsadatokat;
+- külön „Felhasználók” menüpontban létrehozhat, szerkeszthet, inaktiválhat és törölhet felhasználókat;
+- e-mail-címet, jelszót, szerepkört és sofőr-hozzárendelést állíthat be;
+- látja, ha valamelyik sofőr átadott egy feladatot másik autónak;
+- az átadási napló megőrzi, ki, mikor és kinek adta át a rendelést.
 
-A MEGNYÍLÓ ABLAKBAN
-- szállítólevelet lehet fotózni;
-- több fotó is csatolható;
-- kézi megjegyzés írható;
-- hangfelvétel indítható és leállítható;
-- a felvétel visszahallgatható;
-- diktálásból magyar szöveg készíthető támogatott böngészőben;
-- a rendelés teljesítettnek jelölhető;
-- a jelentés elküldhető a szabo.sandor@stand98.hu címre.
+SOFŐRÖK
+- Márió, Patrik és Martin külön e-mail-címmel és jelszóval jelentkezik be;
+- csak a saját, aznapi feladatait látja;
+- más napot, másik sofőr teljes listáját, importot és törzsadatokat nem lát;
+- egy gombbal átadhat egy feladatot a másik két sofőr egyikének;
+- az átadás azonnal megjelenik az adminnál és a fogadó sofőrnél;
+- hosszú szálanyag nem ponyvás autóra történő átadásakor figyelmeztetés keletkezik;
+- rendeléshez szállítólevél-fotó, kézi megjegyzés, hangfelvétel és diktált szöveg csatolható;
+- a jelentés teljesített állapotot is beállíthat.
 
-FONTOS IPHONE-ON
-- az alkalmazást HTTPS GitHub Pages címről kell megnyitni;
-- a Safari első használatkor engedélyt kér a mikrofonhoz és a kamerához;
-- ezt engedélyezni kell;
-- ha korábban letiltottad:
-  Beállítások → Safari → Kamera / Mikrofon, vagy
-  az oldal címsora mellett az oldalbeállításokban engedélyezd.
+BEJELENTKEZÉS
+Az első admin a .env fájlban beállított:
+ADMIN_EMAIL
+ADMIN_PASSWORD
 
-E-MAIL-KÜLDÉS
-GitHub Pages módban:
-- a program megnyitja a telefon megosztási vagy e-mail felületét;
-- a fotó és a hangfájl csatolható;
-- a küldést a telefonon kell véglegesíteni.
+Az első indulás után az admin a Felhasználók menüben hozza létre:
+- Márió felhasználóját, driverKey = mario
+- Patrik felhasználóját, driverKey = patrik
+- Martin felhasználóját, driverKey = martin
 
-Teljesen automatikus küldéshez:
-- a csomag server mappáját kell futtatni;
-- SMTP-adatok szükségesek;
-- AI-alapú hangátíráshoz opcionálisan OpenAI API-kulcs szükséges.
+HELYI INDÍTÁS
+1. Telepíts Node.js 20 vagy újabb verziót.
+2. Csomagold ki a projektet.
+3. Másold a .env.example fájlt .env névre.
+4. Módosítsd legalább:
+   JWT_SECRET
+   ADMIN_EMAIL
+   ADMIN_PASSWORD
+5. Parancssorban a projekt mappájában:
+   npm install
+   npm start
+6. Nyisd meg:
+   http://localhost:3000
 
-GITHUB FRISSÍTÉS
-A repository MAIN ágában írd felül:
-index.html
-styles.css
-app.js
-data.js
-manifest.webmanifest
-sw.js
-icon-192.png
-icon-512.png
+AUTOMATIKUS E-MAIL
+A .env fájlban töltsd ki:
+SMTP_HOST
+SMTP_PORT
+SMTP_SECURE
+SMTP_USER
+SMTP_PASS
+MAIL_FROM
+REPORT_TO=szabo.sandor@stand98.hu
 
-A server mappát is feltöltheted, de GitHub Pages nem futtatja.
+AI HANGÁTÍRÁS
+Opcionálisan:
+OPENAI_API_KEY
+OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
 
-FRISSÍTÉS UTÁN
-1. Várj 1–3 percet.
-2. Számítógépen Ctrl+F5.
-3. iPhone-on töröld a régi főképernyős alkalmazást.
-4. Safariban nyisd meg az oldalt.
-5. Megosztás → Hozzáadás a Főképernyőhöz.
+TELEPÍTÉS INTERNETRE
+A V8 NEM FUTTATHATÓ CSAK GITHUB PAGESEN, mert biztonságos:
+- bejelentkezést,
+- jelszókezelést,
+- központi adatbázist,
+- eszközök közötti szinkront,
+- automatikus e-mailt
+igényel.
+
+Használható például:
+- Render
+- Railway
+- Fly.io
+- VPS
+- céges szerver
+
+A teljes projektet kell telepíteni, nem csak a public mappát.
+A data/store.json futás közben automatikusan létrejön.
+
+BIZTONSÁG
+- a jelszavak bcrypt hash-ként tárolódnak;
+- a bejelentkezés HTTP-only cookie-val működik;
+- a sofőr API-szinten sem tud másik sofőr vagy másik nap feladataihoz hozzáférni;
+- éles használatnál kötelező a HTTPS és erős JWT_SECRET.

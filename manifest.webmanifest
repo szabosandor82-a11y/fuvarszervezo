@@ -1,7 +1,7 @@
 {
-  "name": "Fuvarszervező V7",
-  "short_name": "Fuvarszervező V7",
-  "start_url": "./index.html",
+  "name": "Fuvarszervező V8",
+  "short_name": "Fuvarszervező V8",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#f2f6f8",
   "theme_color": "#103A56",
@@ -20,5 +20,5 @@
     }
   ],
   "version": "4.0",
-  "description": "Fuvarszervező külön Sofőr móddal, szállítólevél-fotóval és hangrögzítéssel."
+  "description": "Admin- és sofőrfelületes fuvarszervező jogosultságkezeléssel és valós idejű feladatátadással."
 }
