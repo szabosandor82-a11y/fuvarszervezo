@@ -29,7 +29,6 @@ let state={
 };
 let importRows=[], importSourceRows=[], importHeaderMap={}, masterType='projects';
 let maps={}, routeLayers={}, installPrompt=null;
-let currentAdmin=null,userTab='users';const adminSocket=typeof io==='function'?io():null;
 let mediaRecorder=null,audioChunks=[],audioBlob=null,feedbackPhotos=[];
 
 const today=()=>new Date().toISOString().slice(0,10);
@@ -55,11 +54,7 @@ function excelDate(v){
 }
 function save(){
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
-  $('#saveState').textContent='Mentés…';
-  fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(state)})
-    .then(r=>{if(r.status===401)location.href='/';return r})
-    .then(()=>{$('#saveState').textContent='Szerveren mentve'})
-    .catch(()=>{$('#saveState').textContent='Helyben mentve'});
+  $('#saveState').textContent='Automatikusan mentve';
   render();
 }
 function load(){
@@ -79,67 +74,10 @@ function dayOrders(driver=null){return state.orders.filter(o=>o.scheduleDate===s
 function driverVehicle(k){return state.settings[k+'Vehicle']||DRIVERS[k].name}
 function showPage(id){
   $$('.page').forEach(x=>x.classList.toggle('active',x.id===id));
-  
-$('#newUserBtn').onclick=()=>{$('#userDialogTitle').textContent='Új felhasználó';$('#editUserId').value='';$('#userName').value='';$('#userEmail').value='';$('#userPassword').value='';$('#userRole').value='driver';$('#userDriverKey').value='';$('#userActive').checked=true;$('#userDialog').showModal()};
-$('#userForm').onsubmit=async e=>{
-  e.preventDefault();const id=$('#editUserId').value,payload={name:$('#userName').value,email:$('#userEmail').value,password:$('#userPassword').value,role:$('#userRole').value,driverKey:$('#userDriverKey').value,active:$('#userActive').checked};
-  try{
-    await api(id?'/api/users/'+id:'/api/users',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    $('#userDialog').close();await renderUsers();
-  }catch(err){alert(err.message)}
-};
-$$('[data-user-tab]').forEach(b=>b.onclick=()=>{
-  $$('[data-user-tab]').forEach(x=>x.classList.toggle('active',x===b));
-  userTab=b.dataset.userTab;$('#usersList').classList.toggle('hidden',userTab!=='users');$('#transfersList').classList.toggle('hidden',userTab!=='transfers');
-});
-$('#adminLogoutBtn').onclick=async()=>{await fetch('/api/logout',{method:'POST'});location.href='/'};
-
-$$('.nav').forEach(x=>x.classList.toggle('active',x.dataset.page===id));
+  $$('.nav').forEach(x=>x.classList.toggle('active',x.dataset.page===id));
   scrollTo(0,0);render();
 }
-function render(){renderPlanner();renderOrders();renderDriverMode();renderMaster();renderUsers();fillSettings()}
-
-
-async function api(url,options={}){
-  const r=await fetch(url,options);const j=await r.json().catch(()=>({}));
-  if(r.status===401){location.href='/';throw new Error('Lejárt a munkamenet.')}
-  if(r.status===403){location.href='/driver.html';throw new Error('Nincs admin jogosultság.')}
-  if(!r.ok)throw new Error(j.error||'Hiba történt.');return j;
-}
-async function initializeAdmin(){
-  const m=await api('/api/me');currentAdmin=m.user;
-  if(currentAdmin.role!=='admin'){location.href='/driver.html';return}
-  try{
-    const remote=await api('/api/state');
-    if(remote&&Array.isArray(remote.orders)){
-      const empty=!remote.projects?.length&&!remote.suppliers?.length&&!remote.orders?.length;
-      if(empty&&(state.projects?.length||state.suppliers?.length)){
-        await api('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(state)});
-      }else{
-        state=remote;localStorage.setItem(STORAGE_KEY,JSON.stringify(state));render();
-      }
-    }
-  }catch(e){console.warn(e)}
-  await renderUsers();
-}
-async function renderUsers(){
-  const list=$('#usersList');if(!list)return;
-  try{
-    const users=await api('/api/users');
-    list.innerHTML=users.map(u=>`<article class="user-card ${u.active?'':'inactive'}">
-      <div class="master-top"><div><h3>${esc(u.name)}</h3><p>${esc(u.email)} · ${u.role==='admin'?'Admin':`Sofőr: ${esc(DRIVERS[u.driverKey]?.name||'nincs hozzárendelve')}`}</p></div><span class="badge">${u.active?'Aktív':'Inaktív'}</span></div>
-      <div class="card-actions"><button onclick="editUser('${u.id}')">Szerkesztés</button><button class="delete" onclick="deleteUser('${u.id}')">Törlés</button></div>
-    </article>`).join('');
-    window.__users=users;
-    const transfers=await api('/api/transfers');
-    const t=$('#transfersList');if(t)t.innerHTML=transfers.length?transfers.map(x=>`<article class="transfer-card ${x.warning?'warn':''}"><b>${esc(x.orderNo)}</b> · ${esc(DRIVERS[x.from]?.name)} → ${esc(DRIVERS[x.to]?.name)}<br><small>${new Date(x.at).toLocaleString('hu-HU')} · ${esc(x.byName)} ${x.warning?'· ⚠ ponyvás figyelmeztetés':''}</small></article>`).join(''):'<div class="notice">Még nincs feladatátadás.</div>';
-  }catch(e){list.innerHTML=`<div class="notice">${esc(e.message)}</div>`}
-}
-window.editUser=id=>{
-  const u=(window.__users||[]).find(x=>x.id===id);if(!u)return;
-  $('#userDialogTitle').textContent='Felhasználó szerkesztése';$('#editUserId').value=u.id;$('#userName').value=u.name;$('#userEmail').value=u.email;$('#userPassword').value='';$('#userRole').value=u.role;$('#userDriverKey').value=u.driverKey||'';$('#userActive').checked=u.active;$('#userDialog').showModal();
-};
-window.deleteUser=async id=>{if(confirm('Biztosan törlöd ezt a felhasználót?')){try{await api('/api/users/'+id,{method:'DELETE'});await renderUsers()}catch(e){alert(e.message)}}};
+function render(){renderPlanner();renderOrders();renderDriverMode();renderMaster();fillSettings()}
 
 function renderPlanner(){
   $('#routeGrid').innerHTML=Object.keys(DRIVERS).map(k=>{
@@ -688,21 +626,6 @@ $('#saveSettingsBtn').onclick=()=>{state.settings={baseAddress:$('#baseAddress')
 $('#backupDownloadBtn').onclick=()=>downloadBlob(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),'fuvarszervezo-v4-mentes.json');
 $('#backupRestoreInput').onchange=e=>{const r=new FileReader();r.onload=()=>{state=JSON.parse(r.result);save();alert('Mentés visszatöltve.')};r.readAsText(e.target.files[0])};
 $('#clearOrdersBtn').onclick=()=>{if(confirm('Minden rendelést törölsz?')){state.orders=[];save()}};
-
-$('#newUserBtn').onclick=()=>{$('#userDialogTitle').textContent='Új felhasználó';$('#editUserId').value='';$('#userName').value='';$('#userEmail').value='';$('#userPassword').value='';$('#userRole').value='driver';$('#userDriverKey').value='';$('#userActive').checked=true;$('#userDialog').showModal()};
-$('#userForm').onsubmit=async e=>{
-  e.preventDefault();const id=$('#editUserId').value,payload={name:$('#userName').value,email:$('#userEmail').value,password:$('#userPassword').value,role:$('#userRole').value,driverKey:$('#userDriverKey').value,active:$('#userActive').checked};
-  try{
-    await api(id?'/api/users/'+id:'/api/users',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    $('#userDialog').close();await renderUsers();
-  }catch(err){alert(err.message)}
-};
-$$('[data-user-tab]').forEach(b=>b.onclick=()=>{
-  $$('[data-user-tab]').forEach(x=>x.classList.toggle('active',x===b));
-  userTab=b.dataset.userTab;$('#usersList').classList.toggle('hidden',userTab!=='users');$('#transfersList').classList.toggle('hidden',userTab!=='transfers');
-});
-$('#adminLogoutBtn').onclick=async()=>{await fetch('/api/logout',{method:'POST'});location.href='/'};
-
 $$('.nav').forEach(x=>x.onclick=()=>{if(x.dataset.page==='driverPage'&&$('#driverModeDate'))$('#driverModeDate').value=selectedDate();showPage(x.dataset.page)});
 $$('[data-close]').forEach(x=>x.onclick=()=>$('#'+x.dataset.close).close());
 $('#openImportBtn').onclick=()=>$('#importDialog').showModal();
@@ -721,6 +644,4 @@ $('#driverModeDate').onchange=renderDriverMode;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('#installBtn').classList.remove('hidden')});
 $('#installBtn').onclick=async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null}};
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
-load();$('#workDate').value=today();render();initializeAdmin().catch(e=>{console.error(e);location.href='/'});
-if(adminSocket)adminSocket.on('state-changed',async()=>{try{state=await api('/api/state');localStorage.setItem(STORAGE_KEY,JSON.stringify(state));render()}catch{}});
-if(adminSocket)adminSocket.on('users-changed',renderUsers);
+load();$('#workDate').value=today();render();

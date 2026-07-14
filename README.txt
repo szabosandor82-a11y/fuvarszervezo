@@ -1,86 +1,46 @@
-FUVAR-SZERVEZŐ V8
-==================
+FUVAR-SZERVEZŐ V9 – GITHUB PAGES VERZIÓ
 
-A V8 már valódi, többfelhasználós rendszer:
+Ez a verzió kifejezetten GitHub Pagesre készült.
+Nem tartalmaz szervermappát, Node.js-t vagy olyan fájlt, amely szétszedné a GitHub Pages oldalt.
 
-ADMIN
-- csak az admin látja a teljes fuvarszervező felületet;
-- látja mindhárom sofőr feladatait, térképeit, importot és törzsadatokat;
-- külön „Felhasználók” menüpontban létrehozhat, szerkeszthet, inaktiválhat és törölhet felhasználókat;
-- e-mail-címet, jelszót, szerepkört és sofőr-hozzárendelést állíthat be;
-- látja, ha valamelyik sofőr átadott egy feladatot másik autónak;
-- az átadási napló megőrzi, ki, mikor és kinek adta át a rendelést.
+FELTÖLTÉS
+A repository MAIN ágában írd felül ezekkel a régi fájlokat:
+- index.html
+- styles.css
+- app.js
+- data.js
+- manifest.webmanifest
+- sw.js
+- icon-192.png
+- icon-512.png
 
-SOFŐRÖK
-- Márió, Patrik és Martin külön e-mail-címmel és jelszóval jelentkezik be;
-- csak a saját, aznapi feladatait látja;
-- más napot, másik sofőr teljes listáját, importot és törzsadatokat nem lát;
-- egy gombbal átadhat egy feladatot a másik két sofőr egyikének;
-- az átadás azonnal megjelenik az adminnál és a fogadó sofőrnél;
-- hosszú szálanyag nem ponyvás autóra történő átadásakor figyelmeztetés keletkezik;
-- rendeléshez szállítólevél-fotó, kézi megjegyzés, hangfelvétel és diktált szöveg csatolható;
-- a jelentés teljesített állapotot is beállíthat.
+Ne hozz létre külön almappát. A fájlok közvetlenül a repository gyökerébe kerüljenek.
 
-BEJELENTKEZÉS
-Az első admin a .env fájlban beállított:
-ADMIN_EMAIL
-ADMIN_PASSWORD
+FRISSÍTÉS UTÁN
+1. Várj 1–3 percet.
+2. Számítógépen Ctrl+F5.
+3. iPhone-on töröld a régi főképernyős alkalmazást.
+4. Safariban nyisd meg az oldalt.
+5. Megosztás → Hozzáadás a Főképernyőhöz.
 
-Az első indulás után az admin a Felhasználók menüben hozza létre:
-- Márió felhasználóját, driverKey = mario
-- Patrik felhasználóját, driverKey = patrik
-- Martin felhasználóját, driverKey = martin
+A V9 MŰKÖDÉSE
+- teljes admin/fuvarszervező felület;
+- mobilra optimalizált megjelenés;
+- Excel-import;
+- utolsó előtti „Dátum” oszlop és utolsó „autó” oszlop;
+- Márió, Patrik, Martin;
+- igazságos szétosztás;
+- hosszú szálanyag automatikusan Martin ponyvás autójára;
+- húzható sorrend és autók közötti áthelyezés;
+- térképes útvonal;
+- Excel, Word és PDF export;
+- Sofőr mód;
+- fotó, hangfelvétel és megjegyzés kezelése a böngészőn belül.
 
-HELYI INDÍTÁS
-1. Telepíts Node.js 20 vagy újabb verziót.
-2. Csomagold ki a projektet.
-3. Másold a .env.example fájlt .env névre.
-4. Módosítsd legalább:
-   JWT_SECRET
-   ADMIN_EMAIL
-   ADMIN_PASSWORD
-5. Parancssorban a projekt mappájában:
-   npm install
-   npm start
-6. Nyisd meg:
-   http://localhost:3000
-
-AUTOMATIKUS E-MAIL
-A .env fájlban töltsd ki:
-SMTP_HOST
-SMTP_PORT
-SMTP_SECURE
-SMTP_USER
-SMTP_PASS
-MAIL_FROM
-REPORT_TO=szabo.sandor@stand98.hu
-
-AI HANGÁTÍRÁS
-Opcionálisan:
-OPENAI_API_KEY
-OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
-
-TELEPÍTÉS INTERNETRE
-A V8 NEM FUTTATHATÓ CSAK GITHUB PAGESEN, mert biztonságos:
-- bejelentkezést,
-- jelszókezelést,
-- központi adatbázist,
-- eszközök közötti szinkront,
-- automatikus e-mailt
-igényel.
-
-Használható például:
-- Render
-- Railway
-- Fly.io
-- VPS
-- céges szerver
-
-A teljes projektet kell telepíteni, nem csak a public mappát.
-A data/store.json futás közben automatikusan létrejön.
-
-BIZTONSÁG
-- a jelszavak bcrypt hash-ként tárolódnak;
-- a bejelentkezés HTTP-only cookie-val működik;
-- a sofőr API-szinten sem tud másik sofőr vagy másik nap feladataihoz hozzáférni;
-- éles használatnál kötelező a HTTPS és erős JWT_SECRET.
+FONTOS, KÉSŐBBI LÉPÉS
+A többfelhasználós e-mail/jelszavas bejelentkezés és jogosultságkezelés most szándékosan nincs bekapcsolva.
+A véglegesítés előtt kötelezően vissza kell térni rá:
+- külön admin;
+- Márió, Patrik, Martin külön belépése;
+- csak saját, aznapi feladat;
+- feladatátadás naplózása.
