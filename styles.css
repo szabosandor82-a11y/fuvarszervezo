@@ -38,3 +38,47 @@
 .final-reminder h3{margin:0 0 8px;color:#8a5300}
 .final-reminder p,.final-reminder li{font-size:12px;line-height:1.5;color:#6f5222}
 .final-reminder ul{margin:8px 0 0;padding-left:20px}
+
+.stop-bubble{padding-bottom:48px}
+.stop-trash{
+  position:absolute;
+  right:10px;
+  bottom:10px;
+  width:36px;
+  height:36px;
+  padding:0;
+  display:grid;
+  place-items:center;
+  border-radius:12px;
+  background:#fde9e9!important;
+  color:var(--red)!important;
+  font-size:17px!important;
+  box-shadow:none;
+}
+.stop-trash:active{transform:scale(.94)}
+.delete-all-zone{
+  margin-top:20px;
+  padding:18px;
+  border-radius:20px;
+  border:1px solid #efbcbc;
+  background:#fff5f5;
+  text-align:center;
+}
+.delete-all-button{
+  width:100%;
+  max-width:520px;
+  padding:15px 18px;
+  background:var(--red);
+  font-size:15px;
+}
+.delete-all-zone p{
+  margin:10px auto 0;
+  max-width:650px;
+  color:#8a4b4b;
+  font-size:12px;
+  line-height:1.45;
+}
+@media(max-width:650px){
+  .stop-trash{width:42px;height:42px;font-size:19px}
+  .delete-all-zone{padding:14px 10px}
+}

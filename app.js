@@ -141,7 +141,7 @@ function renderBubbles(list,driver){
           <label class="wide">Fuvar megjegyzés<textarea data-inline="note" onchange="inlineChange('${o.id}',this)">${esc(o.note||'')}</textarea></label>
         </div>
       </details>
-      <div class="bubble-actions"><button onclick="editOrder('${o.id}')">Teljes szerkesztés</button><button onclick="showItems('${o.id}')">Tételek</button><button onclick="moveOrder('${o.id}')">Másik sofőr</button><button onclick="openNavigation('${o.id}')">Navigáció</button><button onclick="openFeedback('${o.id}')">Szállítólevél / jelentés${o.reports?.length?` <span class="report-count">${o.reports.length}</span>`:''}</button></div>
+      <div class="bubble-actions"><button onclick="editOrder('${o.id}')">Teljes szerkesztés</button><button onclick="showItems('${o.id}')">Tételek</button><button onclick="moveOrder('${o.id}')">Másik sofőr</button><button onclick="openNavigation('${o.id}')">Navigáció</button><button onclick="openFeedback('${o.id}')">Szállítólevél / jelentés${o.reports?.length?` <span class="report-count">${o.reports.length}</span>`:''}</button></div><button class="stop-trash" title="Fuvar törlése" aria-label="Fuvar törlése" onclick="event.stopPropagation();deleteSingleRoute('${o.id}')">🗑</button>
     </article>`).join('');
 }
 window.inlineChange=(id,el)=>{
@@ -264,8 +264,36 @@ function openOrder(o={}){
   $('#dropWindowEnabled').checked=!!o.dropFrom;$('#dropWindowFields').classList.toggle('hidden',!o.dropFrom);$('#dropFrom').value=o.dropFrom||'';$('#dropTo').value=o.dropTo||'';
   $('#pickupNote').value=o.pickupNote||'';$('#orderNote').value=o.note||'';$('#orderDialog').showModal();
 }
+
+window.deleteSingleRoute=id=>{
+  const o=state.orders.find(x=>x.id===id);
+  if(!o)return;
+  const label=[o.orderNo,o.projectName||o.dropAddress,DRIVERS[o.driver]?.name].filter(Boolean).join(' · ');
+  if(confirm(`Biztosan törlöd ezt az egy fuvart?\n\n${label}`)){
+    state.orders=state.orders.filter(x=>x.id!==id);
+    Object.keys(DRIVERS).forEach(d=>{
+      dayOrders(d).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999)).forEach((r,i)=>r.sequence=i+1);
+    });
+    save();
+  }
+};
+function deleteAllRoutes(){
+  const count=state.orders.length;
+  if(!count){alert('Nincs törölhető fuvar.');return}
+  const first=confirm(`${count} fuvar fog törlődni minden dátumról és minden sofőrtől.\n\nA törzsadatok és a beállítások megmaradnak.\n\nFolytatod?`);
+  if(!first)return;
+  const typed=prompt('A végleges törléshez írd be: TÖRLÉS');
+  if((typed||'').trim().toUpperCase()!=='TÖRLÉS'){
+    alert('A törlés megszakítva.');
+    return;
+  }
+  state.orders=[];
+  save();
+  alert('Az összes fuvar törölve. Most újra feltöltheted a SERPA Excel-fájlt.');
+}
+
 window.editOrder=id=>openOrder(state.orders.find(x=>x.id===id));
-window.deleteOrder=id=>{if(confirm('Biztosan törlöd ezt a rendelést?')){state.orders=state.orders.filter(x=>x.id!==id);save()}};
+window.deleteOrder=id=>window.deleteSingleRoute(id);
 $('#orderForm').onsubmit=e=>{
   e.preventDefault();
   const old=state.orders.find(x=>x.id===$('#editOrderId').value),supplier=state.suppliers.find(x=>x.id===$('#supplierSelect').value),project=state.projects.find(x=>x.id===$('#projectSelect').value),recipient=state.recipients.find(x=>x.id===$('#recipientSelect').value);
@@ -625,12 +653,14 @@ $('#balanceRoutesBtn').onclick=balanceRoutes;
 $('#saveSettingsBtn').onclick=()=>{state.settings={baseAddress:$('#baseAddress').value,marioVehicle:$('#marioVehicle').value,patrikVehicle:$('#patrikVehicle').value,martinVehicle:$('#martinVehicle').value};save();alert('Beállítások mentve.')};
 $('#backupDownloadBtn').onclick=()=>downloadBlob(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),'fuvarszervezo-v4-mentes.json');
 $('#backupRestoreInput').onchange=e=>{const r=new FileReader();r.onload=()=>{state=JSON.parse(r.result);save();alert('Mentés visszatöltve.')};r.readAsText(e.target.files[0])};
-$('#clearOrdersBtn').onclick=()=>{if(confirm('Minden rendelést törölsz?')){state.orders=[];save()}};
+$('#clearOrdersBtn').onclick=deleteAllRoutes;
 $$('.nav').forEach(x=>x.onclick=()=>{if(x.dataset.page==='driverPage'&&$('#driverModeDate'))$('#driverModeDate').value=selectedDate();showPage(x.dataset.page)});
 $$('[data-close]').forEach(x=>x.onclick=()=>$('#'+x.dataset.close).close());
 $('#openImportBtn').onclick=()=>$('#importDialog').showModal();
 $('#serpaFile').onchange=e=>readSerpa(e.target.files[0]).catch(err=>alert('Import hiba: '+err.message));
 $('#newOrderBtn').onclick=()=>openOrder({scheduleDate:selectedDate(),items:[]});
+$('#newRouteMainBtn').onclick=()=>openOrder({scheduleDate:selectedDate(),driver:'',items:[]});
+$('#deleteAllRoutesBtn').onclick=deleteAllRoutes;
 $('#orderSearch').oninput=renderOrders;$('#orderDriverFilter').onchange=renderOrders;
 $('#newMasterBtn').onclick=()=>openMaster();$('#masterSearch').oninput=renderMaster;
 $$('[data-master]').forEach(x=>x.onclick=()=>{$$('[data-master]').forEach(y=>y.classList.remove('active'));x.classList.add('active');masterType=x.dataset.master;renderMaster()});

@@ -10,13 +10,13 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="styles.css">
-  <title>Fuvarszervező V9</title>
+  <title>Fuvarszervező V10</title>
 </head>
 <body>
 <header class="topbar">
   <div>
     <div class="eyebrow">STAND 98 · LOGISZTIKA</div>
-    <h1>Fuvarszervező V9</h1>
+    <h1>Fuvarszervező V10</h1>
   </div>
   <div class="top-actions">
     <span id="saveState" class="save-state">Automatikusan mentve</span>
@@ -34,6 +34,7 @@
       </div>
       <div class="toolbar-actions">
         <button id="openImportBtn">Excel import</button>
+        <button id="newRouteMainBtn">＋ Új fuvar</button>
         <button id="optimizeAllBtn" class="accent">Mindhárom optimalizálása</button>
         <button id="balanceRoutesBtn" class="accent">Igazságos szétosztás</button>
         <button id="exportAllBtn" class="secondary">Összes fuvar exportálása</button>
@@ -43,6 +44,10 @@
 
     <div id="importSummary" class="notice hidden"></div>
     <div id="routeGrid" class="route-grid"></div>
+    <div class="delete-all-zone">
+      <button id="deleteAllRoutesBtn" class="delete-all-button">🗑 Összes fuvar törlése</button>
+      <p>Ez minden dátum és minden sofőr összes fuvarját törli. A projektek, beszállítók, átvevők és beállítások megmaradnak.</p>
+    </div>
   </section>
 
   <section id="ordersPage" class="page">

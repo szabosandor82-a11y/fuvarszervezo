@@ -1,6 +1,6 @@
 {
-  "name": "Fuvarszervező V9",
-  "short_name": "Fuvarszervező V9",
+  "name": "Fuvarszervező V10",
+  "short_name": "Fuvarszervező V10",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f2f6f8",
@@ -20,5 +20,5 @@
     }
   ],
   "version": "4.0",
-  "description": "GitHub Pages-kompatibilis, mobilra optimalizált fuvarszervező alkalmazás."
+  "description": "GitHub Pages-kompatibilis, mobilos fuvarszervező gyors egyedi és teljes törléssel."
 }
