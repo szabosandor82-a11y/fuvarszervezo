@@ -1,31 +1,46 @@
-FUVAR-SZERVEZŐ V3 – GITHUB FRISSÍTÉS
+FUVAR-SZERVEZŐ V4 – TELEPÍTÉS ÉS FRISSÍTÉS
 
-1. Csomagold ki ezt a ZIP-et.
-2. A GitHub repository MAIN ágában cseréld le a régi fájlokat ezekre:
-   index.html, styles.css, app.js, data.js, manifest.webmanifest,
-   sw.js, icon-192.png, icon-512.png
+GITHUB FRISSÍTÉS
+1. Csomagold ki a ZIP fájlt.
+2. A GitHub repository MAIN ágában töltsd fel és írd felül ezekkel a régi fájlokat:
+   index.html
+   styles.css
+   app.js
+   data.js
+   manifest.webmanifest
+   sw.js
+   icon-192.png
+   icon-512.png
 3. Commit changes.
-4. Várj 1-3 percet, majd a Pages címet frissítsd Ctrl+F5-tel.
-5. Telefonon a régi főképernyős appot töröld, Safariban nyisd meg az oldalt,
-   majd Megosztás -> Hozzáadás a Főképernyőhöz.
+4. Várj 1–3 percet.
+5. Számítógépen Ctrl+F5-tel frissíts.
+6. iPhone-on töröld a régi főképernyős alkalmazást, nyisd meg Safariban a Pages címet,
+   majd Megosztás → Hozzáadás a Főképernyőhöz.
 
-V3 FŐ FUNKCIÓK
-- Új SERPA-sablon importja (A:H:I logika)
-- csak dátummal rendelkező sorok importja
-- Márió / Patrik / Martin automatikus szétosztás
-- rendelésszám utolsó 4 számjegye
-- azonos rendelés tételeinek összesítése
-- tételek külön mellékletként megtekinthetők és exportálhatók
-- három külön fuvar és három külön térkép
-- húzással módosítható megállósorrend
-- Szigetszentmiklósról induló közelségi optimalizálás
-- projekt -> alap átvevő automatikus hozzárendelés
-- projekt, beszállító, átvevő hozzáadás/szerkesztés/törlés
-- Excel, Word és PDF export tételmelléklettel
-- opcionális felvételi és lerakási időablak
-- automatikus helyi mentés
+V4 ÚJDONSÁGOK
+- Import oszlopnevek alapján, nem fix oszlopszám alapján.
+- Kizárólag a jóváhagyott oszlopokat használja:
+  Bizonylatszám, Témaszám név, Termék kód, Termék név,
+  Ügyfél/raktár, Tétel mennyiség, M.e.,
+  Kért szállítási határidő, Dátum, autó, Megjegyzés.
+- Bizonylatszám utolsó 5 számjegye.
+- Témaszám név alapján biztonságos projektpárosítás.
+- Bizonytalan projektpárosítás esetén üresen marad.
+- Projekt címének és alapértelmezett átvevőjének automatikus kitöltése.
+- 4, 5 és 6 méteres szálanyag felismerése a Termék névből.
+- Ha egy rendelésben egyetlen hosszú tétel is van, az egész rendelés Martin ponyvás autójára kerül.
+- A hosszú tétel oka látható a rendelésen és a tételmellékletben.
+- A térképen valós közúti útvonal jelenik meg az OpenStreetMap/OSRM alapján.
+- A térkép alatti kártyákon gyorsan szerkeszthető:
+  beszállító, projekt, címek, átvevő, telefon, felrakói és fuvarmegjegyzés.
+- Minden felrakóhoz külön felrakói megjegyzés.
+- Excel, Word és PDF fuvar-export tételmelléklettel.
+- Külön Excel export az importadatokról, a kézzel beírt megjegyzésekkel.
+- Dátumonként automatikusan külön fuvarnap.
+- Húzással módosítható sorrend és sofőr.
 
 FONTOS
-- Az Excel-import, térkép, geokódolás és export-könyvtárak első használatához internet kell.
-- A címkeresés az ingyenes OpenStreetMap/Nominatim szolgáltatást használja.
-- Az automatikus útvonalsorrend közelségi becslés; a kézi húzás mindig felülírható.
+- Az Excel-beolvasás, a térkép és a közúti útvonal internetkapcsolatot igényel.
+- A geokódolás ingyenes OpenStreetMap Nominatim szolgáltatást használ.
+- Az automatikus optimalizálás közelségi sorrendet számol, majd ezt valós közúti útvonalként rajzolja ki.
+- A kézi húzással beállított sorrend bármikor felülírhatja az automatikus sorrendet.

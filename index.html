@@ -10,13 +10,13 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="styles.css">
-  <title>Fuvarszervező V3</title>
+  <title>Fuvarszervező V4</title>
 </head>
 <body>
 <header class="topbar">
   <div>
     <div class="eyebrow">STAND 98 · LOGISZTIKA</div>
-    <h1>Fuvarszervező V3</h1>
+    <h1>Fuvarszervező V4</h1>
   </div>
   <div class="top-actions">
     <span id="saveState" class="save-state">Automatikusan mentve</span>
@@ -35,7 +35,8 @@
       <div class="toolbar-actions">
         <button id="openImportBtn">Excel import</button>
         <button id="optimizeAllBtn" class="accent">Mindhárom optimalizálása</button>
-        <button id="exportAllBtn" class="secondary">Összes exportálása</button>
+        <button id="exportAllBtn" class="secondary">Összes fuvar exportálása</button>
+        <button id="exportImportBtn" class="secondary">Import Excel + megjegyzések</button>
       </div>
     </div>
 
@@ -105,7 +106,7 @@
 <dialog id="importDialog">
   <form method="dialog" id="importForm">
     <div class="dialog-head"><div><div class="eyebrow dark">SERPA</div><h3>Új sablon importálása</h3></div><button type="button" class="close" data-close="importDialog">×</button></div>
-    <p class="help">A program az <b>A oszlopból</b> a rendelésszám utolsó 4 számjegyét használja. A <b>H oszlop a dátum</b>, az <b>I oszlop az autó/sofőr</b>. Üres dátumú sor nem kerül be.</p>
+    <p class="help">A program oszlopnév alapján dolgozik, és kizárólag a jóváhagyott mezőket használja. A bizonylatszámból az utolsó <b>5 számjegyet</b> tartja meg. Az üres <b>Dátum</b> mezőjű sorokat kihagyja. A 4, 5 vagy 6 méteres szálanyagokat a Termék név alapján automatikusan Martin ponyvás autójára helyezi.</p>
     <label class="file-drop">Excel fájl kiválasztása<input id="serpaFile" type="file" accept=".xlsx,.xls"></label>
     <div id="importPreview" class="import-preview"><div class="notice">Még nincs fájl kiválasztva.</div></div>
     <button type="button" id="confirmImportBtn" disabled>Importálás és összesítés</button>
@@ -134,7 +135,8 @@
     <div id="pickupWindowFields" class="two-col hidden"><label>Ettől<input id="pickupFrom" type="time"></label><label>Eddig<input id="pickupTo" type="time"></label></div>
     <label class="check"><input id="dropWindowEnabled" type="checkbox"> Lerakási időablak</label>
     <div id="dropWindowFields" class="two-col hidden"><label>Ettől<input id="dropFrom" type="time"></label><label>Eddig<input id="dropTo" type="time"></label></div>
-    <label>Megjegyzés<textarea id="orderNote" rows="3"></textarea></label>
+    <label>Felrakói megjegyzés<textarea id="pickupNote" rows="2" placeholder="Pl. hátsó kapu, telefonálni érkezés előtt"></textarea></label>
+    <label>Fuvar megjegyzés<textarea id="orderNote" rows="3"></textarea></label>
     <button type="submit">Mentés</button>
   </form>
 </dialog>

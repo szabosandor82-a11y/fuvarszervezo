@@ -1,5 +1,5 @@
 {
-  "name": "Fuvarszervező V3",
+  "name": "Fuvarszervező V4",
   "short_name": "Fuvarszervező",
   "start_url": "./index.html",
   "display": "standalone",
@@ -18,5 +18,6 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "version": "4.0"
 }
