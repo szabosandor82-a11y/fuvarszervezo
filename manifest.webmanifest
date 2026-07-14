@@ -1,6 +1,6 @@
 {
-  "name": "Fuvarszervező V5",
-  "short_name": "Fuvarszervező V5",
+  "name": "Fuvarszervező V6",
+  "short_name": "Fuvarszervező V6",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f2f6f8",
@@ -20,5 +20,5 @@
     }
   ],
   "version": "4.0",
-  "description": "Interaktív fuvarszervező sofőr-visszajelzéssel, fotóval és hangjegyzettel."
+  "description": "Interaktív fuvarszervező fix végoszlopos Dátum/autó importszabállyal."
 }

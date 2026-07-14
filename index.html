@@ -10,13 +10,13 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="styles.css">
-  <title>Fuvarszervező V5</title>
+  <title>Fuvarszervező V6</title>
 </head>
 <body>
 <header class="topbar">
   <div>
     <div class="eyebrow">STAND 98 · LOGISZTIKA</div>
-    <h1>Fuvarszervező V5</h1>
+    <h1>Fuvarszervező V6</h1>
   </div>
   <div class="top-actions">
     <span id="saveState" class="save-state">Automatikusan mentve</span>
@@ -107,7 +107,7 @@
 <dialog id="importDialog">
   <form method="dialog" id="importForm">
     <div class="dialog-head"><div><div class="eyebrow dark">SERPA</div><h3>Új sablon importálása</h3></div><button type="button" class="close" data-close="importDialog">×</button></div>
-    <p class="help">A program oszlopnév alapján dolgozik, és kizárólag a jóváhagyott mezőket használja. A bizonylatszámból az utolsó <b>5 számjegyet</b> tartja meg. Az üres <b>Dátum</b> mezőjű sorokat kihagyja. A 4, 5 vagy 6 méteres szálanyagokat a Termék név alapján automatikusan Martin ponyvás autójára helyezi.</p>
+    <p class="help">A program oszlopnév alapján dolgozik, és kizárólag a jóváhagyott mezőket használja. A fuvar dátuma mindig a táblázat utolsó előtti, „Dátum” nevű oszlopa; az utolsó oszlop az „autó”. A bizonylatszámból az utolsó <b>5 számjegyet</b> tartja meg. Az üres <b>Dátum</b> mezőjű sorokat kihagyja. A 4, 5 vagy 6 méteres szálanyagokat a Termék név alapján automatikusan Martin ponyvás autójára helyezi.</p>
     <label class="file-drop">Excel fájl kiválasztása<input id="serpaFile" type="file" accept=".xlsx,.xls"></label>
     <div id="importPreview" class="import-preview"><div class="notice">Még nincs fájl kiválasztva.</div></div>
     <button type="button" id="confirmImportBtn" disabled>Importálás és összesítés</button>

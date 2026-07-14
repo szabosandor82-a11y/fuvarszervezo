@@ -291,10 +291,29 @@ function findHeader(headers,names){
   return -1;
 }
 function mapHeaders(headers){
-  const map={};Object.entries(APPROVED_HEADERS).forEach(([k,names])=>map[k]=findHeader(headers,names));
-  const required=['documentNo','topicName','productCode','productName','customerWarehouse','quantity','unit','requestedDeadline','scheduleDate','driver'];
+  const map={};
+  Object.entries(APPROVED_HEADERS).forEach(([k,names])=>map[k]=findHeader(headers,names));
+
+  // V6 végleges szabály:
+  // - a fuvar dátuma mindig a táblázat utolsó előtti oszlopa,
+  // - ennek a fejlécének „Dátum”-nak kell lennie,
+  // - az utolsó oszlop az „autó”.
+  const lastIndex=headers.length-1;
+  const dateIndex=headers.length-2;
+  map.scheduleDate=dateIndex;
+  map.driver=lastIndex;
+
+  const structuralErrors=[];
+  if(dateIndex<0||norm(headers[dateIndex])!=='datum'){
+    structuralErrors.push('Az utolsó előtti oszlop neve nem „Dátum”.');
+  }
+  if(lastIndex<0||!['auto','autó'].includes(norm(headers[lastIndex]))){
+    structuralErrors.push('Az utolsó oszlop neve nem „autó”.');
+  }
+
+  const required=['documentNo','topicName','productCode','productName','customerWarehouse','quantity','unit','requestedDeadline'];
   const missing=required.filter(k=>map[k]<0);
-  return {map,missing};
+  return {map,missing,structuralErrors};
 }
 function levenshtein(a,b){
   const m=a.length,n=b.length,d=Array.from({length:m+1},()=>Array(n+1).fill(0));
@@ -344,6 +363,10 @@ function parseImportRows(rows,map){
 async function readSerpa(file){
   const buf=await file.arrayBuffer(),wb=XLSX.read(buf,{type:'array',cellDates:true}),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
   importSourceRows=rows;const hm=mapHeaders(rows[0].map(String));importHeaderMap=hm.map;
+  if(hm.structuralErrors?.length){
+    $('#importPreview').innerHTML=`<div class="notice"><b>Import szerkezeti hiba:</b><br>${hm.structuralErrors.map(esc).join('<br>')}<br><br>A program csak akkor importál, ha az utolsó előtti oszlop neve „Dátum”, az utolsó oszlop neve pedig „autó”.</div>`;
+    $('#confirmImportBtn').disabled=true;return;
+  }
   if(hm.missing.length){$('#importPreview').innerHTML=`<div class="notice">Hiányzó kötelező oszlopok: ${hm.missing.join(', ')}</div>`;$('#confirmImportBtn').disabled=true;return}
   importRows=parseImportRows(rows,hm.map);
   importRows.forEach(o=>{
