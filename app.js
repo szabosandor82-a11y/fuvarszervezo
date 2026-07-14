@@ -77,7 +77,7 @@ function showPage(id){
   $$('.nav').forEach(x=>x.classList.toggle('active',x.dataset.page===id));
   scrollTo(0,0);render();
 }
-function render(){renderPlanner();renderOrders();renderMaster();fillSettings()}
+function render(){renderPlanner();renderOrders();renderDriverMode();renderMaster();fillSettings()}
 
 function renderPlanner(){
   $('#routeGrid').innerHTML=Object.keys(DRIVERS).map(k=>{
@@ -459,7 +459,11 @@ window.openFeedback=id=>{
   $('#feedbackOrderMeta').innerHTML=`<b>${esc(DRIVERS[o.driver]?.name||'Nincs sofőr')}</b> · ${esc(o.scheduleDate)}<br>${esc(o.pickupName)} → ${esc(o.projectName||o.dropAddress)}`;
   $('#feedbackNote').value='';$('#transcriptText').value='';$('#markCompleted').checked=false;
   $('#deliveryPhotos').value='';$('#photoPreview').innerHTML='';feedbackPhotos=[];audioBlob=null;audioChunks=[];
-  $('#audioPreview').classList.add('hidden');$('#recordStatus').textContent='Nincs felvétel.';
+  $('#audioPreview').classList.add('hidden');$('#recordStatus').textContent=(navigator.mediaDevices&&window.MediaRecorder)
+    ?'Nincs felvétel. Nyomd meg a Felvétel indítása gombot.'
+    :'A böngésző nem támogatja a közvetlen hangrögzítést vagy nincs HTTPS kapcsolat.';
+  $('#startRecordBtn').disabled=!(navigator.mediaDevices&&window.MediaRecorder);
+  $('#speechToTextBtn').disabled=!(window.SpeechRecognition||window.webkitSpeechRecognition);
   $('#feedbackDialog').showModal();
 };
 $('#deliveryPhotos').onchange=e=>{
@@ -521,6 +525,29 @@ $('#feedbackForm').onsubmit=async e=>{
   $('#feedbackDialog').close();save();
   alert(result.automatic?'A jelentést automatikusan elküldtem e-mailben.':'A jelentés elkészült. A telefon megosztási/e-mail felületén fejezd be a küldést.');
 };
+
+
+function renderDriverMode(){
+  const driver=$('#driverModeSelect')?.value||'mario';
+  const date=$('#driverModeDate')?.value||selectedDate();
+  if($('#driverModeDate')&&!$('#driverModeDate').value)$('#driverModeDate').value=selectedDate();
+  const rows=state.orders.filter(o=>o.scheduleDate===date&&o.driver===driver)
+    .sort((a,b)=>(+a.sequence||999)-(+b.sequence||999));
+  const target=$('#driverOrderList');if(!target)return;
+  target.innerHTML=rows.length?rows.map((o,i)=>`
+    <article class="driver-order ${o.status==='teljesítve'?'done':''}">
+      <div class="order-top">
+        <div><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||o.dropAddress||'Nincs projekt')}</h3>
+        <p><b>Felrakó:</b> ${esc(o.pickupName||'')} · ${esc(o.pickupAddress||'')}</p>
+        <p><b>Lerakó:</b> ${esc(o.dropAddress||'')}</p>
+        <p><b>Átvevő:</b> ${esc(o.recipientName||'')} ${esc(o.recipientPhone||'')}</p></div>
+        <span class="badge ${o.status==='teljesítve'?'status-done':''}">${o.status==='teljesítve'?'Teljesítve':'Folyamatban'}</span>
+      </div>
+      ${o.note?`<p><b>Megjegyzés:</b> ${esc(o.note)}</p>`:''}
+      <div class="mic-hint">🎤 A gomb megnyomása után hangfelvételt, diktálást és szállítólevél-fotót is készíthetsz.</div>
+      <button class="driver-report-button" onclick="openFeedback('${o.id}')">📷 🎤 Fotó / hang / jelentés</button>
+    </article>`).join(''):'<div class="notice">Ezen a napon nincs rendelés a kiválasztott sofőrnél.</div>';
+}
 
 function renderMaster(){
   const q=norm($('#masterSearch').value),arr=state[masterType].filter(x=>!q||norm(Object.values(x).join(' ')).includes(q));
@@ -599,7 +626,7 @@ $('#saveSettingsBtn').onclick=()=>{state.settings={baseAddress:$('#baseAddress')
 $('#backupDownloadBtn').onclick=()=>downloadBlob(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),'fuvarszervezo-v4-mentes.json');
 $('#backupRestoreInput').onchange=e=>{const r=new FileReader();r.onload=()=>{state=JSON.parse(r.result);save();alert('Mentés visszatöltve.')};r.readAsText(e.target.files[0])};
 $('#clearOrdersBtn').onclick=()=>{if(confirm('Minden rendelést törölsz?')){state.orders=[];save()}};
-$$('.nav').forEach(x=>x.onclick=()=>showPage(x.dataset.page));
+$$('.nav').forEach(x=>x.onclick=()=>{if(x.dataset.page==='driverPage'&&$('#driverModeDate'))$('#driverModeDate').value=selectedDate();showPage(x.dataset.page)});
 $$('[data-close]').forEach(x=>x.onclick=()=>$('#'+x.dataset.close).close());
 $('#openImportBtn').onclick=()=>$('#importDialog').showModal();
 $('#serpaFile').onchange=e=>readSerpa(e.target.files[0]).catch(err=>alert('Import hiba: '+err.message));
@@ -609,9 +636,11 @@ $('#newMasterBtn').onclick=()=>openMaster();$('#masterSearch').oninput=renderMas
 $$('[data-master]').forEach(x=>x.onclick=()=>{$$('[data-master]').forEach(y=>y.classList.remove('active'));x.classList.add('active');masterType=x.dataset.master;renderMaster()});
 $('#pickupWindowEnabled').onchange=e=>$('#pickupWindowFields').classList.toggle('hidden',!e.target.checked);
 $('#dropWindowEnabled').onchange=e=>$('#dropWindowFields').classList.toggle('hidden',!e.target.checked);
-$('#workDate').onchange=render;
+$('#workDate').onchange=()=>{if($('#driverModeDate'))$('#driverModeDate').value=$('#workDate').value;render()};
 $('#prevDay').onclick=()=>{const d=new Date(selectedDate()+'T12:00:00');d.setDate(d.getDate()-1);$('#workDate').value=d.toISOString().slice(0,10);render()};
 $('#nextDay').onclick=()=>{const d=new Date(selectedDate()+'T12:00:00');d.setDate(d.getDate()+1);$('#workDate').value=d.toISOString().slice(0,10);render()};
+$('#driverModeSelect').onchange=renderDriverMode;
+$('#driverModeDate').onchange=renderDriverMode;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('#installBtn').classList.remove('hidden')});
 $('#installBtn').onclick=async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null}};
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');

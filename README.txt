@@ -1,27 +1,47 @@
-FUVAR-SZERVEZŐ V6
+FUVAR-SZERVEZŐ V7
 
-A V6 legfontosabb javítása
-- A fuvar dátuma mindig a feltöltött Excel UTOLSÓ ELŐTTI oszlopa.
-- Az utolsó előtti oszlop fejlécének pontosan „Dátum”-nak kell lennie.
-- Az UTOLSÓ oszlop az „autó”.
-- A program nem használ fix Excel-oszlopszámot.
-- Ha a táblázat közepére új oszlopok kerülnek, az import továbbra is működik.
-- Ha a két utolsó oszlop neve vagy sorrendje hibás, a program nem importál, hanem jól látható hibaüzenetet ad.
+A V7 fő javítása
+A hangrögzítés és a szállítólevél-fotózás most külön, jól látható SOFŐR MÓD menüpontból érhető el.
 
-A V5 minden funkciója megmaradt
-- igazságos szétosztás Márió, Patrik és Martin között;
-- Vác, Kispest és Felcsút figyelembevétele;
-- 7:00–16:00 munkaidő és túlóra-becslés;
-- hosszú, 4–6 méteres szálanyag automatikusan Martin ponyvás autójára;
-- húzással változtatható sorrend;
-- rendelés áthúzása másik autóra;
-- térképes útvonal;
-- Excel, Word és PDF export;
-- szállítólevél-fotó;
-- kézi megjegyzés;
-- hangfelvétel;
-- hangfájl és fotók e-mailes küldése;
-- opcionális szerveres automatikus e-mail és AI-hangátírás.
+HOL TALÁLHATÓ?
+1. Nyisd meg az alkalmazást telefonon.
+2. Az alsó menüben nyomd meg a lila mikrofonos „Sofőr mód” gombot.
+3. Válaszd ki:
+   - Márió
+   - Patrik
+   - Martin
+4. Válaszd ki a fuvarnapot.
+5. A rendelésnél nyomd meg:
+   „📷 🎤 Fotó / hang / jelentés”
+
+A MEGNYÍLÓ ABLAKBAN
+- szállítólevelet lehet fotózni;
+- több fotó is csatolható;
+- kézi megjegyzés írható;
+- hangfelvétel indítható és leállítható;
+- a felvétel visszahallgatható;
+- diktálásból magyar szöveg készíthető támogatott böngészőben;
+- a rendelés teljesítettnek jelölhető;
+- a jelentés elküldhető a szabo.sandor@stand98.hu címre.
+
+FONTOS IPHONE-ON
+- az alkalmazást HTTPS GitHub Pages címről kell megnyitni;
+- a Safari első használatkor engedélyt kér a mikrofonhoz és a kamerához;
+- ezt engedélyezni kell;
+- ha korábban letiltottad:
+  Beállítások → Safari → Kamera / Mikrofon, vagy
+  az oldal címsora mellett az oldalbeállításokban engedélyezd.
+
+E-MAIL-KÜLDÉS
+GitHub Pages módban:
+- a program megnyitja a telefon megosztási vagy e-mail felületét;
+- a fotó és a hangfájl csatolható;
+- a küldést a telefonon kell véglegesíteni.
+
+Teljesen automatikus küldéshez:
+- a csomag server mappáját kell futtatni;
+- SMTP-adatok szükségesek;
+- AI-alapú hangátíráshoz opcionálisan OpenAI API-kulcs szükséges.
 
 GITHUB FRISSÍTÉS
 A repository MAIN ágában írd felül:
@@ -34,10 +54,11 @@ sw.js
 icon-192.png
 icon-512.png
 
-A `server` mappa is frissíthető, de GitHub Pages nem futtat szerveroldali kódot.
+A server mappát is feltöltheted, de GitHub Pages nem futtatja.
 
 FRISSÍTÉS UTÁN
 1. Várj 1–3 percet.
 2. Számítógépen Ctrl+F5.
-3. iPhone-on töröld a korábbi főképernyős appot.
-4. Safariban nyisd meg az oldalt, majd Megosztás → Hozzáadás a Főképernyőhöz.
+3. iPhone-on töröld a régi főképernyős alkalmazást.
+4. Safariban nyisd meg az oldalt.
+5. Megosztás → Hozzáadás a Főképernyőhöz.

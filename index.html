@@ -10,13 +10,13 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="styles.css">
-  <title>Fuvarszervező V6</title>
+  <title>Fuvarszervező V7</title>
 </head>
 <body>
 <header class="topbar">
   <div>
     <div class="eyebrow">STAND 98 · LOGISZTIKA</div>
-    <h1>Fuvarszervező V6</h1>
+    <h1>Fuvarszervező V7</h1>
   </div>
   <div class="top-actions">
     <span id="saveState" class="save-state">Automatikusan mentve</span>
@@ -77,6 +77,28 @@
     <div id="masterList"></div>
   </section>
 
+
+  <section id="driverPage" class="page">
+    <div class="page-head">
+      <div><div class="eyebrow dark">SOFŐR MÓD</div><h2>Szállítólevél és hangjegyzet</h2></div>
+    </div>
+    <div class="panel driver-selector">
+      <label>Sofőr
+        <select id="driverModeSelect">
+          <option value="mario">Márió</option>
+          <option value="patrik">Patrik</option>
+          <option value="martin">Martin</option>
+        </select>
+      </label>
+      <label>Fuvarnap<input id="driverModeDate" type="date"></label>
+    </div>
+    <div class="notice">
+      Válaszd ki a rendelést, majd nyomd meg a <b>Fotó / hang / jelentés</b> gombot.
+      Innen közvetlenül készíthető szállítólevél-fotó és hangfelvétel.
+    </div>
+    <div id="driverOrderList"></div>
+  </section>
+
   <section id="settingsPage" class="page">
     <div class="page-head"><div><div class="eyebrow dark">BEÁLLÍTÁSOK</div><h2>Alapadatok</h2></div></div>
     <div class="panel form-grid">
@@ -100,6 +122,7 @@
 <nav class="bottom-nav">
   <button class="nav active" data-page="plannerPage"><span>◉</span><small>Fuvarok</small></button>
   <button class="nav" data-page="ordersPage"><span>▤</span><small>Rendelések</small></button>
+  <button class="nav driver-nav" data-page="driverPage"><span>🎤</span><small>Sofőr mód</small></button>
   <button class="nav" data-page="masterPage"><span>▦</span><small>Törzsadatok</small></button>
   <button class="nav" data-page="settingsPage"><span>⚙</span><small>Beállítások</small></button>
 </nav>

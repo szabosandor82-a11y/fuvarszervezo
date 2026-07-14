@@ -1,6 +1,6 @@
 {
-  "name": "Fuvarszervező V6",
-  "short_name": "Fuvarszervező V6",
+  "name": "Fuvarszervező V7",
+  "short_name": "Fuvarszervező V7",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f2f6f8",
@@ -20,5 +20,5 @@
     }
   ],
   "version": "4.0",
-  "description": "Interaktív fuvarszervező fix végoszlopos Dátum/autó importszabállyal."
+  "description": "Fuvarszervező külön Sofőr móddal, szállítólevél-fotóval és hangrögzítéssel."
 }
