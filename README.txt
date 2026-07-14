@@ -1,23 +1,18 @@
-FUVAR-SZERVEZŐ MOBIL PWA V1
+FUVAR-SZERVEZŐ V2
 
-Ez telepíthető webalkalmazás (PWA).
+A GitHub repositoryban a régi fájlokat cseréld le ezekre:
+index.html, styles.css, app.js, data.js, manifest.webmanifest, sw.js, icon-192.png, icon-512.png
 
-FONTOS:
-A telefonos telepítéshez a fájlokat HTTPS webtárhelyre kell feltölteni.
-Ezután:
-- iPhone/Safari: Megosztás → Hozzáadás a Főképernyőhöz
-- Android/Chrome: menü → Alkalmazás telepítése
+A program tartalmazza:
+- projekt-, beszállító- és átvevő-törzs
+- hozzáadás, szerkesztés, törlés
+- felrakó/lerakó/mindkettő projekt típus
+- dátum szerinti ütemezés
+- opcionális felvételi és lerakási időablak
+- SERPA Excel-import
+- rendelésszám utolsó 4 számjegye
+- üres utolsó oszlopú import sorok kihagyása
+- importált tételek rendelésszám és autó szerinti nézete
+- PWA telepítés és service worker
 
-Helyben megnyitva az index.html tesztelhető, de a teljes telepítés és offline mód csak HTTPS-en működik.
-
-Funkciók:
-- mobilbarát, modern kezelőfelület
-- rendelések felvitele, szerkesztése, törlése
-- Excelből lista beillesztése
-- 3 túra kezelése
-- járműigény és sorrend
-- sofőrlap, Google Maps navigáció
-- duplikáció- és ponyvás ellenőrzés
-- telefonos helyi mentés
-- JSON biztonsági mentés
-- offline működés telepítés után
+Megjegyzés: az Excel-import a SheetJS könyvtárat CDN-ről tölti be, ezért az első importhoz internetkapcsolat szükséges.

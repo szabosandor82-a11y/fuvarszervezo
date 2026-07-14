@@ -1,153 +1,81 @@
 <!doctype html>
 <html lang="hu">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#123B5D">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Fuvarszervező">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css">
-  <title>Fuvarszervező Mobil</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#123B5D"><meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="styles.css"><title>Fuvarszervező V2</title>
 </head>
 <body>
-  <div id="app">
-    <header class="appbar">
-      <div>
-        <div class="eyebrow">LOGISZTIKA</div>
-        <h1>Fuvarszervező</h1>
-      </div>
-      <button id="installBtn" class="ghost hidden">Telepítés</button>
-    </header>
+<header class="top"><div><small>STAND 98 LOGISZTIKA</small><h1>Fuvarszervező V2</h1></div><button id="installBtn" class="outline hidden">Telepítés</button></header>
+<main>
+<section id="dashboard" class="page active">
+  <div class="datebar"><button id="prevDay">‹</button><input id="workDate" type="date"><button id="nextDay">›</button></div>
+  <div class="hero"><div><small>KIVÁLASZTOTT NAP</small><h2 id="dateTitle"></h2><p id="baseText"></p></div><div class="big"><b id="dayCount">0</b><span>rendelés</span></div></div>
+  <div class="kpis"><article><b id="unassignedCount">0</b><span>Nincs autón</span></article><article><b id="windowCount">0</b><span>Időablakos</span></article><article><b id="importCount">0</b><span>Importált tétel</span></article></div>
+  <div id="vehicleCards" class="vehicle-grid"></div>
+  <h3>Gyors műveletek</h3>
+  <div class="quick"><button data-go="orders">＋<span>Új szállítás</span></button><button data-go="import">⇩<span>SERPA-import</span></button><button data-go="database">▦<span>Törzsadatok</span></button><button id="backupBtn">✓<span>Mentés</span></button></div>
+</section>
 
-    <main>
-      <section id="dashboardView" class="view active">
-        <div class="hero-card">
-          <div>
-            <span class="label">Mai nap</span>
-            <h2 id="todayLabel"></h2>
-            <p id="baseLabel">Indulás: 2310 Szigetszentmiklós, Kereskedő utca</p>
-          </div>
-          <div class="hero-count">
-            <strong id="totalCount">0</strong>
-            <span>tétel</span>
-          </div>
-        </div>
+<section id="orders" class="page">
+ <div class="head"><div><small>SZÁLLÍTÁSOK</small><h2>Napi lista</h2></div><button id="newOrderBtn" class="round">＋</button></div>
+ <div class="filters"><input id="orderSearch" placeholder="Keresés..."><select id="orderVehicleFilter"><option value="">Minden autó</option><option value="1">Dobozos 1</option><option value="2">Dobozos 2</option><option value="3">Ponyvás</option><option value="none">Nincs kiosztva</option></select></div>
+ <div id="orderList"></div>
+</section>
 
-        <div class="vehicle-grid">
-          <button class="vehicle-card" data-open-tour="1">
-            <span class="vehicle-icon">🚚</span>
-            <div><strong id="v1name">Dobozos 1</strong><small><span id="v1count">0</span> tétel</small></div>
-            <span class="chev">›</span>
-          </button>
-          <button class="vehicle-card" data-open-tour="2">
-            <span class="vehicle-icon">🚚</span>
-            <div><strong id="v2name">Dobozos 2</strong><small><span id="v2count">0</span> tétel</small></div>
-            <span class="chev">›</span>
-          </button>
-          <button class="vehicle-card accent" data-open-tour="3">
-            <span class="vehicle-icon">🚛</span>
-            <div><strong id="v3name">Ponyvás</strong><small><span id="v3count">0</span> tétel</small></div>
-            <span class="chev">›</span>
-          </button>
-        </div>
+<section id="import" class="page">
+ <div class="head"><div><small>SERPA</small><h2>Rendelésimport</h2></div></div>
+ <div class="panel">
+  <p>Az első oszlopból az utolsó 4 számjegyet használjuk. Csak azok a sorok kerülnek be, ahol az utolsó oszlopban szállítási dátum van.</p>
+  <label class="file">Excel kiválasztása<input id="excelFile" type="file" accept=".xlsx,.xls"></label>
+  <div id="importStatus" class="notice">Még nincs fájl beolvasva.</div>
+  <button id="commitImport">Beolvasott rendelések hozzáadása</button>
+ </div>
+ <div class="tabs"><button class="tab active" data-import-view="orders">Rendelésszám szerint</button><button class="tab" data-import-view="vehicles">Autónként</button></div>
+ <div id="importPreview"></div>
+</section>
 
-        <div class="section-title"><h3>Gyors műveletek</h3></div>
-        <div class="quick-grid">
-          <button id="addOrderQuick" class="quick-card"><span>＋</span><b>Új rendelés</b></button>
-          <button id="pasteQuick" class="quick-card"><span>▤</span><b>Lista beillesztése</b></button>
-          <button id="saveQuick" class="quick-card"><span>✓</span><b>Mentés</b></button>
-          <button id="settingsQuick" class="quick-card"><span>⚙</span><b>Beállítások</b></button>
-        </div>
+<section id="database" class="page">
+ <div class="head"><div><small>ADMIN</small><h2>Törzsadatok</h2></div><button id="newDbBtn" class="round">＋</button></div>
+ <div class="tabs"><button class="tab active" data-db="projects">Projektek</button><button class="tab" data-db="suppliers">Beszállítók</button><button class="tab" data-db="recipients">Átvevők</button></div>
+ <input id="dbSearch" placeholder="Keresés névre vagy címre...">
+ <div id="dbList"></div>
+</section>
 
-        <div class="section-title">
-          <h3>Figyelmeztetések</h3>
-          <span id="warningBadge" class="pill">0</span>
-        </div>
-        <div id="warnings" class="warning-list"></div>
-      </section>
+<section id="settings" class="page">
+ <div class="head"><div><small>BEÁLLÍTÁSOK</small><h2>Járművek</h2></div></div>
+ <div class="panel form">
+  <label>Alap indulási pont<input id="baseAddress"></label>
+  <label>Autó 1 neve<input id="vehicle1"></label><label>Autó 2 neve<input id="vehicle2"></label><label>Autó 3 neve<input id="vehicle3"></label>
+  <button id="saveSettings">Mentés</button>
+ </div>
+ <div class="panel"><button id="exportBtn" class="secondary">Biztonsági mentés letöltése</button><label class="file">Mentés visszatöltése<input id="restoreFile" type="file" accept=".json"></label></div>
+</section>
+</main>
 
-      <section id="ordersView" class="view">
-        <div class="view-head">
-          <div><span class="label">RENDELÉSEK</span><h2>Napi lista</h2></div>
-          <button id="addOrderBtn" class="round">＋</button>
-        </div>
-        <div class="search-row">
-          <input id="searchInput" placeholder="Keresés...">
-          <select id="tourFilter">
-            <option value="">Mind</option><option value="1">Túra 1</option><option value="2">Túra 2</option><option value="3">Túra 3</option><option value="none">Nincs kiosztva</option>
-          </select>
-        </div>
-        <div id="orderCards" class="card-list"></div>
-      </section>
+<nav><button class="nav active" data-page="dashboard">⌂<span>Főoldal</span></button><button class="nav" data-page="orders">▤<span>Szállítások</span></button><button class="nav" data-page="import">⇩<span>Import</span></button><button class="nav" data-page="database">▦<span>Törzsadatok</span></button><button class="nav" data-page="settings">⚙<span>Beállítás</span></button></nav>
 
-      <section id="tourView" class="view">
-        <div class="view-head">
-          <button id="tourBack" class="back">‹</button>
-          <div><span class="label">SOFŐRLAP</span><h2 id="tourTitle">Túra</h2></div>
-          <button id="printTour" class="ghost-dark">Nyomtatás</button>
-        </div>
-        <div id="tourMeta" class="route-meta"></div>
-        <div id="tourStops" class="timeline"></div>
-      </section>
+<dialog id="orderDialog"><form id="orderForm">
+<div class="dialog-head"><h3 id="orderDialogTitle">Új szállítás</h3><button type="button" class="close" data-close="orderDialog">×</button></div>
+<input id="editOrderId" type="hidden">
+<div class="two"><label>Szállítás dátuma<input id="scheduleDate" type="date" required></label><label>Autó<select id="vehicle"><option value="">Nincs kiosztva</option><option value="1">Dobozos 1</option><option value="2">Dobozos 2</option><option value="3">Ponyvás</option></select></label></div>
+<div class="two"><label>Rendelésszám<input id="orderNo"></label><label>Sorrend<input id="sequence" type="number" min="1"></label></div>
+<label>Felrakó típusa<select id="pickupType"><option value="supplier">Beszállító</option><option value="project">Projekt</option></select></label>
+<label>Felrakó<select id="pickupSelect"></select></label><label>Felrakó címe<input id="pickupAddress"></label>
+<label>Lerakó projekt<select id="projectSelect"></select></label><label>Lerakó címe<input id="dropAddress"></label>
+<label>Átvevő<select id="recipientSelect"></select></label>
+<div class="two"><label>Telefon<input id="recipientPhone"></label><label>E-mail<input id="recipientEmail"></label></div>
+<label>Járműigény<select id="vehicleNeed"><option>Dobozos/Ponyvás</option><option>Csak ponyvás</option><option>Csak dobozos</option></select></label>
+<label class="check"><input id="hasPickupWindow" type="checkbox"> Felvételi időablak megadása</label>
+<div id="pickupWindowBox" class="two hidden"><label>Felvétel ettől<input id="pickupFrom" type="time"></label><label>Felvétel eddig<input id="pickupTo" type="time"></label></div>
+<label class="check"><input id="hasDropWindow" type="checkbox"> Lerakási időablak megadása</label>
+<div id="dropWindowBox" class="two hidden"><label>Lerakás ettől<input id="dropFrom" type="time"></label><label>Lerakás eddig<input id="dropTo" type="time"></label></div>
+<label>Megjegyzés<textarea id="note" rows="3"></textarea></label><button type="submit">Szállítás mentése</button>
+</form></dialog>
 
-      <section id="settingsView" class="view">
-        <div class="view-head">
-          <div><span class="label">BEÁLLÍTÁSOK</span><h2>Járművek és indulás</h2></div>
-        </div>
-        <div class="form-card">
-          <label>Indulási pont<input id="baseAddress"></label>
-          <label>Autó 1 neve<input id="vehicle1"></label>
-          <label>Autó 2 neve<input id="vehicle2"></label>
-          <label>Autó 3 neve<input id="vehicle3"></label>
-          <button id="saveSettings">Beállítások mentése</button>
-        </div>
-        <div class="form-card">
-          <h3>Adatok</h3>
-          <button id="exportJson" class="secondary">Biztonsági mentés letöltése</button>
-          <label class="file-label">Mentés visszatöltése<input id="importJson" type="file" accept=".json"></label>
-          <button id="clearAll" class="danger">Összes adat törlése</button>
-        </div>
-      </section>
-    </main>
+<dialog id="dbDialog"><form id="dbForm"><div class="dialog-head"><h3 id="dbTitle">Új adat</h3><button type="button" class="close" data-close="dbDialog">×</button></div><input id="dbEditIndex" type="hidden"><div id="dbFields"></div><button type="submit">Mentés</button></form></dialog>
 
-    <nav class="bottom-nav">
-      <button class="nav-btn active" data-view="dashboardView"><span>⌂</span><small>Főoldal</small></button>
-      <button class="nav-btn" data-view="ordersView"><span>▤</span><small>Rendelések</small></button>
-      <button class="nav-btn" data-view="settingsView"><span>⚙</span><small>Beállítások</small></button>
-    </nav>
-  </div>
-
-  <dialog id="orderDialog">
-    <form method="dialog" id="orderForm">
-      <div class="dialog-head"><h3 id="dialogTitle">Új rendelés</h3><button value="cancel" class="close">×</button></div>
-      <input type="hidden" id="editId">
-      <label>Felrakó neve<input id="pickupName" required></label>
-      <label>Felrakó címe<input id="pickupAddress" required></label>
-      <label>Rendelésszám<input id="orderNo"></label>
-      <label>Projekt<input id="project"></label>
-      <label>Lerakó címe<input id="dropAddress" required></label>
-      <label>Megjegyzés<textarea id="note" rows="2"></textarea></label>
-      <div class="two-col">
-        <label>Járműigény<select id="vehicleNeed"><option>Dobozos/Ponyvás</option><option>Csak ponyvás</option><option>Csak dobozos</option></select></label>
-        <label>Túra<select id="tour"><option value="">Nincs</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label>
-      </div>
-      <label>Sorrend<input id="sequence" type="number" min="1"></label>
-      <button id="saveOrder" value="default">Rendelés mentése</button>
-    </form>
-  </dialog>
-
-  <dialog id="pasteDialog">
-    <form method="dialog">
-      <div class="dialog-head"><h3>Lista beillesztése</h3><button value="cancel" class="close">×</button></div>
-      <p class="hint">Excelből másold ide: Felrakó, Felrakó címe, Rendelésszám, Projekt, Lerakó címe, Megjegyzés.</p>
-      <textarea id="pasteArea" rows="10"></textarea>
-      <button id="importPaste" value="default">Lista hozzáadása</button>
-    </form>
-  </dialog>
-
-  <script src="app.js"></script>
-</body>
-</html>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="data.js"></script><script src="app.js"></script>
+</body></html>
