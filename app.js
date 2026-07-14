@@ -1,677 +1,77 @@
-const STORAGE_KEY='fuvarszervezo_v4';
-const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
-const DRIVERS={
-  mario:{name:'Márió',color:'#103a56',homeName:'Vác',home:[47.7759,19.1361]},
-  patrik:{name:'Patrik',color:'#197c98',homeName:'Kispest',home:[47.4552,19.1490]},
-  martin:{name:'Martin',color:'#76469a',homeName:'Felcsút',home:[47.4555,18.5845]}
-};
-const APPROVED_HEADERS={
-  documentNo:['bizonylatszám'],
-  topicName:['témaszám név'],
-  productCode:['termék kód','termékkód'],
-  productName:['termék név','terméknév'],
-  customerWarehouse:['ügyfél/raktár','ügyfél/raktár név'],
-  quantity:['tétel mennyiség'],
-  unit:['m.e.','me'],
-  requestedDeadline:['kért szállítási határidő'],
-  scheduleDate:['dátum'],
-  driver:['autó','auto'],
-  note:['megjegyzés']
-};
-let state={
-  projects:[],suppliers:[],recipients:[],orders:[],
-  settings:{
-    baseAddress:'2310 Szigetszentmiklós, Kereskedő utca',
-    marioVehicle:'Dobozos 1',patrikVehicle:'Dobozos 2',martinVehicle:'Ponyvás'
-  },
-  geoCache:{},
-  projectAliases:{}
-};
-let importRows=[], importSourceRows=[], importHeaderMap={}, masterType='projects';
-let maps={}, routeLayers={}, installPrompt=null;
-let mediaRecorder=null,audioChunks=[],audioBlob=null,feedbackPhotos=[];
-
-const today=()=>new Date().toISOString().slice(0,10);
-const uid=()=>crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random();
+const KEY='fuvarszervezo_v11';const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
+let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca'},aliases:{projects:{},suppliers:{}},geo:{}};
+let maps={},masterType='projects',importOrders=[],reviewQueue=[],reviewIndex=0,deferredPrompt=null;
+const today=()=>new Date().toISOString().slice(0,10),uid=()=>crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random();
 function esc(v=''){return String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function norm(s=''){return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[_.,;:()[\]{}\/\\-]+/g,' ').replace(/\s+/g,' ').trim()}
-function compactProjectName(s=''){return norm(s).replace(/\b(budapest|bp|utem|ii|iii|iv|projekt|project|epulet|haz)\b/g,' ').replace(/\s+/g,' ').trim()}
-function driverFrom(v=''){const n=norm(v);if(n.includes('mario'))return'mario';if(n.includes('patrik'))return'patrik';if(n.includes('martin'))return'martin';return''}
 function last5(v=''){const d=String(v).replace(/\D/g,'');return d.slice(-5).padStart(5,'0')}
-function excelDate(v){
-  if(v===''||v==null)return'';
-  if(v instanceof Date)return v.toISOString().slice(0,10);
-  if(typeof v==='number'){
-    const d=XLSX.SSF.parse_date_code(v);
-    return d?`${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`:'';
-  }
-  const s=String(v).trim();
-  let m=s.match(/(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})/);
-  if(m)return`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
-  m=s.match(/(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})/);
-  if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-  return'';
-}
-function save(){
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
-  $('#saveState').textContent='Automatikusan mentve';
-  render();
-}
-function load(){
-  const raw=localStorage.getItem(STORAGE_KEY);
-  if(raw){state=JSON.parse(raw);state.projectAliases=state.projectAliases||{};state.geoCache=state.geoCache||{};return}
-  state.projects=(SEED_DATA.projects||[]).map((x,i)=>({...x,id:x.id||'p'+i,defaultRecipientId:x.defaultRecipientId||''}));
-  state.suppliers=(SEED_DATA.suppliers||[]).map((x,i)=>({...x,id:x.id||'s'+i,pickupNote:x.pickupNote||x.note||''}));
-  state.recipients=(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:x.id||'r'+i}));
-  state.projects.forEach(p=>{
-    const r=state.recipients.find(x=>norm(x.project)===norm(p.name))||state.recipients.find(x=>norm(x.name)===norm(p.receiver));
-    p.defaultRecipientId=r?.id||'';
-  });
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
-}
+function dateVal(v){if(!v)return'';if(v instanceof Date)return v.toISOString().slice(0,10);if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return d?`${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`:''}const m=String(v).match(/(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})/);return m?`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`:''}
+function defaultVehicles(){return[{id:'v-mario',driverName:'Márió',name:'Dobozos 1',type:'3.5 T dobozos autó',homeCity:'Vác',active:true},{id:'v-patrik',driverName:'Patrik',name:'Dobozos 2',type:'3.5 T dobozos autó',homeCity:'Kispest',active:true},{id:'v-martin',driverName:'Martin',name:'Ponyvás',type:'3.5 T plató autó',homeCity:'Felcsút',active:true}]}
+function load(){const raw=localStorage.getItem(KEY);if(raw){state=JSON.parse(raw);state.aliases=state.aliases||{projects:{},suppliers:{}};return}state.projects=(SEED_DATA.projects||[]).map((x,i)=>({...x,id:'p'+i,defaultRecipientId:''}));state.suppliers=(SEED_DATA.suppliers||[]).map((x,i)=>({...x,id:'s'+i,isCentral:!!x.site&&norm(x.site)==='kozpont',pickupNote:x.note||''}));state.recipients=(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i}));state.projects.forEach(p=>{const r=state.recipients.find(x=>norm(x.project)===norm(p.name))||state.recipients.find(x=>norm(x.name)===norm(p.receiver));p.defaultRecipientId=r?.id||''});state.vehicles=defaultVehicles();save(false)}
+function save(renderNow=true){localStorage.setItem(KEY,JSON.stringify(state));if(renderNow)render()}
+function activeVehicles(){return state.vehicles.filter(v=>v.active)}
 function selectedDate(){return $('#workDate').value||today()}
-function dayOrders(driver=null){return state.orders.filter(o=>o.scheduleDate===selectedDate()&&(!driver||o.driver===driver))}
-function driverVehicle(k){return state.settings[k+'Vehicle']||DRIVERS[k].name}
-function showPage(id){
-  $$('.page').forEach(x=>x.classList.toggle('active',x.id===id));
-  $$('.nav').forEach(x=>x.classList.toggle('active',x.dataset.page===id));
-  scrollTo(0,0);render();
-}
-function render(){renderPlanner();renderOrders();renderDriverMode();renderMaster();fillSettings()}
-
-function renderPlanner(){
-  $('#routeGrid').innerHTML=Object.keys(DRIVERS).map(k=>{
-    const list=dayOrders(k);
-    return`<section class="route-column" data-driver="${k}">
-      <header class="route-header">
-        <div><h2>${esc(DRIVERS[k].name)} · ${esc(driverVehicle(k))}</h2>
-          <small>${list.length} rendelés · ${list.reduce((a,o)=>a+(o.items?.length||0),0)} tétel</small>
-          <div class="driver-home">Munkába indul: ${esc(DRIVERS[k].homeName)} · alap munkaidő 7:00–16:00</div>
-          <div class="workload-card" id="workload-${k}">Terhelés számítása…</div>
-          <div class="map-status" id="mapStatus-${k}"></div>
-        </div>
-        <div class="route-actions"><button onclick="optimizeRoute('${k}')">Optimalizálás</button><button onclick="exportMenu('${k}')">Export</button></div>
-      </header>
-      <div id="map-${k}" class="route-map"></div>
-      <div id="list-${k}" class="route-list">${renderBubbles(list,k)}</div>
-    </section>`;
-  }).join('');
-  setTimeout(initMaps,30);setTimeout(initSortables,40);setTimeout(updateWorkloadCards,60);
-}
-function projectOptions(selected=''){
-  return '<option value="">Nincs projekt</option>'+state.projects.filter(x=>x.active!==false&&x.type!=='felrakó')
-    .sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(x=>option(x.id,x.name,selected)).join('');
-}
-function supplierOptions(selected=''){
-  return '<option value="">Nincs beszállító</option>'+state.suppliers.filter(x=>x.active!==false)
-    .sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(x=>option(x.id,`${x.name}${x.site?' · '+x.site:''}`,selected)).join('');
-}
-function recipientOptions(projectName='',selected=''){
-  return '<option value="">Nincs átvevő</option>'+state.recipients.filter(x=>x.active!==false&&(!projectName||norm(x.project)===norm(projectName)))
-    .sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(x=>option(x.id,x.name,selected)).join('');
-}
-function renderBubbles(list,driver){
-  if(!list.length)return'<div class="empty-route">Erre a napra még nincs rendelés ennél a sofőrnél.</div>';
-  return list.slice().sort((a,b)=>(+a.sequence||999)-(+b.sequence||999)).map((o,i)=>`
-    <article class="stop-bubble" data-id="${o.id}">
-      <span class="drag">☷</span>
-      <div><span class="stop-number">${i+1}</span><span class="stop-title">${esc(o.orderNo)} · ${esc(o.projectName||'Projekt nincs kiválasztva')}</span></div>
-      <p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs kiválasztva')} ${o.pickupAddress?'· '+esc(o.pickupAddress):''}</p>
-      <p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs kiválasztva')}</p>
-      ${o.pickupNote?`<p><b>Felrakói megjegyzés:</b> ${esc(o.pickupNote)}</p>`:''}
-      ${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}
-      ${o.longMaterialReason?`<div class="long-reason">Ponyvásra téve: ${esc(o.longMaterialReason)}</div>`:''}
-      <div class="stop-tags">
-        <span class="tag">${o.items?.length||0} tétel</span>
-        ${o.vehicleNeed==='tarp'?'<span class="tag tarp">csak ponyvás</span>':''}
-        ${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">határidő ${o.requestedDeadline}</span>`:''}
-        ${o.pickupFrom?`<span class="tag warn">felvétel ${o.pickupFrom}-${o.pickupTo}</span>`:''}
-        ${o.dropFrom?`<span class="tag warn">lerakás ${o.dropFrom}-${o.dropTo}</span>`:''}
-      </div>
-      <details class="inline-editor">
-        <summary>Gyors szerkesztés ▾</summary>
-        <div class="inline-grid">
-          <label>Beszállító<select data-inline="supplierId" onchange="inlineChange('${o.id}',this)">${supplierOptions(o.supplierId)}</select></label>
-          <label>Projekt<select data-inline="projectId" onchange="inlineChange('${o.id}',this)">${projectOptions(o.projectId)}</select></label>
-          <label class="wide">Felrakó cím<input data-inline="pickupAddress" value="${esc(o.pickupAddress||'')}" onchange="inlineChange('${o.id}',this)"></label>
-          <label class="wide">Lerakó cím<input data-inline="dropAddress" value="${esc(o.dropAddress||'')}" onchange="inlineChange('${o.id}',this)"></label>
-          <label>Átvevő<select data-inline="recipientId" onchange="inlineChange('${o.id}',this)">${recipientOptions(o.projectName,o.recipientId)}</select></label>
-          <label>Telefon<input data-inline="recipientPhone" value="${esc(o.recipientPhone||'')}" onchange="inlineChange('${o.id}',this)"></label>
-          <label class="wide">Felrakói megjegyzés<textarea data-inline="pickupNote" onchange="inlineChange('${o.id}',this)">${esc(o.pickupNote||'')}</textarea></label>
-          <label class="wide">Fuvar megjegyzés<textarea data-inline="note" onchange="inlineChange('${o.id}',this)">${esc(o.note||'')}</textarea></label>
-        </div>
-      </details>
-      <div class="bubble-actions"><button onclick="editOrder('${o.id}')">Teljes szerkesztés</button><button onclick="showItems('${o.id}')">Tételek</button><button onclick="moveOrder('${o.id}')">Másik sofőr</button><button onclick="openNavigation('${o.id}')">Navigáció</button><button onclick="openFeedback('${o.id}')">Szállítólevél / jelentés${o.reports?.length?` <span class="report-count">${o.reports.length}</span>`:''}</button></div><button class="stop-trash" title="Fuvar törlése" aria-label="Fuvar törlése" onclick="event.stopPropagation();deleteSingleRoute('${o.id}')">🗑</button>
-    </article>`).join('');
-}
-window.inlineChange=(id,el)=>{
-  const o=state.orders.find(x=>x.id===id);if(!o)return;
-  const f=el.dataset.inline,v=el.value;o[f]=v;
-  if(f==='supplierId'){
-    const s=state.suppliers.find(x=>x.id===v);o.pickupName=s?.name||'';o.pickupAddress=s?.address||o.pickupAddress;o.pickupNote=s?.pickupNote||s?.note||o.pickupNote||'';
-  }
-  if(f==='projectId'){
-    const p=state.projects.find(x=>x.id===v);o.projectName=p?.name||'';o.dropAddress=p?.address||o.dropAddress;
-    const r=state.recipients.find(x=>x.id===p?.defaultRecipientId);
-    if(r){o.recipientId=r.id;o.recipientName=r.name;o.recipientPhone=r.phone||'';o.recipientEmail=r.email||''}
-  }
-  if(f==='recipientId'){
-    const r=state.recipients.find(x=>x.id===v);o.recipientName=r?.name||'';o.recipientPhone=r?.phone||o.recipientPhone;o.recipientEmail=r?.email||'';
-  }
-  save();
-};
-function initSortables(){
-  Object.keys(DRIVERS).forEach(k=>{
-    const el=$('#list-'+k);if(!el)return;
-    new Sortable(el,{animation:180,group:'routes',handle:'.drag',ghostClass:'sortable-ghost',onEnd:e=>{
-      const movedId=e.item.dataset.id,newDriver=e.to.id.replace('list-','');
-      const o=state.orders.find(x=>x.id===movedId);if(o)o.driver=newDriver;
-      Object.keys(DRIVERS).forEach(d=>{$$('#list-'+d+' .stop-bubble').forEach((node,i)=>{const r=state.orders.find(x=>x.id===node.dataset.id);if(r)r.sequence=i+1})});
-      save();
-    }});
-  });
-}
-async function geocode(address){
-  if(!address)return null;if(state.geoCache[address])return state.geoCache[address];
-  try{
-    const u='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=hu&q='+encodeURIComponent(address);
-    const r=await fetch(u,{headers:{'Accept-Language':'hu'}}),j=await r.json();
-    if(j[0]){
-      const p=[+j[0].lat,+j[0].lon];state.geoCache[address]=p;localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
-      await new Promise(res=>setTimeout(res,1050));return p;
-    }
-  }catch(e){}return null;
-}
-function initMaps(){
-  Object.keys(DRIVERS).forEach(k=>{
-    if(maps[k])maps[k].remove();
-    maps[k]=L.map('map-'+k,{zoomControl:true}).setView([47.45,19.04],9);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(maps[k]);
-    drawMap(k);
-  });
-}
-async function roadGeometry(points){
-  if(points.length<2)return null;
-  try{
-    const coords=points.map(p=>`${p[1]},${p[0]}`).join(';');
-    const u=`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
-    const r=await fetch(u),j=await r.json();
-    return j.routes?.[0]?.geometry?.coordinates?.map(c=>[c[1],c[0]])||null;
-  }catch(e){return null}
-}
-async function drawMap(driver){
-  const map=maps[driver];if(!map)return;
-  $('#mapStatus-'+driver).textContent='Címek és útvonal betöltése…';
-  (routeLayers[driver]||[]).forEach(x=>map.removeLayer(x));routeLayers[driver]=[];
-  const orders=dayOrders(driver).slice().sort((a,b)=>(+a.sequence||999)-(+b.sequence||999)),points=[];
-  const base=await geocode(state.settings.baseAddress);
-  if(base)points.push({coord:base,label:'Indulás: '+state.settings.baseAddress,type:'base'});
-  for(const o of orders){
-    const p=await geocode(o.dropAddress);
-    if(p)points.push({coord:p,label:`${o.orderNo} · ${o.projectName||o.dropAddress}`,type:'stop'});
-  }
-  points.forEach((p,i)=>{
-    const marker=L.marker(p.coord).addTo(map).bindPopup(`<b>${esc(p.label)}</b><br>${i===0?'Indulás':`${i}. megálló`}`);
-    routeLayers[driver].push(marker);
-  });
-  if(points.length){
-    const road=await roadGeometry(points.map(p=>p.coord));
-    const coords=road||points.map(p=>p.coord);
-    const line=L.polyline(coords,{color:DRIVERS[driver].color,weight:5,opacity:.82}).addTo(map);
-    routeLayers[driver].push(line);map.fitBounds(line.getBounds(),{padding:[25,25]});
-    $('#mapStatus-'+driver).innerHTML=road?`<span class="tag route-real">Valós közúti útvonal · ${points.length-1} cím</span>`:`<span class="tag route-estimated">Becsült vonal · ${points.length-1} cím</span>`;
-  }else $('#mapStatus-'+driver).textContent='Nincs geokódolható cím';
-}
-async function optimizeRoute(driver){
-  const list=dayOrders(driver);if(list.length<2)return;
-  $('#mapStatus-'+driver).textContent='Optimalizálás…';
-  const base=await geocode(state.settings.baseAddress);
-  if(!base){alert('Az indulási címet nem sikerült megtalálni.');return}
-  const enriched=[];for(const o of list)enriched.push({o,p:await geocode(o.dropAddress)});
-  let current=base,remaining=enriched.filter(x=>x.p),ordered=[];
-  while(remaining.length){remaining.sort((a,b)=>distance(current,a.p)-distance(current,b.p));const n=remaining.shift();ordered.push(n.o);current=n.p}
-  enriched.filter(x=>!x.p).forEach(x=>ordered.push(x.o));ordered.forEach((o,i)=>o.sequence=i+1);save();
-}
-function distance(a,b){const r=Math.PI/180,dLat=(b[0]-a[0])*r,dLon=(b[1]-a[1])*r,x=Math.sin(dLat/2)**2+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dLon/2)**2;return 6371*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
-window.optimizeRoute=optimizeRoute;
-window.openNavigation=id=>{const o=state.orders.find(x=>x.id===id);window.open('https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(o.dropAddress),'_blank')};
-window.moveOrder=id=>{const o=state.orders.find(x=>x.id===id),choice=prompt('Sofőr: Márió, Patrik vagy Martin',DRIVERS[o.driver]?.name||'');const d=driverFrom(choice);if(d){o.driver=d;o.sequence=dayOrders(d).length+1;save()}};
-window.showItems=id=>{const o=state.orders.find(x=>x.id===id);$('#itemsTitle').textContent=`${o.orderNo} – ${o.items?.length||0} tétel`;$('#itemsBody').innerHTML=itemsTable(o.items||[]);$('#itemsDialog').showModal()};
-function itemsTable(items){return`<table class="items-table"><thead><tr><th>Termék kód</th><th>Termék név</th><th>Mennyiség</th><th>M.e.</th><th>Hosszú?</th></tr></thead><tbody>${items.map(x=>`<tr><td>${esc(x.code)}</td><td>${esc(x.name)}</td><td>${esc(x.qty)}</td><td>${esc(x.unit)}</td><td>${x.longMaterial?'Igen':''}</td></tr>`).join('')}</tbody></table>`}
-
-function renderOrders(){
-  const q=norm($('#orderSearch').value),df=$('#orderDriverFilter').value;
-  const rows=state.orders.filter(o=>(!q||norm([o.orderNo,o.projectName,o.pickupName,o.pickupAddress,o.dropAddress].join(' ')).includes(q))&&(!df||(df==='unassigned'?!o.driver:o.driver===df)))
-    .sort((a,b)=>b.scheduleDate.localeCompare(a.scheduleDate)||(+a.sequence||999)-(+b.sequence||999));
-  $('#ordersList').innerHTML=rows.length?rows.map(o=>`<article class="order-card ${o.vehicleNeed==='tarp'?'tarp':''}">
-    <div class="order-top"><div><h3>${esc(o.orderNo)} · ${esc(o.projectName||'Nincs projekt')}</h3><p>${esc(o.scheduleDate)} · ${esc(o.pickupName||'Nincs beszállító')} → ${esc(o.dropAddress||'Nincs lerakócím')}</p></div><span class="badge">${o.driver?DRIVERS[o.driver].name:'Nincs sofőr'}</span></div>
-    <p>${o.items?.length||0} tétel · ${esc(o.recipientName||'Nincs átvevő')} ${esc(o.recipientPhone||'')}</p>
-    ${o.longMaterialReason?`<p class="long-reason">${esc(o.longMaterialReason)}</p>`:''}
-    <div class="card-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="showItems('${o.id}')">Tételek</button><button onclick="openFeedback('${o.id}')">Szállítólevél / jelentés</button><button class="delete" onclick="deleteOrder('${o.id}')">Törlés</button></div>
-  </article>`).join(''):'<div class="notice">Nincs találat.</div>';
-}
+function dayOrders(vehicleId=null,date=selectedDate()){return state.orders.filter(o=>o.scheduleDate===date&&(!vehicleId||o.vehicleId===vehicleId))}
 function option(v,t,sel=''){return`<option value="${esc(v)}" ${String(v)===String(sel)?'selected':''}>${esc(t)}</option>`}
-function fillSupplierOptions(sel=''){$('#supplierSelect').innerHTML=supplierOptions(sel)}
-function fillProjectOptions(sel=''){$('#projectSelect').innerHTML=projectOptions(sel)}
-function fillRecipientOptions(projectName='',sel=''){$('#recipientSelect').innerHTML=recipientOptions(projectName,sel)}
-function openOrder(o={}){
-  $('#orderDialogTitle').textContent=o.id?'Rendelés szerkesztése':'Új rendelés';$('#editOrderId').value=o.id||'';
-  $('#orderDate').value=o.scheduleDate||selectedDate();$('#orderDriver').value=o.driver||'';$('#orderNo').value=o.orderNo||'';
-  $('#vehicleNeed').value=o.vehicleNeed||'any';fillSupplierOptions(o.supplierId);$('#pickupAddress').value=o.pickupAddress||'';
-  fillProjectOptions(o.projectId);$('#dropAddress').value=o.dropAddress||'';fillRecipientOptions(o.projectName||'',o.recipientId);
-  $('#recipientPhone').value=o.recipientPhone||'';$('#recipientEmail').value=o.recipientEmail||'';
-  $('#pickupWindowEnabled').checked=!!o.pickupFrom;$('#pickupWindowFields').classList.toggle('hidden',!o.pickupFrom);$('#pickupFrom').value=o.pickupFrom||'';$('#pickupTo').value=o.pickupTo||'';
-  $('#dropWindowEnabled').checked=!!o.dropFrom;$('#dropWindowFields').classList.toggle('hidden',!o.dropFrom);$('#dropFrom').value=o.dropFrom||'';$('#dropTo').value=o.dropTo||'';
-  $('#pickupNote').value=o.pickupNote||'';$('#orderNote').value=o.note||'';$('#orderDialog').showModal();
-}
-
-window.deleteSingleRoute=id=>{
-  const o=state.orders.find(x=>x.id===id);
-  if(!o)return;
-  const label=[o.orderNo,o.projectName||o.dropAddress,DRIVERS[o.driver]?.name].filter(Boolean).join(' · ');
-  if(confirm(`Biztosan törlöd ezt az egy fuvart?\n\n${label}`)){
-    state.orders=state.orders.filter(x=>x.id!==id);
-    Object.keys(DRIVERS).forEach(d=>{
-      dayOrders(d).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999)).forEach((r,i)=>r.sequence=i+1);
-    });
-    save();
-  }
-};
-function deleteAllRoutes(){
-  const count=state.orders.length;
-  if(!count){alert('Nincs törölhető fuvar.');return}
-  const first=confirm(`${count} fuvar fog törlődni minden dátumról és minden sofőrtől.\n\nA törzsadatok és a beállítások megmaradnak.\n\nFolytatod?`);
-  if(!first)return;
-  const typed=prompt('A végleges törléshez írd be: TÖRLÉS');
-  if((typed||'').trim().toUpperCase()!=='TÖRLÉS'){
-    alert('A törlés megszakítva.');
-    return;
-  }
-  state.orders=[];
-  save();
-  alert('Az összes fuvar törölve. Most újra feltöltheted a SERPA Excel-fájlt.');
-}
-
+function showPage(id){$$('.page').forEach(p=>p.classList.toggle('active',p.id===id));$$('.nav').forEach(n=>n.classList.toggle('active',n.dataset.page===id));scrollTo(0,0);render()}
+function render(){applyAfterFourRule();renderRoutes();renderOrders();renderMasters();renderVehicles();renderDriver();fillSelectors();$('#baseAddress').value=state.settings.baseAddress}
+function longReason(name=''){const n=norm(name);let m=n.match(/(?:^|[^0-9])([456])\s*(?:m|meter)(?:es|eres)?\b/);if(m)return`${m[1]} méteres szálanyag`;m=n.match(/\b(4000|5000|6000)\s*mm\b/);if(m&&/(szal|cso|acel|rud|profil)/.test(n))return`${+m[1]/1000} méteres szálanyag`;return''}
+function canCarryLong(v){return/(plato|kcr|kamion)/.test(norm(v.type))}
+function centralSupplier(name){const group=state.suppliers.filter(s=>norm(s.name)===norm(name));return group.find(s=>s.isCentral)||group[0]||null}
+function renderRoutes(){const vehicles=activeVehicles();$('#routes').innerHTML=vehicles.map(v=>{const list=dayOrders(v.id).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999));return`<section class="route"><header class="route-head"><h2><input value="${esc(v.driverName)}" onchange="renameDriver('${v.id}',this.value)"></h2><small>${esc(v.name)} · ${esc(v.type)} · ${list.length} fuvar</small></header><div id="map-${v.id}" class="map"></div><div id="route-${v.id}" class="route-list">${bubbles(list)}</div></section>`}).join('')||'<div class="notice">Nincs aktív jármű.</div>';setTimeout(initMaps,30);setTimeout(initSortables,40)}
+function bubbles(list){if(!list.length)return'<div class="notice">Nincs fuvar.</div>';return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')} · ${esc(o.pickupAddress||'')}</p><p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs megadva')}</p>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('')}
+window.renameDriver=(id,name)=>{const v=state.vehicles.find(x=>x.id===id);if(v){v.driverName=name.trim()||v.driverName;save()}};
+function initSortables(){activeVehicles().forEach(v=>{const el=$('#route-'+v.id);if(!el)return;new Sortable(el,{group:'vehicles',animation:180,handle:'.drag',onEnd:e=>{const o=state.orders.find(x=>x.id===e.item.dataset.id);if(o)o.vehicleId=e.to.id.replace('route-','');activeVehicles().forEach(x=>{$$('#route-'+x.id+' .bubble').forEach((n,i)=>{const r=state.orders.find(o=>o.id===n.dataset.id);if(r)r.sequence=i+1})});save()}})})}
+async function geo(addr){if(!addr)return null;if(state.geo[addr])return state.geo[addr];try{const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=hu&q='+encodeURIComponent(addr));const j=await r.json();if(j[0]){state.geo[addr]=[+j[0].lat,+j[0].lon];save(false);await new Promise(r=>setTimeout(r,1050));return state.geo[addr]}}catch{}return null}
+function initMaps(){activeVehicles().forEach(v=>{if(maps[v.id])maps[v.id].remove();maps[v.id]=L.map('map-'+v.id).setView([47.45,19.04],9);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(maps[v.id]);drawMap(v.id)})}
+async function drawMap(id){const map=maps[id],pts=[];const base=await geo(state.settings.baseAddress);if(base)pts.push(base);for(const o of dayOrders(id).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999))){const p=await geo(o.dropAddress);if(p){pts.push(p);L.marker(p).addTo(map).bindPopup(`${esc(o.orderNo)} · ${esc(o.projectName||o.dropAddress)}`)}}if(pts.length){const line=L.polyline(pts,{weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[20,20]})}}
+function balance(){const active=activeVehicles();if(!active.length)return alert('Nincs aktív jármű.');const orders=state.orders.filter(o=>o.scheduleDate===selectedDate()),longCars=active.filter(canCarryLong);orders.forEach(o=>{if(o.longMaterialReason){const target=longCars.find(v=>norm(v.driverName).includes('martin'))||longCars[0];if(target)o.vehicleId=target.id}});const loads=Object.fromEntries(active.map(v=>[v.id,orders.filter(o=>o.vehicleId===v.id&&o.longMaterialReason).length]));orders.filter(o=>!o.longMaterialReason).forEach(o=>{if(!o.vehicleId||!active.some(v=>v.id===o.vehicleId)){const target=active.slice().sort((a,b)=>(loads[a.id]||0)-(loads[b.id]||0))[0];o.vehicleId=target.id;loads[target.id]=(loads[target.id]||0)+1}});active.forEach(v=>dayOrders(v.id).forEach((o,i)=>o.sequence=i+1));save()}
+function toggleComplete(id){const o=state.orders.find(x=>x.id===id);if(!o)return;o.completed=!o.completed;o.completedAt=o.completed?new Date().toISOString():'';if(o.completed)(o.items||[]).forEach(i=>i.received=true);save()}
+function applyAfterFourRule(){const now=new Date();if(now.getHours()<16)return;const d=today(),next=new Date();next.setDate(next.getDate()+1);const nd=next.toISOString().slice(0,10);let changed=false;state.orders.forEach(o=>{if(o.scheduleDate===d&&!o.completed&&!o.carriedAfter16){o.scheduleDate=nd;o.carriedAfter16=true;changed=true}});if(changed){localStorage.setItem(KEY,JSON.stringify(state));$('#dayWarning').classList.remove('hidden');$('#dayWarning').textContent='A 16:00 után nem teljesített mai fuvarokat a program áthelyezte a következő napra.'}}
+function renderOrders(){const q=norm($('#orderSearch').value),vf=$('#orderVehicleFilter').value;const rows=state.orders.filter(o=>(!q||norm(Object.values(o).join(' ')).includes(q))&&(!vf||o.vehicleId===vf)).sort((a,b)=>a.scheduleDate.localeCompare(b.scheduleDate));$('#orderList').innerHTML=rows.map(o=>`<article class="card"><h3>${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p>${o.scheduleDate} · ${esc(state.vehicles.find(v=>v.id===o.vehicleId)?.driverName||'Nincs kiosztva')}</p><p>${esc(o.pickupName||'')} → ${esc(o.dropAddress||'')}</p><div class="card-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="deleteOne('${o.id}')">Törlés</button></div></article>`).join('')||'<div class="notice">Nincs találat.</div>'}
+function renderVehicles(){$('#vehicleList').innerHTML=state.vehicles.map(v=>`<article class="card vehicle-card ${v.active?'':'inactive'}"><div><h3>${esc(v.driverName)} · ${esc(v.name)}</h3><p>${esc(v.type)} · ${esc(v.homeCity||'')}</p><div class="card-actions"><button onclick="editVehicle('${v.id}')">Szerkesztés</button></div></div><label class="switch"><input type="checkbox" ${v.active?'checked':''} onchange="toggleVehicle('${v.id}',this.checked)"> Aktív</label></article>`).join('')}
+window.toggleVehicle=(id,val)=>{const v=state.vehicles.find(x=>x.id===id);if(v){v.active=val;if(!val){const active=state.vehicles.filter(x=>x.active);state.orders.filter(o=>o.vehicleId===id).forEach(o=>o.vehicleId=active[0]?.id||'')}save()}};
+function renderDriver(){const vid=$('#driverVehicleSelect').value||activeVehicles()[0]?.id,date=$('#driverDate').value||selectedDate();const rows=dayOrders(vid,date).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999));$('#driverTasks').innerHTML=rows.map((o,i)=>`<article class="driver-task ${o.completed?'done':''}"><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||o.dropAddress)}</h3><p><b>Felrakó:</b> ${esc(o.pickupName)} · ${esc(o.pickupAddress)}</p><p><b>Lerakó:</b> ${esc(o.dropAddress)}</p><button onclick="toggleComplete('${o.id}')">${o.completed?'✓ Minden tétel rendben':'○ Átvétel rendben'}</button><button class="secondary" onclick="openItems('${o.id}')">Tételek külön pipálása</button><button class="secondary" onclick="openCamera('${o.id}')">📷 Szállítólevél fotózása</button></article>`).join('')||'<div class="notice">Nincs feladat.</div>'}
+function fillSelectors(){const vehicleOpts='<option value="">Nincs kiosztva</option>'+state.vehicles.map(v=>option(v.id,`${v.driverName} · ${v.name}${v.active?'':' (kikapcsolva)'}`)).join('');$('#vehicleId').innerHTML=vehicleOpts;$('#orderVehicleFilter').innerHTML='<option value="">Minden autó</option>'+state.vehicles.map(v=>option(v.id,v.driverName)).join('');$('#driverVehicleSelect').innerHTML=activeVehicles().map(v=>option(v.id,`${v.driverName} · ${v.name}`,$('#driverVehicleSelect').value)).join('');if(!$('#driverDate').value)$('#driverDate').value=selectedDate()}
+function renderMasters(){const q=norm($('#masterSearch').value),arr=state[masterType].filter(x=>!q||norm(Object.values(x).join(' ')).includes(q));$('#masterList').innerHTML=arr.map(x=>`<article class="card"><h3>${esc(x.name)}</h3><p>${esc(x.address||x.project||'')} ${esc(x.phone||'')}</p>${masterType==='suppliers'?`<p>${x.isCentral?'★ Központi telephely':''}</p>`:''}<div class="card-actions"><button onclick="editMaster('${x.id}')">Szerkesztés</button><button onclick="deleteMaster('${x.id}')">Törlés</button></div></article>`).join('')||'<div class="notice">Nincs találat.</div>'}
+function supplierOptions(sel=''){return'<option value="">Egyedi / nincs kiválasztva</option>'+state.suppliers.sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(s=>option(s.id,`${s.name}${s.isCentral?' ★ központ':''} · ${s.address}`,sel)).join('')}
+function projectOptions(sel=''){return'<option value="">Egyedi úticél</option>'+state.projects.sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(p=>option(p.id,p.name,sel)).join('')}
+function recipientOptions(project,sel=''){return'<option value="">Nincs átvevő</option>'+state.recipients.filter(r=>!project||norm(r.project)===norm(project)).map(r=>option(r.id,`${r.name} · ${r.phone||''}`,sel)).join('')}
+function openOrder(o={}){$('#orderId').value=o.id||'';$('#orderTitle').textContent=o.id?'Fuvar szerkesztése':'Új fuvar';$('#scheduleDate').value=o.scheduleDate||selectedDate();fillSelectors();$('#vehicleId').value=o.vehicleId||'';$('#orderNo').value=o.orderNo||'';$('#deadline').value=o.requestedDeadline||'';$('#supplierId').innerHTML=supplierOptions(o.supplierId);$('#pickupAddress').value=o.pickupAddress||'';$('#pickupNote').value=o.pickupNote||'';$('#projectId').innerHTML=projectOptions(o.projectId);$('#dropAddress').value=o.dropAddress||'';$('#recipientId').innerHTML=recipientOptions(o.projectName,o.recipientId);$('#recipientPhone').value=o.recipientPhone||'';$('#recipientEmail').value=o.recipientEmail||'';$('#orderNote').value=o.note||'';$('#orderDialog').showModal()}
 window.editOrder=id=>openOrder(state.orders.find(x=>x.id===id));
-window.deleteOrder=id=>window.deleteSingleRoute(id);
-$('#orderForm').onsubmit=e=>{
-  e.preventDefault();
-  const old=state.orders.find(x=>x.id===$('#editOrderId').value),supplier=state.suppliers.find(x=>x.id===$('#supplierSelect').value),project=state.projects.find(x=>x.id===$('#projectSelect').value),recipient=state.recipients.find(x=>x.id===$('#recipientSelect').value);
-  const o={id:old?.id||uid(),scheduleDate:$('#orderDate').value,driver:$('#orderDriver').value,sequence:old?.sequence||999,orderNo:last5($('#orderNo').value),vehicleNeed:$('#vehicleNeed').value,
-    supplierId:supplier?.id||'',pickupName:supplier?.name||'',pickupAddress:$('#pickupAddress').value,projectId:project?.id||'',projectName:project?.name||'',dropAddress:$('#dropAddress').value,
-    recipientId:recipient?.id||'',recipientName:recipient?.name||'',recipientPhone:$('#recipientPhone').value,recipientEmail:$('#recipientEmail').value,
-    pickupFrom:$('#pickupWindowEnabled').checked?$('#pickupFrom').value:'',pickupTo:$('#pickupWindowEnabled').checked?$('#pickupTo').value:'',
-    dropFrom:$('#dropWindowEnabled').checked?$('#dropFrom').value:'',dropTo:$('#dropWindowEnabled').checked?$('#dropTo').value:'',
-    pickupNote:$('#pickupNote').value,note:$('#orderNote').value,items:old?.items||[],requestedDeadline:old?.requestedDeadline||'',topicName:old?.topicName||'',longMaterialReason:old?.longMaterialReason||'',reports:old?.reports||[],status:old?.status||'tervezett'
-  };
-  const i=state.orders.findIndex(x=>x.id===o.id);if(i>=0)state.orders[i]=o;else state.orders.push(o);$('#orderDialog').close();save();
-};
-$('#supplierSelect').onchange=()=>{const x=state.suppliers.find(a=>a.id===$('#supplierSelect').value);$('#pickupAddress').value=x?.address||'';$('#pickupNote').value=x?.pickupNote||x?.note||''};
-$('#projectSelect').onchange=()=>{
-  const p=state.projects.find(a=>a.id===$('#projectSelect').value);$('#dropAddress').value=p?.address||'';fillRecipientOptions(p?.name||'',p?.defaultRecipientId||'');
-  const r=state.recipients.find(x=>x.id===p?.defaultRecipientId);$('#recipientSelect').value=r?.id||'';$('#recipientPhone').value=r?.phone||p?.phone||'';$('#recipientEmail').value=r?.email||'';
-};
-$('#recipientSelect').onchange=()=>{const r=state.recipients.find(x=>x.id===$('#recipientSelect').value);$('#recipientPhone').value=r?.phone||'';$('#recipientEmail').value=r?.email||''};
-
-function findHeader(headers,names){
-  const normalized=headers.map(norm);
-  for(const name of names){const idx=normalized.indexOf(norm(name));if(idx>=0)return idx}
-  return -1;
-}
-function mapHeaders(headers){
-  const map={};
-  Object.entries(APPROVED_HEADERS).forEach(([k,names])=>map[k]=findHeader(headers,names));
-
-  // V6 végleges szabály:
-  // - a fuvar dátuma mindig a táblázat utolsó előtti oszlopa,
-  // - ennek a fejlécének „Dátum”-nak kell lennie,
-  // - az utolsó oszlop az „autó”.
-  const lastIndex=headers.length-1;
-  const dateIndex=headers.length-2;
-  map.scheduleDate=dateIndex;
-  map.driver=lastIndex;
-
-  const structuralErrors=[];
-  if(dateIndex<0||norm(headers[dateIndex])!=='datum'){
-    structuralErrors.push('Az utolsó előtti oszlop neve nem „Dátum”.');
-  }
-  if(lastIndex<0||!['auto','autó'].includes(norm(headers[lastIndex]))){
-    structuralErrors.push('Az utolsó oszlop neve nem „autó”.');
-  }
-
-  const required=['documentNo','topicName','productCode','productName','customerWarehouse','quantity','unit','requestedDeadline'];
-  const missing=required.filter(k=>map[k]<0);
-  return {map,missing,structuralErrors};
-}
-function levenshtein(a,b){
-  const m=a.length,n=b.length,d=Array.from({length:m+1},()=>Array(n+1).fill(0));
-  for(let i=0;i<=m;i++)d[i][0]=i;for(let j=0;j<=n;j++)d[0][j]=j;
-  for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
-  return d[m][n];
-}
-function similarity(a,b){a=compactProjectName(a);b=compactProjectName(b);if(!a||!b)return 0;if(a===b)return 1;return 1-levenshtein(a,b)/Math.max(a.length,b.length)}
-function safeProjectMatch(topic){
-  const alias=state.projectAliases[norm(topic)];if(alias)return state.projects.find(p=>p.id===alias)||null;
-  const scored=state.projects.map(p=>({p,score:similarity(topic,p.name)})).sort((a,b)=>b.score-a.score);
-  if(scored[0]&&scored[0].score>=.82&&(!scored[1]||scored[0].score-scored[1].score>=.10))return scored[0].p;
-  return null;
-}
-function safeSupplierMatch(name){
-  const n=norm(name);const exact=state.suppliers.find(s=>norm(s.name)===n);if(exact)return exact;
-  const candidates=state.suppliers.filter(s=>n.includes(norm(s.name))||norm(s.name).includes(n));
-  return candidates.length===1?candidates[0]:null;
-}
-function detectLongMaterial(name=''){
-  const n=norm(name);
-  const direct=n.match(/(?:^|[^0-9])([456])\s*(?:m|meter)(?:es|eres)?\b/);
-  if(direct)return`${direct[1]} méteres szálanyag: ${name}`;
-  const mm=n.match(/\b(4000|5000|6000)\s*mm\b/);
-  if(mm&&/(szal|cso|acel|rúd|rud|profil)/.test(n))return`${Number(mm[1])/1000} méteres szálanyag: ${name}`;
-  return'';
-}
-function parseImportRows(rows,map){
-  const grouped={};
-  for(let i=1;i<rows.length;i++){
-    const r=rows[i],date=excelDate(r[map.scheduleDate]);if(!date)continue;
-    const driver=driverFrom(r[map.driver]),no=last5(r[map.documentNo]),topic=String(r[map.topicName]||'').trim(),supplierName=String(r[map.customerWarehouse]||'').trim();
-    const note=map.note>=0?String(r[map.note]||'').trim():'',deadline=excelDate(r[map.requestedDeadline]);
-    const productName=String(r[map.productName]||''),longReason=detectLongMaterial(productName),finalDriver=longReason?'martin':driver;
-    const key=[date,no,supplierName,topic].join('|');
-    if(!grouped[key]){
-      grouped[key]={id:uid(),scheduleDate:date,driver:finalDriver,sequence:999,orderNo:no,vehicleNeed:longReason?'tarp':'any',
-        supplierId:'',pickupName:supplierName,pickupAddress:'',projectId:'',projectName:'',dropAddress:'',recipientId:'',recipientName:'',recipientPhone:'',recipientEmail:'',
-        pickupFrom:'',pickupTo:'',dropFrom:'',dropTo:'',pickupNote:'',note,items:[],requestedDeadline:deadline,topicName:topic,longMaterialReason:longReason};
-    }
-    if(longReason){grouped[key].driver='martin';grouped[key].vehicleNeed='tarp';grouped[key].longMaterialReason=grouped[key].longMaterialReason||longReason}
-    if(note&&!grouped[key].note)grouped[key].note=note;
-    grouped[key].items.push({code:String(r[map.productCode]||''),name:productName,qty:r[map.quantity],unit:String(r[map.unit]||''),longMaterial:!!longReason});
-  }
-  return Object.values(grouped);
-}
-async function readSerpa(file){
-  const buf=await file.arrayBuffer(),wb=XLSX.read(buf,{type:'array',cellDates:true}),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-  importSourceRows=rows;const hm=mapHeaders(rows[0].map(String));importHeaderMap=hm.map;
-  if(hm.structuralErrors?.length){
-    $('#importPreview').innerHTML=`<div class="notice"><b>Import szerkezeti hiba:</b><br>${hm.structuralErrors.map(esc).join('<br>')}<br><br>A program csak akkor importál, ha az utolsó előtti oszlop neve „Dátum”, az utolsó oszlop neve pedig „autó”.</div>`;
-    $('#confirmImportBtn').disabled=true;return;
-  }
-  if(hm.missing.length){$('#importPreview').innerHTML=`<div class="notice">Hiányzó kötelező oszlopok: ${hm.missing.join(', ')}</div>`;$('#confirmImportBtn').disabled=true;return}
-  importRows=parseImportRows(rows,hm.map);
-  importRows.forEach(o=>{
-    const s=safeSupplierMatch(o.pickupName);if(s){o.supplierId=s.id;o.pickupName=s.name;o.pickupAddress=s.address;o.pickupNote=s.pickupNote||s.note||''}
-    const p=safeProjectMatch(o.topicName);if(p){
-      o.projectId=p.id;o.projectName=p.name;o.dropAddress=p.address;
-      state.projectAliases[norm(o.topicName)]=p.id;
-      const rec=state.recipients.find(r=>r.id===p.defaultRecipientId);
-      if(rec){o.recipientId=rec.id;o.recipientName=rec.name;o.recipientPhone=rec.phone||'';o.recipientEmail=rec.email||''}
-    }
-  });
-  const c={mario:0,patrik:0,martin:0,unassigned:0,long:0};importRows.forEach(x=>{c[x.driver||'unassigned']++;if(x.vehicleNeed==='tarp')c.long++});
-  $('#importPreview').innerHTML=`<div class="preview-row head"><span>Rendelés</span><span>Projekt / beszállító</span><span>Dátum / sofőr</span><span>Tétel</span></div>`+
-    importRows.slice(0,250).map(x=>`<div class="preview-row"><span>${esc(x.orderNo)}</span><span>${esc(x.projectName||x.topicName||'Nincs biztos projekt')}<br>${esc(x.pickupName)}</span><span>${esc(x.scheduleDate)} · ${x.driver?DRIVERS[x.driver].name:'Nincs sofőr'}${x.vehicleNeed==='tarp'?'<br><b>Ponyvás</b>':''}</span><span>${x.items.length}</span></div>`).join('');
-  $('#confirmImportBtn').disabled=!importRows.length;$('#importSummary').classList.remove('hidden');
-  $('#importSummary').textContent=`Beolvasva: Márió ${c.mario}, Patrik ${c.patrik}, Martin ${c.martin}, sofőr nélkül ${c.unassigned}; hosszú szálanyag miatt ponyvás: ${c.long}.`;
-}
-$('#confirmImportBtn').onclick=()=>{
-  importRows.forEach(o=>{
-    const existing=state.orders.find(x=>x.scheduleDate===o.scheduleDate&&x.orderNo===o.orderNo&&norm(x.pickupName)===norm(o.pickupName));
-    if(existing){
-      existing.items=[...(existing.items||[]),...o.items];
-      if(o.longMaterialReason){existing.driver='martin';existing.vehicleNeed='tarp';existing.longMaterialReason=o.longMaterialReason}
-      if(o.note)existing.note=o.note;
-    }else state.orders.push(o);
-  });
-  Object.keys(DRIVERS).forEach(d=>dayOrders(d).forEach((o,i)=>{if(!o.sequence||o.sequence===999)o.sequence=i+1}));
-  $('#importDialog').close();save();alert(`${importRows.length} összesített rendelés importálva.`);importRows=[];
-};
-
-
-async function routeMetrics(driver){
-  const orders=dayOrders(driver).slice().sort((a,b)=>(+a.sequence||999)-(+b.sequence||999));
-  const points=[DRIVERS[driver].home];
-  const base=await geocode(state.settings.baseAddress);
-  if(base)points.push(base);
-  const pickups=new Set(),drops=new Set();
-  for(const o of orders){
-    if(o.pickupAddress)pickups.add(norm(o.pickupAddress));
-    if(o.dropAddress)drops.add(norm(o.dropAddress));
-    const p=await geocode(o.dropAddress);if(p)points.push(p);
-  }
-  let km=0;for(let i=1;i<points.length;i++)km+=distance(points[i-1],points[i]);
-  const stopCount=pickups.size+drops.size;
-  const minutes=Math.round(km/38*60+stopCount*18+30);
-  const overtime=Math.max(0,minutes-540);
-  return{km:Math.round(km),stopCount,minutes,overtime,pickups:pickups.size,drops:drops.size};
-}
-function minutesText(m){const h=Math.floor(m/60),min=m%60;return`${h} ó ${String(min).padStart(2,'0')} p`}
-async function updateWorkloadCards(){
-  for(const d of Object.keys(DRIVERS)){
-    const el=$('#workload-'+d);if(!el)continue;
-    const m=await routeMetrics(d);
-    el.innerHTML=`<b>${m.pickups} felrakó · ${m.drops} lerakó</b><br>kb. ${m.km} km · ${minutesText(m.minutes)} ${m.overtime?`<span class="overtime">· becsült túlóra ${minutesText(m.overtime)}</span>`:'<span class="balanced">· munkaidőn belül</span>'}`;
-  }
-}
-async function balanceRoutes(){
-  const all=state.orders.filter(o=>o.scheduleDate===selectedDate());
-  if(!all.length)return;
-  const locked=all.filter(o=>o.vehicleNeed==='tarp'||o.longMaterialReason);
-  const normal=all.filter(o=>!locked.includes(o));
-  locked.forEach(o=>o.driver='martin');
-  const load={mario:0,patrik:0,martin:locked.length*2};
-  const geo={};
-  for(const o of normal){
-    geo[o.id]=await geocode(o.pickupAddress||o.dropAddress);
-  }
-  normal.sort((a,b)=>{
-    const aw=(a.pickupFrom||a.dropFrom)?1:0,bw=(b.pickupFrom||b.dropFrom)?1:0;
-    return bw-aw;
-  });
-  for(const o of normal){
-    const p=geo[o.id];
-    const scores=Object.keys(DRIVERS).map(d=>{
-      const homePenalty=p?distance(DRIVERS[d].home,p)/35:0;
-      return{d,score:load[d]*3+homePenalty};
-    }).sort((a,b)=>a.score-b.score);
-    o.driver=scores[0].d;load[o.driver]+=2;
-  }
-  for(const d of Object.keys(DRIVERS)){
-    const rows=dayOrders(d);rows.forEach((o,i)=>o.sequence=i+1);
-  }
-  save();
-  for(const d of Object.keys(DRIVERS))await optimizeRoute(d);
-}
-window.openFeedback=id=>{
-  const o=state.orders.find(x=>x.id===id);if(!o)return;
-  $('#feedbackOrderId').value=id;
-  $('#feedbackTitle').textContent=`${o.orderNo} · ${o.projectName||o.dropAddress||'Rendelés'}`;
-  $('#feedbackOrderMeta').innerHTML=`<b>${esc(DRIVERS[o.driver]?.name||'Nincs sofőr')}</b> · ${esc(o.scheduleDate)}<br>${esc(o.pickupName)} → ${esc(o.projectName||o.dropAddress)}`;
-  $('#feedbackNote').value='';$('#transcriptText').value='';$('#markCompleted').checked=false;
-  $('#deliveryPhotos').value='';$('#photoPreview').innerHTML='';feedbackPhotos=[];audioBlob=null;audioChunks=[];
-  $('#audioPreview').classList.add('hidden');$('#recordStatus').textContent=(navigator.mediaDevices&&window.MediaRecorder)
-    ?'Nincs felvétel. Nyomd meg a Felvétel indítása gombot.'
-    :'A böngésző nem támogatja a közvetlen hangrögzítést vagy nincs HTTPS kapcsolat.';
-  $('#startRecordBtn').disabled=!(navigator.mediaDevices&&window.MediaRecorder);
-  $('#speechToTextBtn').disabled=!(window.SpeechRecognition||window.webkitSpeechRecognition);
-  $('#feedbackDialog').showModal();
-};
-$('#deliveryPhotos').onchange=e=>{
-  feedbackPhotos=[...e.target.files];
-  $('#photoPreview').innerHTML=feedbackPhotos.map(f=>`<img src="${URL.createObjectURL(f)}" alt="Szállítólevél">`).join('');
-};
-$('#startRecordBtn').onclick=async()=>{
-  try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    audioChunks=[];mediaRecorder=new MediaRecorder(stream);
-    mediaRecorder.ondataavailable=e=>{if(e.data.size)audioChunks.push(e.data)};
-    mediaRecorder.onstop=()=>{
-      audioBlob=new Blob(audioChunks,{type:mediaRecorder.mimeType||'audio/webm'});
-      const a=$('#audioPreview');a.src=URL.createObjectURL(audioBlob);a.classList.remove('hidden');
-      $('#recordStatus').textContent=`Felvétel elkészült (${Math.round(audioBlob.size/1024)} KB).`;
-      stream.getTracks().forEach(t=>t.stop());
-    };
-    mediaRecorder.start();$('#startRecordBtn').disabled=true;$('#stopRecordBtn').disabled=false;$('#recordStatus').textContent='Felvétel folyamatban…';
-  }catch(e){alert('A mikrofon nem érhető el: '+e.message)}
-};
-$('#stopRecordBtn').onclick=()=>{if(mediaRecorder&&mediaRecorder.state!=='inactive')mediaRecorder.stop();$('#startRecordBtn').disabled=false;$('#stopRecordBtn').disabled=true};
-$('#speechToTextBtn').onclick=()=>{
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){alert('Ebben a böngészőben a közvetlen diktálás nem támogatott. A hangfelvételt ettől még elküldheted.');return}
-  const rec=new SR();rec.lang='hu-HU';rec.continuous=true;rec.interimResults=true;
-  let finalText=$('#transcriptText').value;
-  rec.onresult=e=>{let interim='';for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)finalText+=' '+t;else interim+=t}$('#transcriptText').value=(finalText+' '+interim).trim()};
-  rec.onerror=e=>alert('Diktálási hiba: '+e.error);rec.start();$('#recordStatus').textContent='Diktálás folyamatban – a telefon böngészője írja át a beszédet.';
-  setTimeout(()=>{try{rec.stop()}catch(e){}},60000);
-};
-async function sendFeedback(formData,o){
-  try{
-    const response=await fetch('/api/send-report',{method:'POST',body:formData});
-    if(response.ok)return{automatic:true};
-  }catch(e){}
-  const files=[...feedbackPhotos];
-  if(audioBlob)files.push(new File([audioBlob],`${o.orderNo}_hangjegyzet.webm`,{type:audioBlob.type||'audio/webm'}));
-  const subject=`${o.orderNo} - ${o.projectName||o.dropAddress} - ${DRIVERS[o.driver]?.name||''}`;
-  const body=`Rendelésszám: ${o.orderNo}\nProjekt: ${o.projectName}\nSofőr: ${DRIVERS[o.driver]?.name||''}\nDátum: ${o.scheduleDate}\nFelrakó: ${o.pickupName}\nLerakó: ${o.dropAddress}\n\nKézi megjegyzés:\n${$('#feedbackNote').value}\n\nHangból átírt szöveg:\n${$('#transcriptText').value}`;
-  if(navigator.canShare&&files.length&&navigator.canShare({files})){
-    await navigator.share({title:subject,text:`Címzett: szabo.sandor@stand98.hu\n\n${body}`,files});
-    return{automatic:false,shared:true};
-  }
-  window.location.href=`mailto:szabo.sandor@stand98.hu?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  files.forEach((f,i)=>downloadBlob(f,f.name||`${o.orderNo}_melleklet_${i+1}`));
-  return{automatic:false,shared:false};
-}
-$('#feedbackForm').onsubmit=async e=>{
-  e.preventDefault();
-  const o=state.orders.find(x=>x.id===$('#feedbackOrderId').value);if(!o)return;
-  const fd=new FormData();
-  fd.append('to','szabo.sandor@stand98.hu');fd.append('order',JSON.stringify({orderNo:o.orderNo,project:o.projectName,driver:DRIVERS[o.driver]?.name,date:o.scheduleDate,pickup:o.pickupName,drop:o.dropAddress}));
-  fd.append('note',$('#feedbackNote').value);fd.append('transcript',$('#transcriptText').value);
-  feedbackPhotos.forEach((f,i)=>fd.append('photos',f,f.name||`szallitolevel_${i+1}.jpg`));
-  if(audioBlob)fd.append('audio',audioBlob,`${o.orderNo}_hangjegyzet.webm`);
-  const result=await sendFeedback(fd,o);
-  o.reports=o.reports||[];o.reports.push({id:uid(),createdAt:new Date().toISOString(),note:$('#feedbackNote').value,transcript:$('#transcriptText').value,photoCount:feedbackPhotos.length,hasAudio:!!audioBlob,sentAutomatically:!!result.automatic});
-  if($('#markCompleted').checked)o.status='teljesítve';
-  $('#feedbackDialog').close();save();
-  alert(result.automatic?'A jelentést automatikusan elküldtem e-mailben.':'A jelentés elkészült. A telefon megosztási/e-mail felületén fejezd be a küldést.');
-};
-
-
-function renderDriverMode(){
-  const driver=$('#driverModeSelect')?.value||'mario';
-  const date=$('#driverModeDate')?.value||selectedDate();
-  if($('#driverModeDate')&&!$('#driverModeDate').value)$('#driverModeDate').value=selectedDate();
-  const rows=state.orders.filter(o=>o.scheduleDate===date&&o.driver===driver)
-    .sort((a,b)=>(+a.sequence||999)-(+b.sequence||999));
-  const target=$('#driverOrderList');if(!target)return;
-  target.innerHTML=rows.length?rows.map((o,i)=>`
-    <article class="driver-order ${o.status==='teljesítve'?'done':''}">
-      <div class="order-top">
-        <div><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||o.dropAddress||'Nincs projekt')}</h3>
-        <p><b>Felrakó:</b> ${esc(o.pickupName||'')} · ${esc(o.pickupAddress||'')}</p>
-        <p><b>Lerakó:</b> ${esc(o.dropAddress||'')}</p>
-        <p><b>Átvevő:</b> ${esc(o.recipientName||'')} ${esc(o.recipientPhone||'')}</p></div>
-        <span class="badge ${o.status==='teljesítve'?'status-done':''}">${o.status==='teljesítve'?'Teljesítve':'Folyamatban'}</span>
-      </div>
-      ${o.note?`<p><b>Megjegyzés:</b> ${esc(o.note)}</p>`:''}
-      <div class="mic-hint">🎤 A gomb megnyomása után hangfelvételt, diktálást és szállítólevél-fotót is készíthetsz.</div>
-      <button class="driver-report-button" onclick="openFeedback('${o.id}')">📷 🎤 Fotó / hang / jelentés</button>
-    </article>`).join(''):'<div class="notice">Ezen a napon nincs rendelés a kiválasztott sofőrnél.</div>';
-}
-
-function renderMaster(){
-  const q=norm($('#masterSearch').value),arr=state[masterType].filter(x=>!q||norm(Object.values(x).join(' ')).includes(q));
-  $('#masterList').innerHTML=arr.slice(0,350).map(x=>`<article class="master-card"><div class="master-top"><div><h3>${esc(x.name)}</h3><p>${esc(x.address||x.project||'')} ${esc(x.phone||'')}</p></div>${x.type?`<span class="badge">${esc(x.type)}</span>`:''}</div><div class="card-actions"><button onclick="editMaster('${x.id}')">Szerkesztés</button><button class="delete" onclick="deleteMaster('${x.id}')">Törlés</button></div></article>`).join('')||'<div class="notice">Nincs találat.</div>';
-}
-function masterFieldDefs(){
-  if(masterType==='projects')return[['name','Projekt neve'],['address','Cím'],['type','Típus (felrakó / lerakó / mindkettő)'],['defaultRecipientId','Alap átvevő']];
-  if(masterType==='suppliers')return[['name','Beszállító neve'],['site','Telephely'],['address','Cím'],['pickupNote','Alap felrakói megjegyzés']];
-  return[['project','Projekt neve'],['name','Átvevő neve'],['phone','Telefon'],['email','E-mail'],['role','Beosztás'],['company','Cég'],['note','Megjegyzés']];
-}
-function openMaster(x={}){
-  $('#masterDialogTitle').textContent=x.id?'Törzsadat szerkesztése':'Új törzsadat';$('#masterEditId').value=x.id||'';
-  $('#masterFields').innerHTML=masterFieldDefs().map(([k,l])=>{
-    if(k==='defaultRecipientId')return`<label>${l}<select data-master-field="${k}"><option value="">Nincs alap átvevő</option>${state.recipients.map(r=>option(r.id,`${r.name} · ${r.project||''}`,x[k])).join('')}</select></label>`;
-    return`<label>${l}<input data-master-field="${k}" value="${esc(x[k]||'')}"></label>`;
-  }).join('');$('#masterDialog').showModal();
-}
-window.editMaster=id=>openMaster(state[masterType].find(x=>x.id===id));
-window.deleteMaster=id=>{if(confirm('Biztosan törlöd?')){state[masterType]=state[masterType].filter(x=>x.id!==id);save()}};
-$('#masterForm').onsubmit=e=>{
-  e.preventDefault();const id=$('#masterEditId').value,obj={id:id||uid(),active:true};
-  $$('[data-master-field]').forEach(x=>obj[x.dataset.masterField]=x.value.trim());
-  const i=state[masterType].findIndex(x=>x.id===id);if(i>=0)state[masterType][i]=obj;else state[masterType].push(obj);
-  $('#masterDialog').close();save();
-};
-function fillSettings(){
-  $('#baseAddress').value=state.settings.baseAddress;$('#marioVehicle').value=state.settings.marioVehicle;$('#patrikVehicle').value=state.settings.patrikVehicle;$('#martinVehicle').value=state.settings.martinVehicle;
-}
-function exportRows(driver){return dayOrders(driver).slice().sort((a,b)=>(+a.sequence||999)-(+b.sequence||999))}
-function mainExportRows(rows){
-  const data=[['Sorrend','Rendelésszám','Felrakó','Felrakó cím','Felrakói megjegyzés','Projekt','Lerakó cím','Átvevő','Telefon','Kért határidő','Időablak','Fuvar megjegyzés']];
-  rows.forEach((o,i)=>data.push([i+1,o.orderNo,o.pickupName,o.pickupAddress,o.pickupNote,o.projectName,o.dropAddress,o.recipientName,o.recipientPhone,o.requestedDeadline,[o.pickupFrom&&`Felvétel ${o.pickupFrom}-${o.pickupTo}`,o.dropFrom&&`Lerakás ${o.dropFrom}-${o.dropTo}`].filter(Boolean).join('; '),o.note]));
-  return data;
-}
-function itemExportRows(rows){
-  const data=[['Rendelésszám','Termék kód','Termék név','Mennyiség','M.e.','Hosszú szálanyag']];
-  rows.forEach(o=>(o.items||[]).forEach(it=>data.push([o.orderNo,it.code,it.name,it.qty,it.unit,it.longMaterial?'Igen':''])));
-  return data;
-}
-function exportExcel(driver){
-  const rows=exportRows(driver),wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(mainExportRows(rows)),'Fuvarjegyzék');
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(itemExportRows(rows)),'Tételmelléklet');
-  XLSX.writeFile(wb,`${selectedDate()}_${DRIVERS[driver].name}_fuvar.xlsx`);
-}
-function exportImportWithNotes(){
-  const headers=['Bizonylatszám','Témaszám név','Termék kód','Termék név','Ügyfél/raktár','Tétel mennyiség','M.e.','Kért szállítási határidő','Dátum','autó','Megjegyzés'];
-  const rows=[headers];
-  state.orders.slice().sort((a,b)=>a.scheduleDate.localeCompare(b.scheduleDate)).forEach(o=>{
-    (o.items?.length?o.items:[{}]).forEach(it=>rows.push([o.orderNo,o.topicName||o.projectName,it.code||'',it.name||'',o.pickupName,it.qty||'',it.unit||'',o.requestedDeadline,o.scheduleDate,o.driver?DRIVERS[o.driver].name:'',o.note||'']));
-  });
-  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Import + megjegyzések');
-  XLSX.writeFile(wb,`fuvarszervezo_import_megjegyzesek_${today()}.xlsx`);
-}
-function exportWord(driver){
-  const rows=exportRows(driver),main=rows.map((o,i)=>`<tr><td>${i+1}</td><td>${esc(o.orderNo)}</td><td>${esc(o.pickupName)}<br>${esc(o.pickupAddress)}<br><b>${esc(o.pickupNote)}</b></td><td>${esc(o.projectName)}<br>${esc(o.dropAddress)}</td><td>${esc(o.recipientName)} ${esc(o.recipientPhone)}</td><td>${esc(o.note)}</td></tr>`).join('');
-  const annex=rows.map(o=>`<h3>${esc(o.orderNo)} · ${esc(o.projectName)}</h3>${itemsTable(o.items||[])}`).join('');
-  const html=`<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial}table{width:100%;border-collapse:collapse;font-size:10pt}th,td{border:1px solid #999;padding:6px}th{background:#dcecf5}h1{color:#103a56}.page{page-break-before:always}</style></head><body><h1>${DRIVERS[driver].name} – ${selectedDate()}</h1><p>Indulás: ${esc(state.settings.baseAddress)}</p><table><tr><th>#</th><th>Rendelés</th><th>Felrakó</th><th>Lerakó</th><th>Átvevő</th><th>Megjegyzés</th></tr>${main}</table><div class="page"><h2>Tételmelléklet</h2>${annex}</div></body></html>`;
-  downloadBlob(new Blob(['\ufeff'+html],{type:'application/msword'}),`${selectedDate()}_${DRIVERS[driver].name}_fuvar.doc`);
-}
-function exportPdf(driver){
-  const rows=exportRows(driver),{jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape'});
-  doc.setFontSize(16);doc.text(`${DRIVERS[driver].name} – ${selectedDate()}`,14,14);doc.setFontSize(9);doc.text(`Indulás: ${state.settings.baseAddress}`,14,20);
-  doc.autoTable({startY:25,head:[['#','Rendelés','Felrakó','Felrakói megj.','Lerakó','Átvevő','Megjegyzés']],body:rows.map((o,i)=>[i+1,o.orderNo,`${o.pickupName}\n${o.pickupAddress}`,o.pickupNote,`${o.projectName}\n${o.dropAddress}`,`${o.recipientName}\n${o.recipientPhone}`,o.note]),styles:{fontSize:7,cellPadding:2},headStyles:{fillColor:[16,58,86]}});
-  doc.addPage('a4','portrait');doc.setFontSize(15);doc.text('Tételmelléklet',14,14);let y=20;
-  rows.forEach(o=>{if(y>250){doc.addPage();y=18}doc.setFontSize(11);doc.text(`${o.orderNo} · ${o.projectName||''}`,14,y);y+=4;doc.autoTable({startY:y,head:[['Termék kód','Termék név','Mennyiség','M.e.','Hosszú']],body:(o.items||[]).map(it=>[it.code,it.name,String(it.qty),it.unit,it.longMaterial?'Igen':'']),styles:{fontSize:7},margin:{left:14,right:14}});y=doc.lastAutoTable.finalY+8});
-  doc.save(`${selectedDate()}_${DRIVERS[driver].name}_fuvar.pdf`);
-}
-function downloadBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-window.exportMenu=driver=>{const t=prompt('Export formátum: excel, word vagy pdf','excel');if(!t)return;const n=norm(t);if(n.startsWith('e'))exportExcel(driver);else if(n.startsWith('w'))exportWord(driver);else if(n.startsWith('p'))exportPdf(driver)};
-$('#exportAllBtn').onclick=()=>Object.keys(DRIVERS).forEach((d,i)=>setTimeout(()=>exportExcel(d),i*500));
-$('#exportImportBtn').onclick=exportImportWithNotes;
-$('#optimizeAllBtn').onclick=async()=>{for(const d of Object.keys(DRIVERS))await optimizeRoute(d)};
-$('#balanceRoutesBtn').onclick=balanceRoutes;
-$('#saveSettingsBtn').onclick=()=>{state.settings={baseAddress:$('#baseAddress').value,marioVehicle:$('#marioVehicle').value,patrikVehicle:$('#patrikVehicle').value,martinVehicle:$('#martinVehicle').value};save();alert('Beállítások mentve.')};
-$('#backupDownloadBtn').onclick=()=>downloadBlob(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),'fuvarszervezo-v4-mentes.json');
-$('#backupRestoreInput').onchange=e=>{const r=new FileReader();r.onload=()=>{state=JSON.parse(r.result);save();alert('Mentés visszatöltve.')};r.readAsText(e.target.files[0])};
-$('#clearOrdersBtn').onclick=deleteAllRoutes;
-$$('.nav').forEach(x=>x.onclick=()=>{if(x.dataset.page==='driverPage'&&$('#driverModeDate'))$('#driverModeDate').value=selectedDate();showPage(x.dataset.page)});
-$$('[data-close]').forEach(x=>x.onclick=()=>$('#'+x.dataset.close).close());
-$('#openImportBtn').onclick=()=>$('#importDialog').showModal();
-$('#serpaFile').onchange=e=>readSerpa(e.target.files[0]).catch(err=>alert('Import hiba: '+err.message));
-$('#newOrderBtn').onclick=()=>openOrder({scheduleDate:selectedDate(),items:[]});
-$('#newRouteMainBtn').onclick=()=>openOrder({scheduleDate:selectedDate(),driver:'',items:[]});
-$('#deleteAllRoutesBtn').onclick=deleteAllRoutes;
-$('#orderSearch').oninput=renderOrders;$('#orderDriverFilter').onchange=renderOrders;
-$('#newMasterBtn').onclick=()=>openMaster();$('#masterSearch').oninput=renderMaster;
-$$('[data-master]').forEach(x=>x.onclick=()=>{$$('[data-master]').forEach(y=>y.classList.remove('active'));x.classList.add('active');masterType=x.dataset.master;renderMaster()});
-$('#pickupWindowEnabled').onchange=e=>$('#pickupWindowFields').classList.toggle('hidden',!e.target.checked);
-$('#dropWindowEnabled').onchange=e=>$('#dropWindowFields').classList.toggle('hidden',!e.target.checked);
-$('#workDate').onchange=()=>{if($('#driverModeDate'))$('#driverModeDate').value=$('#workDate').value;render()};
-$('#prevDay').onclick=()=>{const d=new Date(selectedDate()+'T12:00:00');d.setDate(d.getDate()-1);$('#workDate').value=d.toISOString().slice(0,10);render()};
-$('#nextDay').onclick=()=>{const d=new Date(selectedDate()+'T12:00:00');d.setDate(d.getDate()+1);$('#workDate').value=d.toISOString().slice(0,10);render()};
-$('#driverModeSelect').onchange=renderDriverMode;
-$('#driverModeDate').onchange=renderDriverMode;
-window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('#installBtn').classList.remove('hidden')});
-$('#installBtn').onclick=async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null}};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
-load();$('#workDate').value=today();render();
+$('#orderForm').onsubmit=e=>{e.preventDefault();const old=state.orders.find(x=>x.id===$('#orderId').value),s=state.suppliers.find(x=>x.id===$('#supplierId').value),p=state.projects.find(x=>x.id===$('#projectId').value),r=state.recipients.find(x=>x.id===$('#recipientId').value);const o={...old,id:old?.id||uid(),scheduleDate:$('#scheduleDate').value,vehicleId:$('#vehicleId').value,orderNo:last5($('#orderNo').value),requestedDeadline:$('#deadline').value,supplierId:s?.id||'',pickupName:s?.name||old?.pickupName||'',pickupAddress:$('#pickupAddress').value,pickupNote:$('#pickupNote').value,projectId:p?.id||'',projectName:p?.name||old?.projectName||'',dropAddress:$('#dropAddress').value,recipientId:r?.id||'',recipientName:r?.name||'',recipientPhone:$('#recipientPhone').value,recipientEmail:$('#recipientEmail').value,note:$('#orderNote').value,items:old?.items||[],completed:old?.completed||false,sequence:old?.sequence||999};const i=state.orders.findIndex(x=>x.id===o.id);if(i>=0)state.orders[i]=o;else state.orders.push(o);$('#orderDialog').close();save()}
+$('#supplierId').onchange=()=>{const s=state.suppliers.find(x=>x.id===$('#supplierId').value);$('#pickupAddress').value=s?.address||'';$('#pickupNote').value=s?.pickupNote||''};
+$('#projectId').onchange=()=>{const p=state.projects.find(x=>x.id===$('#projectId').value);$('#dropAddress').value=p?.address||'';$('#recipientId').innerHTML=recipientOptions(p?.name,p?.defaultRecipientId);const r=state.recipients.find(x=>x.id===p?.defaultRecipientId);$('#recipientPhone').value=r?.phone||p?.phone||'';$('#recipientEmail').value=r?.email||''};
+$('#recipientId').onchange=()=>{const r=state.recipients.find(x=>x.id===$('#recipientId').value);$('#recipientPhone').value=r?.phone||'';$('#recipientEmail').value=r?.email||''};
+function deleteOne(id){const o=state.orders.find(x=>x.id===id);if(o&&confirm(`Törlöd ezt a fuvart?\n${o.orderNo} · ${o.projectName||o.dropAddress}`)){state.orders=state.orders.filter(x=>x.id!==id);save()}}
+function deleteAll(){if(!state.orders.length)return alert('Nincs törölhető fuvar.');if(confirm(`${state.orders.length} fuvar törlődik. Folytatod?`)&&prompt('Írd be: TÖRLÉS')?.toUpperCase()==='TÖRLÉS'){state.orders=[];save()}}
+function openItems(id){const o=state.orders.find(x=>x.id===id);$('#itemsTitle').textContent=`${o.orderNo} · tételek`;$('#itemsBody').innerHTML=(o.items||[]).map((it,i)=>`<label class="item-row ${it.received?'done':''}"><input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${id}',${i},this.checked)"><span><b class="item-name">${esc(it.name)}</b><br>${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)} ${it.longMaterial?'· hosszú szál':''}</span></label>`).join('')||'<div class="notice">Nincs tétel.</div>';$('#itemsDialog').showModal()}
+window.openItems=openItems;window.toggleItem=(id,i,val)=>{const o=state.orders.find(x=>x.id===id);o.items[i].received=val;o.completed=(o.items||[]).length>0&&o.items.every(x=>x.received);save(false);openItems(id)};
+function openCamera(id){const o=state.orders.find(x=>x.id===id);$('#cameraOrderId').value=id;$('#cameraTitle').textContent=`${o.orderNo} · szállítólevél`;$('#cameraPreview').innerHTML='';$('#cameraNote').value='';$('#cameraInput').value='';$('#cameraDialog').showModal()}
+window.openCamera=openCamera;$('#cameraInput').onchange=e=>{$('#cameraPreview').innerHTML=[...e.target.files].map(f=>`<img src="${URL.createObjectURL(f)}">`).join('')};$('#cameraForm').onsubmit=e=>{e.preventDefault();const o=state.orders.find(x=>x.id===$('#cameraOrderId').value);o.deliveryReports=o.deliveryReports||[];o.deliveryReports.push({at:new Date().toISOString(),note:$('#cameraNote').value,photoCount:$('#cameraInput').files.length});$('#cameraDialog').close();save();alert('A fotó és megjegyzés helyben rögzítve.')};
+function editVehicle(id){const v=state.vehicles.find(x=>x.id===id)||{};$('#vehicleTitle').textContent=v.id?'Jármű szerkesztése':'Új jármű';$('#editVehicleId').value=v.id||'';$('#driverName').value=v.driverName||'';$('#vehicleName').value=v.name||'';$('#vehicleType').innerHTML=VEHICLE_TYPES.map(t=>option(t,t,v.type)).join('');$('#homeCity').value=v.homeCity||'';$('#vehicleActive').checked=v.active!==false;$('#vehicleDialog').showModal()}
+window.editVehicle=editVehicle;$('#vehicleForm').onsubmit=e=>{e.preventDefault();const id=$('#editVehicleId').value,v={id:id||uid(),driverName:$('#driverName').value,name:$('#vehicleName').value,type:$('#vehicleType').value,homeCity:$('#homeCity').value,active:$('#vehicleActive').checked};const i=state.vehicles.findIndex(x=>x.id===id);if(i>=0)state.vehicles[i]=v;else state.vehicles.push(v);$('#vehicleDialog').close();save()}
+function masterFields(){if(masterType==='projects')return[['name','Projekt neve'],['address','Cím'],['defaultRecipientId','Alap átvevő']];if(masterType==='suppliers')return[['name','Cégnév'],['site','Telephely'],['address','Cím'],['pickupNote','Felrakói megjegyzés'],['isCentral','Központi telephely']];return[['project','Projekt'],['name','Átvevő neve'],['phone','Telefon'],['email','E-mail']]}
+function openMaster(x={}){$('#masterTitle').textContent=x.id?'Szerkesztés':'Új adat';$('#editMasterId').value=x.id||'';$('#masterFields').innerHTML=masterFields().map(([k,l])=>{if(k==='defaultRecipientId')return`<label>${l}<select data-mf="${k}"><option value="">Nincs</option>${state.recipients.map(r=>option(r.id,`${r.name} · ${r.project}`,x[k])).join('')}</select></label>`;if(k==='isCentral')return`<label class="check"><input data-mf="${k}" type="checkbox" ${x[k]?'checked':''}> ${l}</label>`;return`<label>${l}<input data-mf="${k}" value="${esc(x[k]||'')}"></label>`}).join('');$('#masterDialog').showModal()}
+window.editMaster=id=>openMaster(state[masterType].find(x=>x.id===id));window.deleteMaster=id=>{if(confirm('Törlöd?')){state[masterType]=state[masterType].filter(x=>x.id!==id);save()}};
+$('#masterForm').onsubmit=e=>{e.preventDefault();const id=$('#editMasterId').value,obj={id:id||uid(),active:true};$$('[data-mf]').forEach(x=>obj[x.dataset.mf]=x.type==='checkbox'?x.checked:x.value.trim());if(masterType==='suppliers'&&obj.isCentral)state.suppliers.filter(s=>norm(s.name)===norm(obj.name)).forEach(s=>s.isCentral=false);const i=state[masterType].findIndex(x=>x.id===id);if(i>=0)state[masterType][i]={...state[masterType][i],...obj};else state[masterType].push(obj);$('#masterDialog').close();save()}
+function headerMap(headers){const find=names=>headers.map(norm).findIndex(h=>names.map(norm).includes(h));const map={doc:find(['Bizonylatszám']),topic:find(['Témaszám név']),code:find(['Termék kód','Termékkód']),product:find(['Termék név','Terméknév']),supplier:find(['Ügyfél/raktár','Ügyfél/raktár név']),qty:find(['Tétel mennyiség']),unit:find(['M.e.']),deadline:find(['Kért szállítási határidő']),note:find(['Megjegyzés'])};map.date=headers.length-2;map.driver=headers.length-1;return map}
+function similarity(a,b){a=norm(a);b=norm(b);if(a===b)return 1;const aw=a.split(' '),bw=b.split(' '),common=aw.filter(x=>bw.includes(x)).length;return common/Math.max(aw.length,bw.length)}
+function projectMatch(topic){const alias=state.aliases.projects[norm(topic)];if(alias)return state.projects.find(p=>p.id===alias);const scores=state.projects.map(p=>({p,s:similarity(topic,p.name)})).sort((a,b)=>b.s-a.s);return scores[0]?.s>=.75&&(!scores[1]||scores[0].s-scores[1].s>.15)?scores[0].p:null}
+function supplierMatch(name){const alias=state.aliases.suppliers[norm(name)];if(alias)return state.suppliers.find(s=>s.id===alias);const exact=centralSupplier(name);if(exact)return exact;const companies=[...new Set(state.suppliers.map(s=>s.name))].filter(n=>norm(name).includes(norm(n))||norm(n).includes(norm(name)));return companies.length===1?centralSupplier(companies[0]):null}
+async function readExcel(file){const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true}),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}),h=headerMap(rows[0].map(String));if(norm(rows[0][h.date])!=='datum')return alert('Az utolsó előtti oszlop neve nem Dátum.');const g={};for(const r of rows.slice(1)){const date=dateVal(r[h.date]);if(!date)continue;const no=last5(r[h.doc]),topic=String(r[h.topic]||''),sup=String(r[h.supplier]||''),key=[date,no,topic,sup].join('|'),lr=longReason(r[h.product]);if(!g[key])g[key]={id:uid(),scheduleDate:date,vehicleId:'',sequence:999,orderNo:no,topicName:topic,pickupName:sup,pickupAddress:'',pickupNote:'',projectName:'',dropAddress:'',recipientName:'',recipientPhone:'',recipientEmail:'',requestedDeadline:dateVal(r[h.deadline]),note:h.note>=0?String(r[h.note]||''):'',items:[],longMaterialReason:''};if(lr)g[key].longMaterialReason=lr;g[key].items.push({code:String(r[h.code]||''),name:String(r[h.product]||''),qty:r[h.qty],unit:String(r[h.unit]||''),longMaterial:!!lr,received:false});if(norm(r[h.driver]).includes('martin'))g[key].markedMartin=true}importOrders=Object.values(g);importOrders.forEach(o=>{const p=projectMatch(o.topicName),s=supplierMatch(o.pickupName);if(p){o.projectId=p.id;o.projectName=p.name;o.dropAddress=p.address;const rec=state.recipients.find(r=>r.id===p.defaultRecipientId);if(rec){o.recipientId=rec.id;o.recipientName=rec.name;o.recipientPhone=rec.phone;o.recipientEmail=rec.email}}if(s){o.supplierId=s.id;o.pickupName=s.name;o.pickupAddress=s.address;o.pickupNote=s.pickupNote||''}});const longCars=activeVehicles().filter(canCarryLong),martin=longCars.find(v=>norm(v.driverName).includes('martin'))||longCars[0];importOrders.forEach(o=>{if(o.markedMartin||o.longMaterialReason)o.vehicleId=martin?.id||''});$('#importPreview').textContent=`${importOrders.length} összesített rendelés. Bizonytalan/hiányos: ${importOrders.filter(needsReview).length}.`;$('#startReviewBtn').disabled=false}
+function needsReview(o){return!o.projectId||!o.supplierId||!o.dropAddress||!o.vehicleId}
+function startReview(){reviewQueue=importOrders.filter(needsReview);reviewIndex=0;if(!reviewQueue.length){finalizeImport();return}showReview()}
+function showReview(){const o=reviewQueue[reviewIndex];$('#reviewTitle').textContent=`${o.orderNo} · ${o.topicName||'Egyedi'}`;$('#reviewCounter').textContent=`${reviewIndex+1} / ${reviewQueue.length}`;$('#reviewFields').innerHTML=`<label>Projekt<select id="rvProject" class="${o.projectId?'':'review-error'}">${projectOptions(o.projectId)}</select></label><label>Lerakó cím<input id="rvDrop" class="${o.dropAddress?'':'review-error'}" value="${esc(o.dropAddress||'')}"></label><label>Beszállító<select id="rvSupplier" class="${o.supplierId?'':'review-error'}">${supplierOptions(o.supplierId)}</select></label><label>Felrakó cím<input id="rvPickup" class="${o.pickupAddress?'':'review-error'}" value="${esc(o.pickupAddress||'')}"></label><label>Jármű<select id="rvVehicle" class="${o.vehicleId?'':'review-error'}"><option value="">Később osztom ki</option>${activeVehicles().map(v=>option(v.id,`${v.driverName} · ${v.name}`,o.vehicleId)).join('')}</select></label><label>Fuvar megjegyzés<textarea id="rvNote">${esc(o.note||'')}</textarea></label>`;$('#reviewDialog').showModal()}
+function saveReview(){const o=reviewQueue[reviewIndex],p=state.projects.find(x=>x.id===$('#rvProject').value),s=state.suppliers.find(x=>x.id===$('#rvSupplier').value);o.projectId=p?.id||'';o.projectName=p?.name||o.topicName||'';o.dropAddress=$('#rvDrop').value;o.supplierId=s?.id||'';o.pickupName=s?.name||o.pickupName;o.pickupAddress=$('#rvPickup').value;o.vehicleId=$('#rvVehicle').value;o.note=$('#rvNote').value;if(p)state.aliases.projects[norm(o.topicName)]=p.id;if(s)state.aliases.suppliers[norm(o.pickupName)]=s.id;reviewIndex++;if(reviewIndex>=reviewQueue.length){$('#reviewDialog').close();finalizeImport()}else showReview()}
+function finalizeImport(){state.orders.push(...importOrders);importOrders=[];balance();$('#importDialog').close();save();alert('Import beillesztve. Az üresen hagyott mezők később is szerkeszthetők.')}
+function backup(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='fuvarszervezo-v11-telefonra.json';a.click()}
+$$('.nav').forEach(n=>n.onclick=()=>showPage(n.dataset.page));$$('[data-close]').forEach(b=>b.onclick=()=>$('#'+b.dataset.close).close());$$('[data-master]').forEach(b=>b.onclick=()=>{$$('[data-master]').forEach(x=>x.classList.toggle('active',x===b));masterType=b.dataset.master;renderMasters()});
+$('#prevDay').onclick=()=>{const d=new Date(selectedDate()+'T12:00:00');d.setDate(d.getDate()-1);$('#workDate').value=d.toISOString().slice(0,10);render()};$('#nextDay').onclick=()=>{const d=new Date(selectedDate()+'T12:00:00');d.setDate(d.getDate()+1);$('#workDate').value=d.toISOString().slice(0,10);render()};$('#workDate').onchange=render;
+$('#importBtn').onclick=()=>$('#importDialog').showModal();$('#excelInput').onchange=e=>readExcel(e.target.files[0]).catch(err=>alert(err.message));$('#startReviewBtn').onclick=startReview;$('#reviewForm').onsubmit=e=>{e.preventDefault();saveReview()};$('#reviewSkipBtn').onclick=saveReview;
+$('#quickAddBtn').onclick=()=>openOrder({scheduleDate:selectedDate(),items:[]});$('#addOrderBtn').onclick=()=>openOrder({scheduleDate:selectedDate(),items:[]});$('#balanceBtn').onclick=balance;$('#deleteAllBtn').onclick=deleteAll;
+$('#orderSearch').oninput=renderOrders;$('#orderVehicleFilter').onchange=renderOrders;$('#addVehicleBtn').onclick=()=>editVehicle();$('#saveBaseBtn').onclick=()=>{state.settings.baseAddress=$('#baseAddress').value;save()};$('#driverVehicleSelect').onchange=renderDriver;$('#driverDate').onchange=renderDriver;
+$('#addMasterBtn').onclick=()=>openMaster();$('#masterSearch').oninput=renderMasters;$('#backupBtn').onclick=backup;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;$('#installBtn').classList.remove('hidden')});$('#installBtn').onclick=async()=>{deferredPrompt?.prompt();deferredPrompt=null};
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');load();$('#workDate').value=today();$('#driverDate').value=today();render();

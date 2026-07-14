@@ -1,9 +1,9 @@
 {
-  "name": "Fuvarszervező V10",
-  "short_name": "Fuvarszervező V10",
+  "name": "Fuvarszervező V11",
+  "short_name": "Fuvarszervező",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#f2f6f8",
+  "background_color": "#f1f5f7",
   "theme_color": "#103A56",
   "icons": [
     {
@@ -18,7 +18,5 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ],
-  "version": "4.0",
-  "description": "GitHub Pages-kompatibilis, mobilos fuvarszervező gyors egyedi és teljes törléssel."
+  ]
 }
