@@ -10,13 +10,13 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="styles.css">
-  <title>Fuvarszervező V4</title>
+  <title>Fuvarszervező V5</title>
 </head>
 <body>
 <header class="topbar">
   <div>
     <div class="eyebrow">STAND 98 · LOGISZTIKA</div>
-    <h1>Fuvarszervező V4</h1>
+    <h1>Fuvarszervező V5</h1>
   </div>
   <div class="top-actions">
     <span id="saveState" class="save-state">Automatikusan mentve</span>
@@ -35,6 +35,7 @@
       <div class="toolbar-actions">
         <button id="openImportBtn">Excel import</button>
         <button id="optimizeAllBtn" class="accent">Mindhárom optimalizálása</button>
+        <button id="balanceRoutesBtn" class="accent">Igazságos szétosztás</button>
         <button id="exportAllBtn" class="secondary">Összes fuvar exportálása</button>
         <button id="exportImportBtn" class="secondary">Import Excel + megjegyzések</button>
       </div>
@@ -154,6 +155,43 @@
     <input id="masterEditId" type="hidden">
     <div id="masterFields"></div>
     <button type="submit">Mentés</button>
+  </form>
+</dialog>
+
+
+<dialog id="feedbackDialog">
+  <form id="feedbackForm">
+    <div class="dialog-head">
+      <div><div class="eyebrow dark">SOFŐR VISSZAJELZÉS</div><h3 id="feedbackTitle">Szállítólevél és hangjegyzet</h3></div>
+      <button type="button" class="close" data-close="feedbackDialog">×</button>
+    </div>
+    <input id="feedbackOrderId" type="hidden">
+    <div id="feedbackOrderMeta" class="notice"></div>
+    <label>Szállítólevél fotó(k)
+      <input id="deliveryPhotos" type="file" accept="image/*" capture="environment" multiple>
+    </label>
+    <div id="photoPreview" class="photo-preview"></div>
+    <label>Kézi megjegyzés
+      <textarea id="feedbackNote" rows="3" placeholder="Pl. 2 db könyök nem érkezett meg"></textarea>
+    </label>
+    <div class="record-box">
+      <div>
+        <b>Hangjegyzet</b>
+        <p id="recordStatus">Nincs felvétel.</p>
+      </div>
+      <div class="toolbar-actions">
+        <button type="button" id="startRecordBtn">Felvétel indítása</button>
+        <button type="button" id="stopRecordBtn" class="secondary" disabled>Leállítás</button>
+        <button type="button" id="speechToTextBtn" class="secondary">Diktálás szöveggé</button>
+      </div>
+      <audio id="audioPreview" controls class="hidden"></audio>
+      <label>Hangból átírt szöveg
+        <textarea id="transcriptText" rows="4"></textarea>
+      </label>
+    </div>
+    <label class="check"><input id="markCompleted" type="checkbox"> Átvétel kész / rendelés teljesítve</label>
+    <button type="submit">Jelentés elküldése</button>
+    <p class="help">GitHub Pages használatakor a program előkészíti az e-mailt és a csatolmányokat. Teljesen automatikus küldéshez a csomagban található V5 backend aktiválása szükséges.</p>
   </form>
 </dialog>
 

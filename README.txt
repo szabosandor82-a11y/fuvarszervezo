@@ -1,46 +1,73 @@
-FUVAR-SZERVEZŐ V4 – TELEPÍTÉS ÉS FRISSÍTÉS
+FUVAR-SZERVEZŐ V5
+
+FŐ ÚJDONSÁGOK
+1. Igazságos automatikus szétosztás
+   - figyeli a felrakók és lerakók számát;
+   - figyeli a sofőrök lakóhelyének közelségét:
+       Márió – Vác
+       Patrik – Kispest
+       Martin – Felcsút;
+   - a hosszú szálanyag mindig Martin ponyvás autóján marad;
+   - ha Martin szabad, normál rendeléseket is kap;
+   - becsült kilométert, munkaidőt és túlórát mutat;
+   - alap munkaidő: 7:00–16:00, a túlóra csak figyelmeztetés.
+
+2. Teljesen interaktív fuvarok
+   - egy autón belül húzással módosítható sorrend;
+   - rendelés egyik autóról a másikra húzható;
+   - gyors szerkesztés közvetlenül a fuvar kártyáján;
+   - a térkép és az export sorrendje automatikusan frissül.
+
+3. Sofőr-visszajelző modul
+   - rendeléshez szállítólevél-fotó készíthető;
+   - több fotó csatolható;
+   - kézi hiány/megjegyzés rögzíthető;
+   - hangfelvétel készíthető és visszahallgatható;
+   - az eredeti hangfájl is elküldhető;
+   - támogatott böngészőben magyar diktálásból szöveg készül;
+   - rendelés teljesítettnek jelölhető;
+   - címzett: szabo.sandor@stand98.hu.
+
+GITHUB PAGES MÓD
+A GitHub Pages nem tud titkos SMTP- vagy AI-kulcsot biztonságosan tárolni.
+Ezért ebben a módban:
+- a program elkészíti az e-mail szövegét;
+- mobilon megnyitja a megosztási felületet a fotókkal és a hanggal;
+- ahol a Web Share nem használható, megnyitja az e-mail-vázlatot és külön letölti a csatolmányokat.
+
+TELJESEN AUTOMATIKUS E-MAIL + AI HANGÁTÍRÁS
+A csomagban található `server` mappa opcionális háttérszolgáltatás.
+Aktiválás:
+1. Telepíts Node.js-t.
+2. Nyisd meg a `server` mappát.
+3. Másold a `.env.example` fájlt `.env` névre.
+4. Töltsd ki a céges SMTP-adatokat.
+5. Opcionálisan add meg az OPENAI_API_KEY értékét.
+6. Futtasd:
+   npm install
+   npm start
+7. Az alkalmazást ugyanerről a szerverről nyisd meg.
+Ekkor a „Jelentés elküldése” gomb automatikusan elküldi:
+- a szállítólevél-fotókat;
+- az eredeti hangfelvételt;
+- a kézi megjegyzést;
+- a böngészős vagy AI-alapú szöveges átiratot.
 
 GITHUB FRISSÍTÉS
-1. Csomagold ki a ZIP fájlt.
-2. A GitHub repository MAIN ágában töltsd fel és írd felül ezekkel a régi fájlokat:
-   index.html
-   styles.css
-   app.js
-   data.js
-   manifest.webmanifest
-   sw.js
-   icon-192.png
-   icon-512.png
-3. Commit changes.
-4. Várj 1–3 percet.
-5. Számítógépen Ctrl+F5-tel frissíts.
-6. iPhone-on töröld a régi főképernyős alkalmazást, nyisd meg Safariban a Pages címet,
-   majd Megosztás → Hozzáadás a Főképernyőhöz.
+A repository MAIN ágában írd felül:
+index.html
+styles.css
+app.js
+data.js
+manifest.webmanifest
+sw.js
+icon-192.png
+icon-512.png
 
-V4 ÚJDONSÁGOK
-- Import oszlopnevek alapján, nem fix oszlopszám alapján.
-- Kizárólag a jóváhagyott oszlopokat használja:
-  Bizonylatszám, Témaszám név, Termék kód, Termék név,
-  Ügyfél/raktár, Tétel mennyiség, M.e.,
-  Kért szállítási határidő, Dátum, autó, Megjegyzés.
-- Bizonylatszám utolsó 5 számjegye.
-- Témaszám név alapján biztonságos projektpárosítás.
-- Bizonytalan projektpárosítás esetén üresen marad.
-- Projekt címének és alapértelmezett átvevőjének automatikus kitöltése.
-- 4, 5 és 6 méteres szálanyag felismerése a Termék névből.
-- Ha egy rendelésben egyetlen hosszú tétel is van, az egész rendelés Martin ponyvás autójára kerül.
-- A hosszú tétel oka látható a rendelésen és a tételmellékletben.
-- A térképen valós közúti útvonal jelenik meg az OpenStreetMap/OSRM alapján.
-- A térkép alatti kártyákon gyorsan szerkeszthető:
-  beszállító, projekt, címek, átvevő, telefon, felrakói és fuvarmegjegyzés.
-- Minden felrakóhoz külön felrakói megjegyzés.
-- Excel, Word és PDF fuvar-export tételmelléklettel.
-- Külön Excel export az importadatokról, a kézzel beírt megjegyzésekkel.
-- Dátumonként automatikusan külön fuvarnap.
-- Húzással módosítható sorrend és sofőr.
+A `server` mappát GitHubra is feltöltheted, de GitHub Pages nem futtatja.
+Automatikus e-mailhez Render, Railway, Fly.io, VPS vagy céges szerver szükséges.
 
-FONTOS
-- Az Excel-beolvasás, a térkép és a közúti útvonal internetkapcsolatot igényel.
-- A geokódolás ingyenes OpenStreetMap Nominatim szolgáltatást használ.
-- Az automatikus optimalizálás közelségi sorrendet számol, majd ezt valós közúti útvonalként rajzolja ki.
-- A kézi húzással beállított sorrend bármikor felülírhatja az automatikus sorrendet.
+FRISSÍTÉS UTÁN
+- várj 1–3 percet;
+- számítógépen Ctrl+F5;
+- iPhone-on töröld a régi főképernyős appot, majd Safariból add hozzá újra.
