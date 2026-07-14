@@ -1,81 +1,166 @@
 <!doctype html>
 <html lang="hu">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#123B5D"><meta name="apple-mobile-web-app-capable" content="yes">
-<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="styles.css"><title>Fuvarszervező V2</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#103A56">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="styles.css">
+  <title>Fuvarszervező V3</title>
 </head>
 <body>
-<header class="top"><div><small>STAND 98 LOGISZTIKA</small><h1>Fuvarszervező V2</h1></div><button id="installBtn" class="outline hidden">Telepítés</button></header>
+<header class="topbar">
+  <div>
+    <div class="eyebrow">STAND 98 · LOGISZTIKA</div>
+    <h1>Fuvarszervező V3</h1>
+  </div>
+  <div class="top-actions">
+    <span id="saveState" class="save-state">Automatikusan mentve</span>
+    <button id="installBtn" class="outline hidden">Telepítés</button>
+  </div>
+</header>
+
 <main>
-<section id="dashboard" class="page active">
-  <div class="datebar"><button id="prevDay">‹</button><input id="workDate" type="date"><button id="nextDay">›</button></div>
-  <div class="hero"><div><small>KIVÁLASZTOTT NAP</small><h2 id="dateTitle"></h2><p id="baseText"></p></div><div class="big"><b id="dayCount">0</b><span>rendelés</span></div></div>
-  <div class="kpis"><article><b id="unassignedCount">0</b><span>Nincs autón</span></article><article><b id="windowCount">0</b><span>Időablakos</span></article><article><b id="importCount">0</b><span>Importált tétel</span></article></div>
-  <div id="vehicleCards" class="vehicle-grid"></div>
-  <h3>Gyors műveletek</h3>
-  <div class="quick"><button data-go="orders">＋<span>Új szállítás</span></button><button data-go="import">⇩<span>SERPA-import</span></button><button data-go="database">▦<span>Törzsadatok</span></button><button id="backupBtn">✓<span>Mentés</span></button></div>
-</section>
+  <section id="plannerPage" class="page active">
+    <div class="toolbar panel">
+      <div class="date-control">
+        <button id="prevDay" class="icon-button">‹</button>
+        <label>Dátum<input id="workDate" type="date"></label>
+        <button id="nextDay" class="icon-button">›</button>
+      </div>
+      <div class="toolbar-actions">
+        <button id="openImportBtn">Excel import</button>
+        <button id="optimizeAllBtn" class="accent">Mindhárom optimalizálása</button>
+        <button id="exportAllBtn" class="secondary">Összes exportálása</button>
+      </div>
+    </div>
 
-<section id="orders" class="page">
- <div class="head"><div><small>SZÁLLÍTÁSOK</small><h2>Napi lista</h2></div><button id="newOrderBtn" class="round">＋</button></div>
- <div class="filters"><input id="orderSearch" placeholder="Keresés..."><select id="orderVehicleFilter"><option value="">Minden autó</option><option value="1">Dobozos 1</option><option value="2">Dobozos 2</option><option value="3">Ponyvás</option><option value="none">Nincs kiosztva</option></select></div>
- <div id="orderList"></div>
-</section>
+    <div id="importSummary" class="notice hidden"></div>
+    <div id="routeGrid" class="route-grid"></div>
+  </section>
 
-<section id="import" class="page">
- <div class="head"><div><small>SERPA</small><h2>Rendelésimport</h2></div></div>
- <div class="panel">
-  <p>Az első oszlopból az utolsó 4 számjegyet használjuk. Csak azok a sorok kerülnek be, ahol az utolsó oszlopban szállítási dátum van.</p>
-  <label class="file">Excel kiválasztása<input id="excelFile" type="file" accept=".xlsx,.xls"></label>
-  <div id="importStatus" class="notice">Még nincs fájl beolvasva.</div>
-  <button id="commitImport">Beolvasott rendelések hozzáadása</button>
- </div>
- <div class="tabs"><button class="tab active" data-import-view="orders">Rendelésszám szerint</button><button class="tab" data-import-view="vehicles">Autónként</button></div>
- <div id="importPreview"></div>
-</section>
+  <section id="ordersPage" class="page">
+    <div class="page-head">
+      <div><div class="eyebrow dark">RENDELÉSEK</div><h2>Összesített rendelések</h2></div>
+      <button id="newOrderBtn" class="round">＋</button>
+    </div>
+    <div class="filters panel">
+      <input id="orderSearch" placeholder="Keresés rendelésszámra, projektre, címre...">
+      <select id="orderDriverFilter">
+        <option value="">Minden sofőr</option>
+        <option value="mario">Márió</option>
+        <option value="patrik">Patrik</option>
+        <option value="martin">Martin</option>
+        <option value="unassigned">Nincs kiosztva</option>
+      </select>
+    </div>
+    <div id="ordersList"></div>
+  </section>
 
-<section id="database" class="page">
- <div class="head"><div><small>ADMIN</small><h2>Törzsadatok</h2></div><button id="newDbBtn" class="round">＋</button></div>
- <div class="tabs"><button class="tab active" data-db="projects">Projektek</button><button class="tab" data-db="suppliers">Beszállítók</button><button class="tab" data-db="recipients">Átvevők</button></div>
- <input id="dbSearch" placeholder="Keresés névre vagy címre...">
- <div id="dbList"></div>
-</section>
+  <section id="masterPage" class="page">
+    <div class="page-head">
+      <div><div class="eyebrow dark">TÖRZSADATOK</div><h2>Projektek, beszállítók, átvevők</h2></div>
+      <button id="newMasterBtn" class="round">＋</button>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-master="projects">Projektek</button>
+      <button class="tab" data-master="suppliers">Beszállítók</button>
+      <button class="tab" data-master="recipients">Átvevők</button>
+    </div>
+    <div class="filters panel"><input id="masterSearch" placeholder="Keresés névre, címre vagy telefonszámra..."></div>
+    <div id="masterList"></div>
+  </section>
 
-<section id="settings" class="page">
- <div class="head"><div><small>BEÁLLÍTÁSOK</small><h2>Járművek</h2></div></div>
- <div class="panel form">
-  <label>Alap indulási pont<input id="baseAddress"></label>
-  <label>Autó 1 neve<input id="vehicle1"></label><label>Autó 2 neve<input id="vehicle2"></label><label>Autó 3 neve<input id="vehicle3"></label>
-  <button id="saveSettings">Mentés</button>
- </div>
- <div class="panel"><button id="exportBtn" class="secondary">Biztonsági mentés letöltése</button><label class="file">Mentés visszatöltése<input id="restoreFile" type="file" accept=".json"></label></div>
-</section>
+  <section id="settingsPage" class="page">
+    <div class="page-head"><div><div class="eyebrow dark">BEÁLLÍTÁSOK</div><h2>Alapadatok</h2></div></div>
+    <div class="panel form-grid">
+      <label>Indulási cím<input id="baseAddress"></label>
+      <label>Márió autója<input id="marioVehicle"></label>
+      <label>Patrik autója<input id="patrikVehicle"></label>
+      <label>Martin autója<input id="martinVehicle"></label>
+      <button id="saveSettingsBtn">Beállítások mentése</button>
+    </div>
+    <div class="panel">
+      <h3>Biztonsági mentés</h3>
+      <div class="toolbar-actions">
+        <button id="backupDownloadBtn" class="secondary">Mentés letöltése</button>
+        <label class="file-button">Mentés visszatöltése<input id="backupRestoreInput" type="file" accept=".json"></label>
+        <button id="clearOrdersBtn" class="danger">Rendelések törlése</button>
+      </div>
+    </div>
+  </section>
 </main>
 
-<nav><button class="nav active" data-page="dashboard">⌂<span>Főoldal</span></button><button class="nav" data-page="orders">▤<span>Szállítások</span></button><button class="nav" data-page="import">⇩<span>Import</span></button><button class="nav" data-page="database">▦<span>Törzsadatok</span></button><button class="nav" data-page="settings">⚙<span>Beállítás</span></button></nav>
+<nav class="bottom-nav">
+  <button class="nav active" data-page="plannerPage"><span>◉</span><small>Fuvarok</small></button>
+  <button class="nav" data-page="ordersPage"><span>▤</span><small>Rendelések</small></button>
+  <button class="nav" data-page="masterPage"><span>▦</span><small>Törzsadatok</small></button>
+  <button class="nav" data-page="settingsPage"><span>⚙</span><small>Beállítások</small></button>
+</nav>
 
-<dialog id="orderDialog"><form id="orderForm">
-<div class="dialog-head"><h3 id="orderDialogTitle">Új szállítás</h3><button type="button" class="close" data-close="orderDialog">×</button></div>
-<input id="editOrderId" type="hidden">
-<div class="two"><label>Szállítás dátuma<input id="scheduleDate" type="date" required></label><label>Autó<select id="vehicle"><option value="">Nincs kiosztva</option><option value="1">Dobozos 1</option><option value="2">Dobozos 2</option><option value="3">Ponyvás</option></select></label></div>
-<div class="two"><label>Rendelésszám<input id="orderNo"></label><label>Sorrend<input id="sequence" type="number" min="1"></label></div>
-<label>Felrakó típusa<select id="pickupType"><option value="supplier">Beszállító</option><option value="project">Projekt</option></select></label>
-<label>Felrakó<select id="pickupSelect"></select></label><label>Felrakó címe<input id="pickupAddress"></label>
-<label>Lerakó projekt<select id="projectSelect"></select></label><label>Lerakó címe<input id="dropAddress"></label>
-<label>Átvevő<select id="recipientSelect"></select></label>
-<div class="two"><label>Telefon<input id="recipientPhone"></label><label>E-mail<input id="recipientEmail"></label></div>
-<label>Járműigény<select id="vehicleNeed"><option>Dobozos/Ponyvás</option><option>Csak ponyvás</option><option>Csak dobozos</option></select></label>
-<label class="check"><input id="hasPickupWindow" type="checkbox"> Felvételi időablak megadása</label>
-<div id="pickupWindowBox" class="two hidden"><label>Felvétel ettől<input id="pickupFrom" type="time"></label><label>Felvétel eddig<input id="pickupTo" type="time"></label></div>
-<label class="check"><input id="hasDropWindow" type="checkbox"> Lerakási időablak megadása</label>
-<div id="dropWindowBox" class="two hidden"><label>Lerakás ettől<input id="dropFrom" type="time"></label><label>Lerakás eddig<input id="dropTo" type="time"></label></div>
-<label>Megjegyzés<textarea id="note" rows="3"></textarea></label><button type="submit">Szállítás mentése</button>
-</form></dialog>
+<dialog id="importDialog">
+  <form method="dialog" id="importForm">
+    <div class="dialog-head"><div><div class="eyebrow dark">SERPA</div><h3>Új sablon importálása</h3></div><button type="button" class="close" data-close="importDialog">×</button></div>
+    <p class="help">A program az <b>A oszlopból</b> a rendelésszám utolsó 4 számjegyét használja. A <b>H oszlop a dátum</b>, az <b>I oszlop az autó/sofőr</b>. Üres dátumú sor nem kerül be.</p>
+    <label class="file-drop">Excel fájl kiválasztása<input id="serpaFile" type="file" accept=".xlsx,.xls"></label>
+    <div id="importPreview" class="import-preview"><div class="notice">Még nincs fájl kiválasztva.</div></div>
+    <button type="button" id="confirmImportBtn" disabled>Importálás és összesítés</button>
+  </form>
+</dialog>
 
-<dialog id="dbDialog"><form id="dbForm"><div class="dialog-head"><h3 id="dbTitle">Új adat</h3><button type="button" class="close" data-close="dbDialog">×</button></div><input id="dbEditIndex" type="hidden"><div id="dbFields"></div><button type="submit">Mentés</button></form></dialog>
+<dialog id="orderDialog">
+  <form id="orderForm">
+    <div class="dialog-head"><div><div class="eyebrow dark">RENDELÉS</div><h3 id="orderDialogTitle">Rendelés szerkesztése</h3></div><button type="button" class="close" data-close="orderDialog">×</button></div>
+    <input id="editOrderId" type="hidden">
+    <div class="two-col">
+      <label>Szállítás dátuma<input id="orderDate" type="date" required></label>
+      <label>Sofőr<select id="orderDriver"><option value="">Nincs kiosztva</option><option value="mario">Márió</option><option value="patrik">Patrik</option><option value="martin">Martin</option></select></label>
+    </div>
+    <div class="two-col">
+      <label>Rendelésszám<input id="orderNo" maxlength="4"></label>
+      <label>Járműigény<select id="vehicleNeed"><option value="any">Dobozos / ponyvás</option><option value="tarp">Csak ponyvás</option><option value="box">Csak dobozos</option></select></label>
+    </div>
+    <label>Beszállító / felrakó<select id="supplierSelect"></select></label>
+    <label>Felrakó címe<input id="pickupAddress"></label>
+    <label>Projekt / lerakó<select id="projectSelect"></select></label>
+    <label>Lerakó címe<input id="dropAddress"></label>
+    <label>Átvevő<select id="recipientSelect"></select></label>
+    <div class="two-col"><label>Telefon<input id="recipientPhone"></label><label>E-mail<input id="recipientEmail"></label></div>
+    <label class="check"><input id="pickupWindowEnabled" type="checkbox"> Felvételi időablak</label>
+    <div id="pickupWindowFields" class="two-col hidden"><label>Ettől<input id="pickupFrom" type="time"></label><label>Eddig<input id="pickupTo" type="time"></label></div>
+    <label class="check"><input id="dropWindowEnabled" type="checkbox"> Lerakási időablak</label>
+    <div id="dropWindowFields" class="two-col hidden"><label>Ettől<input id="dropFrom" type="time"></label><label>Eddig<input id="dropTo" type="time"></label></div>
+    <label>Megjegyzés<textarea id="orderNote" rows="3"></textarea></label>
+    <button type="submit">Mentés</button>
+  </form>
+</dialog>
+
+<dialog id="itemsDialog">
+  <div class="dialog-body">
+    <div class="dialog-head"><div><div class="eyebrow dark">MELLÉKLET</div><h3 id="itemsTitle">Tételek</h3></div><button type="button" class="close" data-close="itemsDialog">×</button></div>
+    <div id="itemsBody"></div>
+  </div>
+</dialog>
+
+<dialog id="masterDialog">
+  <form id="masterForm">
+    <div class="dialog-head"><div><div class="eyebrow dark">TÖRZSADAT</div><h3 id="masterDialogTitle">Új adat</h3></div><button type="button" class="close" data-close="masterDialog">×</button></div>
+    <input id="masterEditId" type="hidden">
+    <div id="masterFields"></div>
+    <button type="submit">Mentés</button>
+  </form>
+</dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="data.js"></script><script src="app.js"></script>
-</body></html>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

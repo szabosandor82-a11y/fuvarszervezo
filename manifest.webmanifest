@@ -1,10 +1,10 @@
 {
-  "name": "Fuvarszervező V2",
+  "name": "Fuvarszervező V3",
   "short_name": "Fuvarszervező",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#f2f6f9",
-  "theme_color": "#123B5D",
+  "background_color": "#f2f6f8",
+  "theme_color": "#103A56",
   "icons": [
     {
       "src": "icon-192.png",
