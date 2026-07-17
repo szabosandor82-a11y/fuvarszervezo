@@ -1,6 +1,6 @@
 {
-  "name": "Fuvarszervező V13",
-  "short_name": "Fuvarszervező V13",
+  "name": "Fuvarszervező V14",
+  "short_name": "Fuvarszervező V14",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f1f5f7",
@@ -18,6 +18,5 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ],
-  "description": "GitHub Pages fuvarszervező törzsadat-importtal, kimutatásokkal és hátralékkezeléssel."
+  ]
 }
