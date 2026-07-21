@@ -234,3 +234,90 @@ function renderReports(){
   $('#brandHome').onclick=resetToStartPage;
   $('#reportMonth').onchange=renderReports;$('#refreshReportBtn').onclick=renderReports;
 })();
+
+/* ==================== V21 PATCH ==================== */
+const V21_VERSION='V21';
+
+function validMoveTargetFromInputs(prefix='move'){
+  const y=$(`#${prefix}Year`)?.value||'',m=$(`#${prefix}Month`)?.value||'',d=$(`#${prefix}Day`)?.value||'';
+  if(y.length!==4||m.length<1||d.length<1)return '';
+  const target=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`,dt=new Date(target+'T12:00:00');
+  return !isNaN(dt)&&localISO(dt)===target?target:'';
+}
+function bindV21MoveDateParts(){
+  const y=$('#moveYear'),m=$('#moveMonth'),d=$('#moveDay'),btn=$('#moveItemsBtn');
+  if(!y||!m||!d||!btn)return;
+  const update=()=>{btn.disabled=!validMoveTargetFromInputs('move')};
+  [[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next])=>{
+    el.addEventListener('input',()=>{el.value=el.value.replace(/\D/g,'').slice(0,max);if(el.value.length===max&&next){next.focus();next.select()}update()});
+    el.addEventListener('change',update);
+  });
+  btn.onclick=moveUncheckedItemsFromDialog;
+  update();
+}
+function openItems(id){
+  const o=state.orders.find(x=>x.id===id);if(!o)return;currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);
+  $('#itemsTitle').textContent=`${o.orderNo} · tételek`;
+  $('#itemMovePanel').innerHTML=`<div class="move-controls"><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Áthelyezés éve"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div><button id="moveItemsBtn" class="move-items-btn" type="button" disabled>Áthelyezés</button></div>`;
+  $('#itemsBody').innerHTML=(o.items||[]).map((it,i)=>`<div class="item-row ${it.received?'done':''}"><input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${id}',${i},this.checked)"><div><b class="item-name">${esc(it.name)}</b><br>${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)} ${it.longMaterial?'· hosszú szál':''}<div class="missing-qty-wrap ${it.received?'hidden':''}"><input class="missing-qty-input" type="number" min="0" step="any" aria-label="Nem kapott mennyiség" value="${esc(it.missingQty||'')}" oninput="updateMissingQty('${id}',${i},this.value)"></div><label class="item-note-edit">Tétel megjegyzés<textarea placeholder="Nincs megjegyzés" oninput="updateItemNote('${id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label></div></div>`).join('')||'<div class="notice">Nincs tétel.</div>';
+  bindV21MoveDateParts();if(!$('#itemsDialog').open)$('#itemsDialog').showModal()
+}
+window.openItems=openItems;
+
+function moveUncheckedItemsFromDialog(){
+  const o=state.orders.find(x=>x.id===currentItemsOrderId);if(!o)return;
+  const target=validMoveTargetFromInputs('move');if(!target)return alert('Előbb adj meg érvényes áthelyezési dátumot az ablak fejlécében.');
+  if(target===o.scheduleDate)return alert('Az új dátum nem lehet az eredeti nappal azonos.');
+  const moving=(o.items||[]).filter(i=>!i.received);if(!moving.length)return alert('Nincs áthelyezhető, kipipálatlan tétel.');
+  for(const it of moving){const total=numericQty(it.qty),missing=it.missingQty===''||it.missingQty==null?total:numericQty(it.missingQty);if(missing<=0)return alert(`A(z) ${it.name} hiányzó mennyisége legyen nagyobb nullánál.`);if(total>0&&missing>total)return alert(`A(z) ${it.name} hiányzó mennyisége nem lehet több a rendelt mennyiségnél (${it.qty}).`)}
+  if(!confirm(`${moving.length} kipipálatlan tétel hiányzó mennyiségének áthelyezése erre a napra: ${target}?`))return;
+  let targetOrder=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===o.orderNo&&x.vehicleId===o.vehicleId&&x.projectName===o.projectName&&x.pickupName===o.pickupName&&x.movedFromOrderId===o.id);
+  if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id};state.orders.push(targetOrder)}
+  const keep=[];
+  (o.items||[]).forEach(it=>{
+    if(it.received){keep.push(it);return}
+    ensureItemId(it);const total=numericQty(it.qty),moveQty=it.missingQty===''||it.missingQty==null?total:numericQty(it.missingQty);
+    const moved={...it,_id:uid(),qty:formatQty(moveQty),received:false,missingQty:''};targetOrder.items.push(moved);
+    state.backlog.push({id:uid(),sourceOrderId:o.id,targetOrderId:targetOrder.id,itemId:moved._id,orderNo:o.orderNo,supplier:o.pickupName,projectName:o.projectName,code:it.code,name:it.name,itemNote:itemNoteValue(it),quantity:formatQty(moveQty),unit:it.unit,movedToDate:target,movedAt:new Date().toISOString()});
+    if(total>0&&moveQty<total){it.qty=formatQty(total-moveQty);it.received=true;it.missingQty='';keep.push(it)}
+  });
+  o.items=keep;o.completed=o.items.length>0&&o.items.every(i=>i.received);$('#itemsDialog').close();save();alert(`A hiányzó mennyiségek átkerültek a(z) ${target} napra és a Hátralék menübe.`)
+}
+
+function backlogDateEditor(b){
+  const [y,m,d]=(b.movedToDate||'---').split('-');
+  return `<div class="backlog-date-editor" onclick="event.stopPropagation()"><input id="by-${b.id}" inputmode="numeric" maxlength="4" value="${esc(y||'')}" placeholder="ÉÉÉÉ"><input id="bm-${b.id}" inputmode="numeric" maxlength="2" value="${esc(m||'')}" placeholder="HH"><input id="bd-${b.id}" inputmode="numeric" maxlength="2" value="${esc(d||'')}" placeholder="NN"><button type="button" onclick="rescheduleBacklog('${b.id}')">Ütemezés</button></div>`;
+}
+function renderBacklog(){
+  const q=norm($('#backlogSearch')?.value||''),rows=(state.backlog||[]).map(backlogRecordData).filter(b=>!q||norm(Object.values(b).join(' ')).includes(q));
+  if($('#backlogBody'))$('#backlogBody').innerHTML=rows.map(b=>`<tr class="backlog-row" onclick="openBacklogResult('${b.targetOrderId}','${b.movedToDate}')"><td>${esc(b.orderNo)}</td><td>${esc(b.supplier)}</td><td>${esc(b.projectName)}</td><td>${esc(b.code)}</td><td>${esc(b.name)}</td><td>${esc(b.itemNote)}</td><td>${esc(b.quantity)} ${esc(b.unit)}</td><td>${backlogDateEditor(b)}</td></tr>`).join('')||'<tr><td colspan="8">Nincs találat.</td></tr>';
+  rows.forEach(b=>bindBacklogDateInputs(b.id));
+}
+function bindBacklogDateInputs(id){
+  const y=$(`#by-${id}`),m=$(`#bm-${id}`),d=$(`#bd-${id}`);if(!y||!m||!d)return;
+  [[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next])=>el.addEventListener('input',()=>{el.value=el.value.replace(/\D/g,'').slice(0,max);if(el.value.length===max&&next){next.focus();next.select()}}));
+}
+window.rescheduleBacklog=id=>{
+  const b=state.backlog.find(x=>x.id===id);if(!b)return;
+  const y=$(`#by-${id}`)?.value||'',m=$(`#bm-${id}`)?.value||'',d=$(`#bd-${id}`)?.value||'';
+  const target=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`,dt=new Date(target+'T12:00:00');
+  if(y.length!==4||!m||!d||isNaN(dt)||localISO(dt)!==target)return alert('Adj meg érvényes dátumot ÉÉÉÉ–HH–NN formában.');
+  const o=state.orders.find(x=>x.id===b.targetOrderId);if(!o)return alert('A hátralékhoz tartozó fuvar nem található.');
+  if(o.scheduleDate===target)return alert('A fuvar már ezen a napon szerepel.');
+  if(!confirm(`A teljes kapcsolódó fuvar áthelyezése erre a napra: ${target}?`))return;
+  o.scheduleDate=target;
+  (state.backlog||[]).filter(x=>x.targetOrderId===o.id).forEach(x=>x.movedToDate=target);
+  save();renderBacklog();alert(`A hátralék és a hozzá tartozó fuvarbuborék átkerült a(z) ${target} napra.`)
+};
+
+function deleteEveryOrder(){
+  const count=(state.orders||[]).length;if(!count)return alert('Nincs törölhető fuvar.');
+  if(!confirm(`Biztosan törölni szeretnéd az összes, minden napon szereplő ${count} fuvart?`))return;
+  if(prompt('Ez nem vonható vissza. Írd be pontosan: TÖRLÉS')?.trim().toUpperCase()!=='TÖRLÉS')return alert('A törlés megszakadt.');
+  state.orders=[];state.backlog=[];state.failedTrips=[];state.routeStats={};state.geo={};
+  save();alert('Minden fuvar, hátralék és meghiúsult fuvar törölve. A törzsadatok megmaradtak.')
+}
+(function installV21Handlers(){
+  const btn=$('#deleteEveryOrderBtn');if(btn)btn.onclick=deleteEveryOrder;
+  renderBacklog();
+})();
