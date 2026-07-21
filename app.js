@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION='V19';const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION='V20';const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 let maps={},masterType='projects',currentItemsOrderId='',mediaRecorder=null,audioChunks=[],audioBlob=null,importOrders=[],reviewQueue=[],reviewIndex=0,deferredPrompt=null;
@@ -112,3 +112,125 @@ $('#orderSearch').oninput=renderOrders;$('#globalSearch').oninput=handleGlobalSe
 $('#backlogSearch').oninput=()=>{$('#clearBacklogSearch').classList.toggle('hidden',!$('#backlogSearch').value);renderBacklog()};$('#clearBacklogSearch').onclick=()=>{$('#backlogSearch').value='';$('#clearBacklogSearch').classList.add('hidden');renderBacklog()};$('#addMasterBtn').onclick=()=>openMaster();$('#masterSearch').oninput=renderMasters;$('#backupBtn').onclick=backup;$('#restoreInput').onchange=e=>e.target.files[0]&&restoreFile(e.target.files[0]);
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;$('#installBtn').classList.remove('hidden')});$('#installBtn').onclick=async()=>{deferredPrompt?.prompt();deferredPrompt=null};
 bindDateParts('schedule');bindDateParts('deadline');if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').then(r=>r.update());load();$('#workDate').value=tomorrow();$('#driverDate').value=tomorrow();render();
+/* ==================== V20 PATCH ==================== */
+const V20_VERSION='V20';
+function load(){
+  const raw=localStorage.getItem(KEY);
+  if(raw){
+    state=JSON.parse(raw);
+    state.aliases=state.aliases||{projects:{},suppliers:{}};
+    state.vehicles=state.vehicles||defaultVehicles();
+    state.orders=state.orders||[];
+    state.backlog=state.backlog||[];
+    state.failedTrips=state.failedTrips||[];
+    state.routeStats=state.routeStats||{};
+    state.geo=state.geo||{};
+    state.orders.forEach(o=>(o.items||[]).forEach(it=>{ensureItemId(it);if(it.missingQty===undefined)it.missingQty=''}));
+    refreshMasterData();save(false);return;
+  }
+  state.recipients=(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i}));
+  state.vehicles=defaultVehicles();state.orders=[];state.backlog=[];state.failedTrips=[];state.routeStats={};
+  refreshMasterData();save(false)
+}
+
+function render(){applyAfterFourRule();renderRoutes();renderOrders();renderBacklog();renderReports();renderMasters();renderVehicles();renderDriver();fillSelectors();$('#baseAddress').value=state.settings.baseAddress}
+
+function bubbles(list){
+  if(!list.length)return'<div class="notice">Nincs fuvar.</div>';
+  return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')} · ${esc(o.pickupAddress||'')}</p><p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs megadva')}</p>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button><button class="failed-button" onclick="failOrderToTomorrow('${o.id}')">Nem teljesült – holnapra</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('')
+}
+
+async function drawMap(id){
+  const map=maps[id],pts=[],date=selectedDate();
+  if(!map)return;
+  const base=await geo(state.settings.baseAddress);if(base)pts.push(base);
+  for(const o of dayOrders(id).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999))){
+    const pickup=await geo(o.pickupAddress);
+    if(pickup){pts.push(pickup);L.marker(pickup).addTo(map).bindPopup(`<b>Felrakó · ${esc(o.orderNo)}</b><br>${esc(o.pickupName||'')}<br>${esc(o.pickupAddress||'')}`)}
+    const drop=await geo(o.dropAddress);
+    if(drop){pts.push(drop);L.marker(drop).addTo(map).bindPopup(`<b>Lerakó · ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</b><br>${esc(o.dropAddress||'')}${o.recipientName?`<br>Átvevő: ${esc(o.recipientName)}`:''}${o.note?`<br>Megjegyzés: ${esc(o.note)}`:''}${itemNoteSummary(o).replaceAll('<p class="item-note-preview">','<br>').replaceAll('</p>','')}`)}
+  }
+  if(pts.length){
+    const rr=await roadRoute(pts),coords=rr?rr.geometry.coordinates.map(c=>[c[1],c[0]]):pts;
+    const line=L.polyline(coords,{weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[20,20]});
+    state.routeStats=state.routeStats||{};state.routeStats[date]=state.routeStats[date]||{};
+    state.routeStats[date][id]={km:rr?Math.round(rr.distance/100)/10:0,updatedAt:new Date().toISOString()};
+    localStorage.setItem(KEY,JSON.stringify(state));
+    const el=$('#summary-'+id);if(el&&rr)el.textContent=(el.textContent?el.textContent+' · ':'')+`${Math.round(rr.distance/100)/10} km`;
+  }
+}
+
+function numericQty(v){const n=parseFloat(String(v??'').replace(',','.').replace(/[^0-9.-]/g,''));return Number.isFinite(n)?n:0}
+function formatQty(v){return Number.isInteger(v)?String(v):String(Math.round(v*1000)/1000).replace('.',',')}
+function openItems(id){
+  const o=state.orders.find(x=>x.id===id);if(!o)return;currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);
+  $('#itemsTitle').textContent=`${o.orderNo} · tételek`;
+  $('#itemMovePanel').innerHTML=`<p><b>Nem kipipált tételek áthelyezése másik napra</b><br>Írd be a következő felvétel dátumát. A hiányzó darabszám kerül át; üres mező esetén a teljes rendelt mennyiség.</p><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN"></div>`;
+  $('#itemsBody').innerHTML=(o.items||[]).map((it,i)=>`<div class="item-row ${it.received?'done':''}"><input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${id}',${i},this.checked)"><div><b class="item-name">${esc(it.name)}</b><br>${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)} ${it.longMaterial?'· hosszú szál':''}<div class="missing-qty-wrap ${it.received?'hidden':''}"><label>Nem kaptam meg – mennyiség<input type="number" min="0" step="any" placeholder="Üres = teljes mennyiség" value="${esc(it.missingQty||'')}" oninput="updateMissingQty('${id}',${i},this.value)"></label><small>Áthelyezéskor ez a mennyiség kerül a következő napra és a Hátralékba.</small></div><label class="item-note-edit">Tétel megjegyzés<textarea placeholder="Nincs megjegyzés" oninput="updateItemNote('${id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label></div></div>`).join('')||'<div class="notice">Nincs tétel.</div>';
+  bindMoveDateParts();if(!$('#itemsDialog').open)$('#itemsDialog').showModal()
+}
+window.updateMissingQty=(id,i,val)=>{const o=state.orders.find(x=>x.id===id);if(!o?.items?.[i])return;o.items[i].missingQty=val;save(false)};
+window.toggleItem=(id,i,val)=>{const o=state.orders.find(x=>x.id===id);if(!o||!o.items?.[i])return;o.items[i].received=val;if(val)o.items[i].missingQty='';o.completed=(o.items||[]).length>0&&o.items.every(x=>x.received);save(false);openItems(id);renderRoutes();renderDriver()};
+
+function moveUncheckedItemsFromDialog(){
+  const o=state.orders.find(x=>x.id===currentItemsOrderId);if(!o)return;
+  const y=$('#moveYear')?.value,m=$('#moveMonth')?.value,d=$('#moveDay')?.value;if(!y||!m||!d)return;
+  const target=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`,dt=new Date(target+'T12:00:00');
+  if(isNaN(dt)||localISO(dt)!==target)return alert('Érvénytelen dátum.');if(target===o.scheduleDate)return alert('Az új dátum nem lehet az eredeti nappal azonos.');
+  const moving=(o.items||[]).filter(i=>!i.received);if(!moving.length)return alert('Nincs áthelyezhető, kipipálatlan tétel.');
+  for(const it of moving){const total=numericQty(it.qty),missing=it.missingQty===''||it.missingQty==null?total:numericQty(it.missingQty);if(missing<=0)return alert(`A(z) ${it.name} hiányzó mennyisége legyen nagyobb nullánál.`);if(total>0&&missing>total)return alert(`A(z) ${it.name} hiányzó mennyisége nem lehet több a rendelt mennyiségnél (${it.qty}).`)}
+  if(!confirm(`${moving.length} kipipálatlan tétel hiányzó mennyiségének áthelyezése erre a napra: ${target}?`))return;
+  let targetOrder=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===o.orderNo&&x.vehicleId===o.vehicleId&&x.projectName===o.projectName&&x.pickupName===o.pickupName);
+  if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id};state.orders.push(targetOrder)}
+  const keep=[];
+  (o.items||[]).forEach(it=>{
+    if(it.received){keep.push(it);return}
+    ensureItemId(it);const total=numericQty(it.qty),moveQty=it.missingQty===''||it.missingQty==null?total:numericQty(it.missingQty);
+    const moved={...it,_id:uid(),qty:formatQty(moveQty),received:false,missingQty:''};targetOrder.items.push(moved);
+    state.backlog.push({id:uid(),sourceOrderId:o.id,targetOrderId:targetOrder.id,itemId:moved._id,orderNo:o.orderNo,supplier:o.pickupName,projectName:o.projectName,code:it.code,name:it.name,itemNote:itemNoteValue(it),quantity:formatQty(moveQty),unit:it.unit,movedToDate:target,movedAt:new Date().toISOString()});
+    if(total>0&&moveQty<total){it.qty=formatQty(total-moveQty);it.received=true;it.missingQty='';keep.push(it)}
+  });
+  o.items=keep;o.completed=o.items.length>0&&o.items.every(i=>i.received);$('#itemsDialog').close();save();alert(`A hiányzó mennyiségek átkerültek erre a napra: ${target}.`)
+}
+function backlogRecordData(b){const o=state.orders.find(x=>x.id===b.targetOrderId),it=o?.items?.find(i=>i._id===b.itemId);return{...b,orderNo:o?.orderNo||b.orderNo,supplier:o?.pickupName||b.supplier,projectName:o?.projectName||b.projectName,code:it?.code||b.code,name:it?.name||b.name,itemNote:it?itemNoteValue(it):b.itemNote,quantity:it?.qty||b.quantity||'',unit:it?.unit||b.unit||'',movedToDate:o?.scheduleDate||b.movedToDate,targetOrderId:o?.id||b.targetOrderId}}
+function renderBacklog(){const q=norm($('#backlogSearch')?.value||''),rows=(state.backlog||[]).map(backlogRecordData).filter(b=>!q||norm(Object.values(b).join(' ')).includes(q));if($('#backlogBody'))$('#backlogBody').innerHTML=rows.map(b=>`<tr class="backlog-row" onclick="openBacklogResult('${b.targetOrderId}','${b.movedToDate}')"><td>${esc(b.orderNo)}</td><td>${esc(b.supplier)}</td><td>${esc(b.projectName)}</td><td>${esc(b.code)}</td><td>${esc(b.name)}</td><td>${esc(b.itemNote)}</td><td>${esc(b.quantity)} ${esc(b.unit)}</td><td>${esc(b.movedToDate)}</td></tr>`).join('')||'<tr><td colspan="8">Nincs találat.</td></tr>'}
+
+window.failOrderToTomorrow=id=>{
+  const o=state.orders.find(x=>x.id===id);if(!o)return;
+  const d=new Date(o.scheduleDate+'T12:00:00');d.setDate(d.getDate()+1);const target=localISO(d);
+  if(!confirm(`Biztosan meghiúsultként rögzíted a ${o.orderNo} rendelést, és a teljes fuvart áthelyezed erre a napra: ${target}?`))return;
+  state.failedTrips=state.failedTrips||[];
+  state.failedTrips.push({id:uid(),sourceOrderId:o.id,orderNo:o.orderNo,vehicleId:o.vehicleId,driverName:state.vehicles.find(v=>v.id===o.vehicleId)?.driverName||'',originalDate:o.scheduleDate,movedToDate:target,createdAt:new Date().toISOString()});
+  const moved={...o,id:uid(),scheduleDate:target,completed:false,completedAt:'',sequence:999,failedMovedFrom:o.id,items:(o.items||[]).map(it=>({...it,_id:uid(),received:false}))};
+  state.orders=state.orders.filter(x=>x.id!==id);state.orders.push(moved);save();alert(`A fuvar meghiúsultként rögzítve és áthelyezve: ${target}.`)
+};
+
+function reportMonthDefault(){return today().slice(0,7)}
+function renderReports(){
+  if(!$('#reportBody'))return;const month=$('#reportMonth')?.value||reportMonthDefault();if($('#reportMonth')&&!$('#reportMonth').value)$('#reportMonth').value=month;
+  const vehicles=state.vehicles.filter(v=>['mario','patrik','martin'].some(n=>norm(v.driverName).includes(n))||v.active);
+  const rows=vehicles.map(v=>{
+    const completed=state.orders.filter(o=>o.vehicleId===v.id&&o.scheduleDate.startsWith(month)&&o.completed);
+    const pickupKeys=new Set(completed.map(o=>`${o.scheduleDate}|${norm(o.pickupAddress||o.pickupName)}`).filter(x=>x.split('|')[1]));
+    const km=Object.entries(state.routeStats||{}).filter(([date])=>date.startsWith(month)).reduce((sum,[,byVehicle])=>sum+(+byVehicle?.[v.id]?.km||0),0);
+    const failed=(state.failedTrips||[]).filter(f=>f.vehicleId===v.id&&f.originalDate?.startsWith(month)).length;
+    return{driver:v.driverName,km:Math.round(km*10)/10,completed:completed.length,pickups:pickupKeys.size,failed}
+  });
+  const total=rows.reduce((a,r)=>({driver:'Havi összesen',km:a.km+r.km,completed:a.completed+r.completed,pickups:a.pickups+r.pickups,failed:a.failed+r.failed}),{km:0,completed:0,pickups:0,failed:0});
+  $('#reportBody').innerHTML=[...rows,total].map((r,i)=>`<tr ${i===rows.length?'class="report-total"':''}><td><b>${esc(r.driver)}</b></td><td>${formatQty(Math.round(r.km*10)/10)} km</td><td>${r.completed}</td><td>${r.pickups}</td><td>${r.failed}</td></tr>`).join('')
+}
+
+(function installV20Handlers(){
+  const oldSubmit=$('#orderForm').onsubmit;
+  $('#orderForm').onsubmit=e=>{
+    const id=$('#orderId').value,old=state.orders.find(x=>x.id===id),oldPickup=old?.pickupAddress||'',oldDrop=old?.dropAddress||'';
+    oldSubmit(e);
+    const saved=state.orders.find(x=>x.id===(id||state.orders[state.orders.length-1]?.id));
+    if(oldPickup&&saved&&oldPickup!==saved.pickupAddress)delete state.geo[oldPickup];
+    if(oldDrop&&saved&&oldDrop!==saved.dropAddress)delete state.geo[oldDrop];
+    if(saved){delete state.geo[saved.pickupAddress];delete state.geo[saved.dropAddress]}
+    localStorage.setItem(KEY,JSON.stringify(state));setTimeout(()=>{initMaps();renderReports()},50)
+  };
+  $('#brandHome').onclick=resetToStartPage;
+  $('#reportMonth').onchange=renderReports;$('#refreshReportBtn').onclick=renderReports;
+})();

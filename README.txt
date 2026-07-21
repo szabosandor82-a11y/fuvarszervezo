@@ -1,7 +1,7 @@
-FUVAR-SZERVEZŐ V19 – GITHUB PAGES VERZIÓ
+FUVAR-SZERVEZŐ V20 – GITHUB PAGES VERZIÓ
 
-V19 javítások:
-- A fejléc, manifest és gyorsítótár verziója V19.
+V20 javítások:
+- A fejléc, manifest és gyorsítótár verziója V20.
 - A manuális fuvar dátuma külön ÉÉÉÉ–HH–NN mezőkkel adható meg. Az év pontosan 4 karakter, majd a kurzor a hónapra, onnan a napra ugrik.
 - A manuális fuvar a megadott szállítási napra kerül.
 - Egyedi úticélnál az átvevő neve kézzel megadható és később módosítható.
@@ -11,7 +11,10 @@ V19 javítások:
 - A SERPA Tétel megjegyzés megjelenik a Tételek nézetben és az Excel exportban.
 
 
-V19: kereshető projekt/felrakó, egységes dátumbevitel, egyedi úticél, tételmegjegyzések, aktív napi törlés, keresési találat megnyitása és kiemelése.
+V20: kereshető projekt/felrakó, egységes dátumbevitel, egyedi úticél, tételmegjegyzések, aktív napi törlés, keresési találat megnyitása és kiemelése.
 
 
-V19 újdonságok: sofőrönkénti export, holnapi kezdőoldal, X kereséstörlés, rögzített párbeszédablak-fejléc, javított tételpipák, tételek dátum szerinti áthelyezése és Hátralék menü.
+V20 újdonságok: sofőrönkénti export, holnapi kezdőoldal, X kereséstörlés, rögzített párbeszédablak-fejléc, javított tételpipák, tételek dátum szerinti áthelyezése és Hátralék menü.
+
+
+V20 újdonságok: térkép újraszámítás címváltozáskor; részleges hiánymennyiség; Hátralék mennyiség oszlop; holnapi kezdőoldal a fejlécből; meghiúsult fuvar áthelyezése; havi Kimutatás.
