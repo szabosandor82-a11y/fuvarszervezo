@@ -884,3 +884,163 @@ async function optimizeAll(doSave=true){
     if(doSave){save();alert('Optimalizálás befejezve.');}
   }catch(err){console.error(err);alert('Az optimalizálás közben hiba történt: '+(err?.message||err))}
 }
+
+/* ==================== V27 ====================
+   Szabályalapú fuvarszervezés:
+   - beszállítói felrakási blokkok
+   - ugyanahhoz a beszállítóhoz lehetőleg egyszer
+   - útba eső, teljesen felvehető projekt lerakása
+   - nincs pontozásos optimalizálás
+*/
+function v27SupplierKey(o){return norm(o.pickupAddress||o.pickupName||'ismeretlen-felrako')}
+function v27ProjectKey(o){return norm(o.dropAddress||o.projectName||'ismeretlen-lerako')}
+function v27GroupBy(list,keyFn){const m=new Map();for(const x of list){const k=keyFn(x);if(!m.has(k))m.set(k,[]);m.get(k).push(x)}return m}
+function v27GroupPoint(group,profiles,type){for(const o of group){const p=profiles[o.id]?.[type];if(v24FinitePoint(p))return p}return null}
+function v27GroupDistance(group,profiles){return group.reduce((s,o)=>s+v26OrderDistance(profiles[o.id]),0)}
+function v27GroupRegions(group,profiles){return group.flatMap(o=>[v26Region(profiles[o.id]?.pickup),v26Region(profiles[o.id]?.drop)])}
+function v27TerritoryFit(driver,group,profiles){
+  const key=v24DriverKey(driver),regions=v27GroupRegions(group,profiles);
+  if(key==='mario'&&regions.includes('buda'))return 14;
+  if(key==='patrik'&&(regions.includes('pest')||regions.includes('south-pest')))return 14;
+  if(key==='martin'&&(regions.includes('buda')||regions.includes('south-pest')))return -2;
+  return 0;
+}
+function v27ProjectUnityBonus(driverId,group,assigned){
+  const existing=new Set((assigned[driverId]||[]).map(v27ProjectKey));
+  return group.reduce((s,o)=>s+(existing.has(v27ProjectKey(o))?7:0),0);
+}
+function v27SupplierInsertion(driverId,group,assigned,profiles,home){
+  const pickup=v27GroupPoint(group,profiles,'pickup');
+  if(!pickup)return 70;
+  const anchors=[home];
+  for(const o of assigned[driverId]||[]){const p=profiles[o.id];if(p?.pickup)anchors.push(p.pickup);if(p?.drop)anchors.push(p.drop)}
+  let nearest=70;for(const a of anchors)if(a)nearest=Math.min(nearest,dist(a,pickup));
+  const drops=group.map(o=>profiles[o.id]?.drop).filter(v24FinitePoint);
+  const avgDrop=drops.length?drops.reduce((a,p)=>[a[0]+p[0]/drops.length,a[1]+p[1]/drops.length],[0,0]):pickup;
+  return nearest+dist(pickup,avgDrop)*.45;
+}
+async function v27Distribute(){
+  const drivers=activeVehicles();if(!drivers.length)throw new Error('Nincs aktív jármű.');
+  const orders=state.orders.filter(o=>o.scheduleDate===selectedDate());if(!orders.length)throw new Error('Nincs szétosztható fuvar az adott napon.');
+  const martin=drivers.find(v=>v24DriverKey(v)==='martin');
+  const profiles={},homes={},assigned={};
+  for(const v of drivers){homes[v.id]=await vehicleHome(v);assigned[v.id]=[]}
+  for(const o of orders){syncOrderFromMasters(o);profiles[o.id]=await orderGeoProfile(o);o.vehicleId='';o.sequence=999}
+
+  // Kötelező szálas rendelések Martin (vagy más hosszúanyag-képes jármű).
+  for(const o of orders.filter(x=>x.longMaterialReason)){
+    const target=(martin&&canCarryLong(martin))?martin:drivers.find(canCarryLong);
+    if(target){o.vehicleId=target.id;assigned[target.id].push(o)}
+  }
+
+  // A maradékot beszállítói blokkokban osztjuk, így egy sofőr egy beszállítóhoz egyszer megy.
+  const remaining=orders.filter(o=>!o.vehicleId);
+  const supplierGroups=[...v27GroupBy(remaining,v27SupplierKey).values()]
+    .sort((a,b)=>b.length-a.length||v27GroupDistance(b,profiles)-v27GroupDistance(a,profiles));
+  const totalTarget=Math.ceil(orders.length/drivers.length);
+  for(const group of supplierGroups){
+    const ranked=drivers.map(v=>{
+      const insertion=v27SupplierInsertion(v.id,group,assigned,profiles,homes[v.id]);
+      const territory=v27TerritoryFit(v,group,profiles);
+      const unity=v27ProjectUnityBonus(v.id,group,assigned);
+      const loadOrders=assigned[v.id].length;
+      const loadStops=v26UniqueCount(assigned[v.id],'pickupAddress')+v26UniqueCount(assigned[v.id],'dropAddress');
+      const overload=Math.max(0,loadOrders-totalTarget)*16;
+      return{v,value:insertion+territory+loadOrders*4+loadStops*2+overload-unity};
+    }).sort((a,b)=>a.value-b.value);
+    const best=ranked[0].v;
+    for(const o of group){o.vehicleId=best.id;assigned[best.id].push(o)}
+  }
+
+  // Projekt-egységesítés: ha ugyanaz a projekt több sofőrnél van, és nincs szálas kényszer,
+  // lehetőleg ahhoz kerül minden, akinél a legtöbb rendelése van és útvonalilag is reális.
+  const projectGroups=v27GroupBy(orders,v27ProjectKey);
+  for(const group of projectGroups.values()){
+    const nonLong=group.filter(o=>!o.longMaterialReason);if(nonLong.length<2)continue;
+    const counts=new Map();for(const o of group)counts.set(o.vehicleId,(counts.get(o.vehicleId)||0)+1);
+    if(counts.size<=1)continue;
+    const candidates=drivers.map(v=>({v,count:counts.get(v.id)||0,add:nonLong.reduce((s,o)=>s+v26ApproxInsertion(o,assigned[v.id],profiles,homes[v.id]),0)}))
+      .sort((a,b)=>b.count-a.count||a.add-b.add);
+    const target=candidates[0].v;
+    for(const o of nonLong){if(o.vehicleId===target.id)continue;const old=o.vehicleId;assigned[old]=assigned[old].filter(x=>x.id!==o.id);o.vehicleId=target.id;assigned[target.id].push(o)}
+  }
+  return{orders,profiles,homes,assigned};
+}
+
+async function v27BuildRoutePlan(vehicleId,profiles=null){
+  const vehicle=state.vehicles.find(v=>v.id===vehicleId),home=await vehicleHome(vehicle||{});
+  const orders=dayOrders(vehicleId).slice();
+  if(!profiles){profiles={};for(const o of orders)profiles[o.id]=await orderGeoProfile(o)}
+  const supplierGroups=v27GroupBy(orders,v27SupplierKey),projectGroups=v27GroupBy(orders,v27ProjectKey);
+  const unvisitedSuppliers=new Set(supplierGroups.keys()),picked=new Set(),delivered=new Set(),events=[];
+  let current=home;
+  const pointOfSupplier=k=>v27GroupPoint(supplierGroups.get(k)||[],profiles,'pickup');
+  const pointOfProject=k=>v27GroupPoint(projectGroups.get(k)||[],profiles,'drop');
+  const projectReady=k=>(projectGroups.get(k)||[]).every(o=>picked.has(o.id))&&!delivered.has(k);
+  const readyProjects=()=>[...projectGroups.keys()].filter(projectReady);
+  const nearestKey=(keys,pointFn)=>keys.slice().sort((a,b)=>dist(current,pointFn(a))-dist(current,pointFn(b)))[0];
+  while(unvisitedSuppliers.size){
+    const supplierKey=nearestKey([...unvisitedSuppliers],pointOfSupplier),supplierOrders=supplierGroups.get(supplierKey)||[],p=pointOfSupplier(supplierKey);
+    events.push({type:'pickup',key:supplierKey,name:supplierOrders[0]?.pickupName||'Felrakó',address:supplierOrders[0]?.pickupAddress||'',orders:supplierOrders.map(o=>o.id),point:p});
+    supplierOrders.forEach(o=>picked.add(o.id));unvisitedSuppliers.delete(supplierKey);if(p)current=p;
+
+    // Csak olyan projektet rakunk le közben, amelynek az összes, ehhez a sofőrhöz tartozó
+    // aznapi rendelése már az autón van, és kis kerülővel a következő felrakó útjába esik.
+    let changed=true;
+    while(changed){
+      changed=false;const ready=readyProjects();if(!ready.length)break;
+      const nextSupplier=unvisitedSuppliers.size?nearestKey([...unvisitedSuppliers],pointOfSupplier):null;
+      const nextPoint=nextSupplier?pointOfSupplier(nextSupplier):home;
+      const feasible=ready.map(k=>{const dp=pointOfProject(k);const direct=dist(current,nextPoint),via=dist(current,dp)+dist(dp,nextPoint);return{k,detour:via-direct,d:dist(current,dp)}})
+        .filter(x=>!unvisitedSuppliers.size||x.detour<=5.5).sort((a,b)=>a.detour-b.detour||a.d-b.d);
+      if(!feasible.length)break;
+      const k=feasible[0].k,g=projectGroups.get(k)||[],dp=pointOfProject(k);
+      events.push({type:'drop',key:k,name:g[0]?.projectName||'Lerakó',address:g[0]?.dropAddress||'',orders:g.map(o=>o.id),point:dp});
+      delivered.add(k);if(dp)current=dp;changed=true;
+    }
+  }
+  // Az összes felrakás után a még nyitott projekteket logikus, legközelebbi sorrendben zárjuk.
+  while(readyProjects().length){
+    const k=nearestKey(readyProjects(),pointOfProject),g=projectGroups.get(k)||[],dp=pointOfProject(k);
+    events.push({type:'drop',key:k,name:g[0]?.projectName||'Lerakó',address:g[0]?.dropAddress||'',orders:g.map(o=>o.id),point:dp});
+    delivered.add(k);if(dp)current=dp;
+  }
+  state.routePlans=state.routePlans||{};state.routePlans[selectedDate()]=state.routePlans[selectedDate()]||{};state.routePlans[selectedDate()][vehicleId]=events;
+  // Buboréksorrend: felrakási blokk szerint, azon belül a lerakási sorrend alapján.
+  const dropIndex=new Map(events.filter(e=>e.type==='drop').map((e,i)=>[e.key,i]));
+  const pickupIndex=new Map(events.filter(e=>e.type==='pickup').map((e,i)=>[e.key,i]));
+  orders.sort((a,b)=>(pickupIndex.get(v27SupplierKey(a))??999)-(pickupIndex.get(v27SupplierKey(b))??999)||(dropIndex.get(v27ProjectKey(a))??999)-(dropIndex.get(v27ProjectKey(b))??999));
+  orders.forEach((o,i)=>o.sequence=i+1);
+  return events;
+}
+
+balance=async function(){
+  try{
+    const result=await v27Distribute();
+    for(const v of activeVehicles())await v27BuildRoutePlan(v.id,result.profiles);
+    save();alert('Fuvarok szétosztva.');
+  }catch(err){console.error(err);alert('A fuvarok szétosztása közben hiba történt: '+(err?.message||err))}
+};
+optimizeAll=async function(doSave=true){
+  try{
+    for(const v of activeVehicles())await v27BuildRoutePlan(v.id);
+    if(doSave){save();alert('Optimalizálás befejezve.');}
+  }catch(err){console.error(err);alert('Az optimalizálás közben hiba történt: '+(err?.message||err))}
+};
+v24DropoffSummary=function(list){
+  const vehicleId=list[0]?.vehicleId,date=selectedDate(),events=state.routePlans?.[date]?.[vehicleId]||[];
+  const drops=events.filter(e=>e.type==='drop');
+  if(!drops.length)return '<aside class="dropoff-summary"><h3>Lerakók</h3><div class="dropoff-empty">Nincs lerakó az adott napon.</div></aside>';
+  return `<aside class="dropoff-summary"><h3>Lerakók · útvonal szerinti sorrend</h3><div class="dropoff-summary-list">${drops.map((e,i)=>{const nos=e.orders.map(id=>state.orders.find(o=>o.id===id)?.orderNo).filter(Boolean);return`<div class="dropoff-stop"><b>${i+1}. ${esc(e.name)}</b><span>${esc([...new Set(nos)].join(', '))}</span>${e.address?`<span>${esc(e.address)}</span>`:''}</div>`}).join('')}</div></aside>`;
+};
+drawMap=async function(id){
+  const map=maps[id],date=selectedDate();if(!map)return;
+  const v=state.vehicles.find(x=>x.id===id),home=await vehicleHome(v||{}),events=(state.routePlans?.[date]?.[id]||await v27BuildRoutePlan(id));
+  const pts=[];if(home)pts.push(home);
+  for(const e of events){
+    if(!e.point)continue;pts.push(e.point);
+    if(e.type==='pickup')L.marker(e.point,{title:`Felrakó: ${e.name}`}).addTo(map).bindPopup(`<b>Felrakó</b><br>${esc(e.name)}<br>${esc(e.address||'')}`);
+  }
+  if(home)pts.push(home);
+  if(pts.length>1){const rr=await roadRoute(pts),coords=rr?rr.geometry.coordinates.map(c=>[c[1],c[0]]):pts;const line=L.polyline(coords,{weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[20,20]});state.routeStats=state.routeStats||{};state.routeStats[date]=state.routeStats[date]||{};state.routeStats[date][id]={km:rr?rr.distance/1000:coords.slice(1).reduce((s,p,i)=>s+dist(coords[i],p),0),minutes:rr?rr.duration/60:0};localStorage.setItem(KEY,JSON.stringify(state))}
+};
