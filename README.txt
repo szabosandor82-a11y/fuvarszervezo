@@ -1,4 +1,4 @@
-FUVAR-SZERVEZŐ V25 – GITHUB PAGES VERZIÓ
+FUVAR-SZERVEZŐ V26 – GITHUB PAGES VERZIÓ
 
 V21 javítások:
 - A fejléc, manifest és gyorsítótár verziója V21.
@@ -22,20 +22,28 @@ V21 újdonságok: térkép újraszámítás címváltozáskor; részleges hiány
 
 V21 újdonságok: minden nap teljes fuvaradatának külön, kétszintű törlése; nagyobb hiánymennyiség mező; dátumhoz kötött tételáthelyezés; a Hátralék menüben szerkeszthető dátum és a hozzá tartozó fuvarbuborék áthelyezése.
 
-V25 újdonságok
+V26 újdonságok
 - Törzsadatok Excel exportja és visszaimportja (Projektek, Beszállítók, Átvevők, Autók munkalapok).
 - Beszállítói importnál azonos cégnév alapján a cím frissül, nem jön létre felesleges duplikáció.
 - SERPA importnál a SERPA cégnév változatlan marad; a program csak a pontosan egyező beszállítói törzsadat címét rendeli hozzá.
 - A beszállítói törzs címe használható felrakóként, és pontos cégnévegyezés esetén lerakóként is.
 
 
-V25: projekt- és beszállítói törzs alapján visszamenőleges címszinkron, több telephelyes beszállítók, felrakó+lerakó térkép és optimalizálás, lerakó kimutatás, lakóhely-alapú napi km.
+V26: projekt- és beszállítói törzs alapján visszamenőleges címszinkron, több telephelyes beszállítók, felrakó+lerakó térkép és optimalizálás, lerakó kimutatás, lakóhely-alapú napi km.
 
 
-V25 fő változások:
+V26 fő változások:
 - Martin elsőként kapja a szálanyagos rendeléseket.
 - A maradék rendeléseket Márió és Patrik kapja, páratlan darabszámnál Márió kap eggyel többet.
 - Márió pesti, Patrik budai területi preferenciával kapja a fuvarokat.
 - Javított felrakó–lerakó útvonal-optimalizálás.
 - A térképen csak a felrakói markerek látszanak; a lerakók az útvonal számításában továbbra is szerepelnek.
 - Sofőrönként külön, színes Lerakók összesítő buborék jelenik meg a fuvarbuborékok alatt.
+
+V26 KIEMELT VÁLTOZÁSOK
+- SERPA import után a jármű nélküli fuvarok kiosztatlanok maradnak; nem kerülnek automatikusan Márióhoz.
+- A Fuvar szétosztása gomb a teljes kiválasztott napot újraszámolja mindhárom sofőr között.
+- Martin elsőként kapja a 4–6 méteres szálanyagot, de kevés vagy nulla szálanyag esetén normál fuvarokat is kap igazságosan.
+- Martin enyhe területi preferenciája kizárólag Buda és Dél-Pest, csak közel azonos kilométerű megoldásoknál.
+- Az elosztás figyeli a felrakó- és lerakócímeket, távolságokat, útvonalba illeszthetőséget, felrakó/lerakó/rendelésszámot és az azonos projektek összevonását.
+- Sikeres szétosztás és optimalizálás után OK-val bezárható visszajelzés jelenik meg.
