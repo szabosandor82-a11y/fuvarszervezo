@@ -1,12 +1,17 @@
-Fuvarszervező V30 – GitHub Pages
+Fuvarszervező V31 – GitHub Pages
 
-Újdonságok:
-- Kétlépcsős működés: igazságos szétosztás, majd útvonal-optimalizálás.
-- A fuvarok darabszáma a három aktív sofőr között lehetőség szerint legfeljebb 1–2 eltéréssel oszlik meg.
-- A hosszú anyag továbbra is Martin vagy hosszúanyag-képes autó feladata.
-- A projekt-egységek lehetőleg egy sofőrnél maradnak.
-- Minden sofőr saját indulási/lakóhely címétől indul és oda tér vissza.
-- A reggel, befelé vezető útvonalon fekvő beszállítók elsőbbséget kapnak.
-- Ugyanaz a sofőr ugyanahhoz a beszállítóhoz naponta csak egyszer megy.
-- Közeli beszállítók megszakítás nélküli felrakási blokkot alkotnak.
-- Lerakás csak akkor történik, ha a projekt minden, a sofőrhöz rendelt anyaga már az autón van.
+Kritikus javítások:
+- A „Fuvar szétosztása” gomb most biztosan a legújabb, kétlépcsős V30/V31 szétosztási algoritmust hívja.
+- Az „Útvonal optimalizálása” gomb most biztosan a legújabb útvonalépítőt hívja.
+- A korábbi közvetlen függvényreferenciás eseménykezelés megszűnt; a gombok mindig az aktuális balance() és optimizeAll() függvényt futtatják.
+- A helyi fájlok verzióparamétert kaptak, így a böngésző nem keveri össze a V30 és V31 app.js/data.js/styles.css fájlokat.
+- A service worker V31 gyorsítótára törli a régi cache-eket.
+- Az alkalmazás fő fájljai hálózat-első frissítést használnak, ezért új GitHub-verzió feltöltésekor nem ragad bent tartósan a régi kód.
+- Beépített diagnosztika: a böngésző konzoljában a getFuvarszervezoDiagnostics() megmutatja, hogy a V31 gombkezelők aktívak-e.
+
+Megmaradt működés:
+- Igazságosabb, kétlépcsős fuvarszétosztás.
+- Hosszú anyag megfelelő autóra kerül.
+- Sofőrönkénti útvonal a saját indulási címtől.
+- Egyszeri beszállító-látogatás és összefüggő felrakási blokkok.
+- Lerakás csak a szükséges felrakások után.

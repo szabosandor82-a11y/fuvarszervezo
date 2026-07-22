@@ -107,7 +107,7 @@ $('#recordStop').onclick=()=>{if(mediaRecorder&&mediaRecorder.state!=='inactive'
 $$('.nav').forEach(n=>n.onclick=()=>showPage(n.dataset.page));$$('[data-close]').forEach(b=>b.onclick=()=>$('#'+b.dataset.close).close());$$('[data-master]').forEach(b=>b.onclick=()=>{$$('[data-master]').forEach(x=>x.classList.toggle('active',x===b));masterType=b.dataset.master;renderMasters()});
 $('#prevDay').onclick=()=>{const d=new Date(selectedDate()+'T12:00:00');d.setDate(d.getDate()-1);$('#workDate').value=d.toISOString().slice(0,10);render()};$('#nextDay').onclick=()=>{const d=new Date(selectedDate()+'T12:00:00');d.setDate(d.getDate()+1);$('#workDate').value=d.toISOString().slice(0,10);render()};$('#workDate').onchange=render;
 $('#importBtn').onclick=()=>$('#importDialog').showModal();$('#excelInput').onchange=e=>readExcel(e.target.files[0]).catch(err=>alert(err.message));$('#startReviewBtn').onclick=startReview;$('#reviewForm').onsubmit=e=>{e.preventDefault();saveReview()};$('#reviewSkipBtn').onclick=saveReview;
-$('#quickAddBtn').onclick=()=>openOrder({scheduleDate:selectedDate(),items:[]});$('#addOrderBtn').onclick=()=>openOrder({scheduleDate:selectedDate(),items:[]});$('#balanceBtn').onclick=balance;$('#optimizeBtn').onclick=optimizeAll;$('#exportBtn').onclick=exportMenu;$('#deleteAllBtn').onclick=deleteAll;
+$('#quickAddBtn').onclick=()=>openOrder({scheduleDate:selectedDate(),items:[]});$('#addOrderBtn').onclick=()=>openOrder({scheduleDate:selectedDate(),items:[]});$('#balanceBtn').onclick=()=>balance();$('#optimizeBtn').onclick=()=>optimizeAll();$('#exportBtn').onclick=exportMenu;$('#deleteAllBtn').onclick=deleteAll;
 $('#orderSearch').oninput=renderOrders;$('#globalSearch').oninput=handleGlobalSearch;$('#clearGlobalSearch').onclick=resetToStartPage;$('#globalSearch').onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();resetToStartPage()}};$('#orderVehicleFilter').onchange=renderOrders;$('#addVehicleBtn').onclick=()=>editVehicle();$('#saveBaseBtn').onclick=()=>{state.settings.baseAddress=$('#baseAddress').value;save()};$('#driverVehicleSelect').onchange=renderDriver;$('#driverDate').onchange=renderDriver;
 $('#backlogSearch').oninput=()=>{$('#clearBacklogSearch').classList.toggle('hidden',!$('#backlogSearch').value);renderBacklog()};$('#clearBacklogSearch').onclick=()=>{$('#backlogSearch').value='';$('#clearBacklogSearch').classList.add('hidden');renderBacklog()};$('#addMasterBtn').onclick=()=>openMaster();$('#masterSearch').oninput=renderMasters;$('#backupBtn').onclick=backup;$('#restoreInput').onchange=e=>e.target.files[0]&&restoreFile(e.target.files[0]);
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;$('#installBtn').classList.remove('hidden')});$('#installBtn').onclick=async()=>{deferredPrompt?.prompt();deferredPrompt=null};
@@ -1396,3 +1396,41 @@ async function v30BuildRoutePlan(vehicleId,profiles=null){
 v27BuildRoutePlan=v30BuildRoutePlan;
 balance=async function(){try{const result=await v30Distribute();for(const v of activeVehicles())await v30BuildRoutePlan(v.id,result.profiles);save();const counts=activeVehicles().map(v=>`${v.driverName}: ${dayOrders(v.id).length}`).join(', ');alert(`Fuvarok igazságosan szétosztva. ${counts}`)}catch(err){console.error(err);alert('A fuvarok szétosztása közben hiba történt: '+(err?.message||err))}};
 optimizeAll=async function(doSave=true){try{for(const v of activeVehicles())await v30BuildRoutePlan(v.id);if(doSave){save();alert('Útvonal-optimalizálás befejezve. Az indulási címek és az útba eső reggeli felrakók figyelembevételével újraszámolva.')}}catch(err){console.error(err);alert('Az optimalizálás közben hiba történt: '+(err?.message||err))}};
+
+
+/* ==================== V31 ====================
+   Kritikus javítás: a kezelőgombok mindig a legutoljára definiált
+   balance és optimizeAll függvényeket hívják meg. A korábbi közvetlen
+   függvényreferencia miatt a régi algoritmus maradt az onclick mezőben.
+*/
+(function v31BindLatestPlannerActions(){
+  const bind=()=>{
+    const balanceButton=document.getElementById('balanceBtn');
+    const optimizeButton=document.getElementById('optimizeBtn');
+    if(balanceButton){
+      balanceButton.onclick=async event=>{
+        event.preventDefault();
+        console.info('[V31] Fuvar szétosztása: v30Distribute + v30BuildRoutePlan');
+        return await balance();
+      };
+      balanceButton.dataset.algorithmVersion='31';
+    }
+    if(optimizeButton){
+      optimizeButton.onclick=async event=>{
+        event.preventDefault();
+        console.info('[V31] Útvonal optimalizálása: v30BuildRoutePlan');
+        return await optimizeAll();
+      };
+      optimizeButton.dataset.algorithmVersion='31';
+    }
+    window.FUVARSZERVEZO_VERSION='31';
+    window.getFuvarszervezoDiagnostics=()=>({
+      version:window.FUVARSZERVEZO_VERSION,
+      balanceHandler:balanceButton?.dataset.algorithmVersion||null,
+      optimizeHandler:optimizeButton?.dataset.algorithmVersion||null,
+      activeDrivers:typeof activeVehicles==='function'?activeVehicles().map(v=>v.driverName):[]
+    });
+  };
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});
+  else bind();
+})();
