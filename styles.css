@@ -19,3 +19,6 @@
 .master-excel-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
 .master-excel-actions small{flex-basis:100%;opacity:.75}
 .master-import-label{margin:0;display:inline-flex;align-items:center;justify-content:center}
+
+/* V23 */
+.master-highlight{background:#e8f5ff;border:1px solid #7db8df;border-radius:10px;padding:8px 10px;margin:7px 0}.drop-highlight{background:#eef9e8;border-color:#87bd72}.supplier-location-select{width:100%;margin-top:6px;font-weight:700;background:#fff8cf;border:2px solid #d4a900}.master-address-value{display:inline-block;margin-top:4px;font-weight:700}.master-warning{background:#ffe2e2;color:#8a1111;border:1px solid #e58a8a;border-radius:8px;padding:7px 9px;margin:6px 0;font-weight:700}.master-excel-actions{display:flex;gap:10px;flex-wrap:wrap}.report-table th,.report-table td{white-space:nowrap}

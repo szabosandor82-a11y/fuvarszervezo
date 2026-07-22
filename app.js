@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION='V22';const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION='V23';const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 let maps={},masterType='projects',currentItemsOrderId='',mediaRecorder=null,audioChunks=[],audioBlob=null,importOrders=[],reviewQueue=[],reviewIndex=0,deferredPrompt=null;
@@ -399,4 +399,156 @@ supplierMatch=exactSupplierMaster;
   const exportBtn=$('#exportMastersBtn'),input=$('#masterExcelInput');
   if(exportBtn)exportBtn.onclick=exportMasterDataExcel;
   if(input)input.onchange=async()=>{const file=input.files?.[0];if(file)await importMasterDataExcel(file);input.value=''};
+})();
+
+/* ==================== V23 PATCH ==================== */
+const V23_VERSION='V23';
+
+function supplierLocations(name=''){
+  return (state.suppliers||[]).filter(s=>norm(s.name)===norm(name)).sort((a,b)=>(b.isCentral?1:0)-(a.isCentral?1:0)||String(a.address||'').localeCompare(String(b.address||''),'hu'));
+}
+function preferredSupplierLocation(name=''){
+  const list=supplierLocations(name);
+  return list.find(s=>s.isCentral)||list.find(s=>norm(s.pickupNote).includes('kozpont'))||list[0]||null;
+}
+function exactProjectMaster(name=''){
+  return (state.projects||[]).find(p=>norm(p.name)===norm(name))||null;
+}
+function syncOrderFromMasters(o,{forceSupplier=false,forceProject=false}={}){
+  if(!o)return {supplier:false,project:false};
+  const supplierName=o.pickupName||'';
+  const supplierList=supplierLocations(supplierName);
+  let supplier=supplierList.find(s=>s.id===o.supplierId)||null;
+  if(!supplier||forceSupplier){
+    const currentStillExists=supplierList.find(s=>norm(s.address)===norm(o.pickupAddress));
+    supplier=currentStillExists||preferredSupplierLocation(supplierName);
+  }
+  if(supplier){
+    o.supplierId=supplier.id;
+    o.pickupAddress=supplier.address||'';
+    o.pickupNote=supplier.pickupNote||'';
+    o.missingSupplierMaster=false;
+  }else{
+    o.missingSupplierMaster=true;
+    if(forceSupplier)o.pickupAddress='';
+  }
+  const projectName=o.projectName&&o.projectName!=='Egyedi úticél'?o.projectName:(o.topicName||'');
+  const project=exactProjectMaster(projectName);
+  if(project){
+    o.projectId=project.id;
+    o.projectName=project.name;
+    o.dropAddress=project.address||'';
+    o.missingProjectMaster=false;
+  }else{
+    o.missingProjectMaster=true;
+    if(forceProject&&o.projectName!=='Egyedi úticél')o.dropAddress='';
+  }
+  return {supplier:!!supplier,project:!!project};
+}
+async function resyncAllMasterData(showMessage=true){
+  let supplierMissing=0,projectMissing=0,changed=0;
+  for(const o of state.orders||[]){
+    const before=[o.supplierId,o.pickupAddress,o.projectId,o.dropAddress].join('|');
+    const result=syncOrderFromMasters(o,{forceSupplier:true,forceProject:true});
+    if(!result.supplier)supplierMissing++;
+    if(!result.project)projectMissing++;
+    const after=[o.supplierId,o.pickupAddress,o.projectId,o.dropAddress].join('|');
+    if(before!==after)changed++;
+  }
+  state.geo={};
+  localStorage.setItem(KEY,JSON.stringify(state));
+  render();
+  if(showMessage)alert(`Újraszinkronizálás kész. Frissített fuvarok: ${changed}. Hiányzó beszállítói cím: ${supplierMissing}. Hiányzó projektcím: ${projectMissing}.`);
+}
+window.resyncAllMasterData=resyncAllMasterData;
+
+function supplierAddressSelect(o){
+  const list=supplierLocations(o.pickupName);
+  if(list.length<=1)return `<span class="master-address-value">${esc(o.pickupAddress||'Nincs megadva')}</span>`;
+  const opts=list.map(s=>option(s.id,`${s.isCentral||norm(s.pickupNote).includes('kozpont')?'★ Központ · ':''}${s.address||'Cím nélkül'}${s.pickupNote?` · ${s.pickupNote}`:''}`,o.supplierId)).join('');
+  return `<select class="supplier-location-select" onchange="changeSupplierLocation('${o.id}',this.value)">${opts}</select>`;
+}
+window.changeSupplierLocation=(orderId,supplierId)=>{
+  const o=state.orders.find(x=>x.id===orderId),s=state.suppliers.find(x=>x.id===supplierId);if(!o||!s)return;
+  const old=o.pickupAddress;o.supplierId=s.id;o.pickupName=s.name;o.pickupAddress=s.address||'';o.pickupNote=s.pickupNote||'';o.missingSupplierMaster=false;
+  if(old)delete state.geo[old];delete state.geo[o.pickupAddress];save();setTimeout(initMaps,50);
+};
+function masterWarnings(o){
+  const w=[];
+  if(o.missingSupplierMaster||!o.pickupAddress)w.push('<div class="master-warning">⚠ Hiányzó beszállítói cím – állítsd be manuálisan.</div>');
+  if(o.missingProjectMaster||!o.dropAddress)w.push('<div class="master-warning">⚠ Hiányzó projektcím – állítsd be manuálisan.</div>');
+  return w.join('');
+}
+function bubbles(list){
+  if(!list.length)return'<div class="notice">Nincs fuvar.</div>';
+  return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3>${masterWarnings(o)}<div class="master-highlight"><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')}<br>${supplierAddressSelect(o)}</div><div class="master-highlight drop-highlight"><b>Lerakó:</b> ${esc(o.projectName||'Egyedi úticél')}<br><span class="master-address-value">${esc(o.dropAddress||'Nincs megadva')}</span></div>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button><button class="failed-button" onclick="failOrderToTomorrow('${o.id}')">Nem teljesült – holnapra</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('');
+}
+
+async function drawMap(id){
+  const map=maps[id],pts=[],date=selectedDate();if(!map)return;
+  const v=state.vehicles.find(x=>x.id===id),home=await vehicleHome(v||{});if(home)pts.push(home);
+  for(const o of dayOrders(id).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999))){
+    const pickup=await geo(o.pickupAddress),drop=await geo(o.dropAddress);
+    if(pickup){pts.push(pickup);L.marker(pickup,{title:`Felrakó: ${o.pickupName||''}`}).addTo(map).bindPopup(`<b>Felrakó · ${esc(o.orderNo)}</b><br>${esc(o.pickupName||'')}<br>${esc(o.pickupAddress||'')}`)}
+    if(drop){pts.push(drop);L.marker(drop,{title:`Lerakó: ${o.projectName||''}`}).addTo(map).bindPopup(`<b>Lerakó · ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</b><br>${esc(o.dropAddress||'')}${o.recipientName?`<br>Átvevő: ${esc(o.recipientName)}`:''}`)}
+  }
+  if(home)pts.push(home);
+  if(pts.length){const rr=await roadRoute(pts),coords=rr?rr.geometry.coordinates.map(c=>[c[1],c[0]]):pts;const line=L.polyline(coords,{weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[20,20]});state.routeStats=state.routeStats||{};state.routeStats[date]=state.routeStats[date]||{};state.routeStats[date][id]={km:rr?rr.distance/1000:coords.slice(1).reduce((s,p,i)=>s+dist(coords[i],p),0),minutes:rr?rr.duration/60:0};localStorage.setItem(KEY,JSON.stringify(state))}
+}
+
+async function orderGeoProfile(o){return{pickup:await geo(o.pickupAddress),drop:await geo(o.dropAddress)}}
+async function balance(){
+  const active=activeVehicles();if(!active.length)return alert('Nincs aktív jármű.');
+  const orders=state.orders.filter(o=>o.scheduleDate===selectedDate()),longCars=active.filter(canCarryLong),profiles={};
+  for(const o of orders){syncOrderFromMasters(o);profiles[o.id]=await orderGeoProfile(o);if(o.longMaterialReason){const target=longCars.find(v=>norm(v.driverName).includes('martin'))||longCars[0];if(target)o.vehicleId=target.id}}
+  const homes={};for(const v of active)homes[v.id]=await vehicleHome(v);
+  const load=Object.fromEntries(active.map(v=>[v.id,{orders:0,pickups:new Set(),drops:new Set(),km:0}]));
+  for(const o of orders.filter(o=>o.longMaterialReason&&o.vehicleId)){const l=load[o.vehicleId];l.orders++;l.pickups.add(norm(o.pickupAddress));l.drops.add(norm(o.dropAddress))}
+  for(const o of orders.filter(o=>!o.longMaterialReason)){
+    const p=profiles[o.id];
+    const ranked=active.map(v=>{const l=load[v.id],travel=dist(homes[v.id],p.pickup)+dist(p.pickup,p.drop);const score=l.orders*18+l.pickups.size*7+l.drops.size*8+l.km*.35+travel;return{v,score,travel}}).sort((a,b)=>a.score-b.score);
+    const best=ranked[0];o.vehicleId=best.v.id;const l=load[o.vehicleId];l.orders++;l.pickups.add(norm(o.pickupAddress));l.drops.add(norm(o.dropAddress));l.km+=best.travel;
+  }
+  active.forEach(v=>dayOrders(v.id).forEach((o,i)=>o.sequence=i+1));save();alert('A fuvarokat a felrakók, lerakók, várható kilométer és a kiegyensúlyozott terhelés alapján szétosztottam.');
+}
+async function optimizeAll(){
+  for(const v of activeVehicles()){
+    const orders=dayOrders(v.id),home=await vehicleHome(v);let current=home,left=[];
+    for(const o of orders)left.push({o,pickup:await geo(o.pickupAddress),drop:await geo(o.dropAddress)});
+    const ordered=[];while(left.length){left.sort((a,b)=>(dist(current,a.pickup)+dist(a.pickup,a.drop))-(dist(current,b.pickup)+dist(b.pickup,b.drop)));const n=left.shift();ordered.push(n.o);current=n.drop||n.pickup||current}ordered.forEach((o,i)=>o.sequence=i+1)
+  }save();
+}
+
+function renderReports(){
+  const month=$('#reportMonth')?.value||today().slice(0,7),vehicles=state.vehicles;
+  const rows=vehicles.map(v=>{const completed=(state.orders||[]).filter(o=>o.vehicleId===v.id&&o.scheduleDate?.startsWith(month)&&o.completed);const pickupKeys=new Set(completed.map(o=>`${o.scheduleDate}|${norm(o.pickupAddress||o.pickupName)}`).filter(x=>x.split('|')[1]));const dropKeys=new Set(completed.map(o=>`${o.scheduleDate}|${norm(o.dropAddress||o.projectName)}`).filter(x=>x.split('|')[1]));const km=Object.entries(state.routeStats||{}).filter(([date])=>date.startsWith(month)).reduce((sum,[,byVehicle])=>sum+(+byVehicle?.[v.id]?.km||0),0);const failed=(state.failedTrips||[]).filter(f=>f.vehicleId===v.id&&f.originalDate?.startsWith(month)).length;return{driver:v.driverName,km:Math.round(km*10)/10,completed:completed.length,pickups:pickupKeys.size,drops:dropKeys.size,failed}});
+  const total=rows.reduce((a,r)=>({driver:'Havi összesen',km:a.km+r.km,completed:a.completed+r.completed,pickups:a.pickups+r.pickups,drops:a.drops+r.drops,failed:a.failed+r.failed}),{km:0,completed:0,pickups:0,drops:0,failed:0});
+  $('#reportBody').innerHTML=[...rows,total].map((r,i)=>`<tr ${i===rows.length?'class="report-total"':''}><td><b>${esc(r.driver)}</b></td><td>${formatQty(Math.round(r.km*10)/10)} km</td><td>${r.completed}</td><td>${r.pickups}</td><td>${r.drops}</td><td>${r.failed}</td></tr>`).join('');
+}
+
+async function importMasterDataExcelV23(file){
+  try{
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true}),counts={created:0,updated:0,skipped:0};
+    const suppliers=sheetRowsByNames(wb,['Beszállítók','Beszállítók törzs','Suppliers']);
+    for(const row of suppliers){const name=valueByHeaders(row,['Cégnév','Cég neve','Beszállító','Név']),address=valueByHeaders(row,['Cím','Telephely címe','Szállítási cím']);if(!name){counts.skipped++;continue}let s=state.suppliers.find(x=>norm(x.name)===norm(name)&&norm(x.address)===norm(address));if(!s){s={id:uid(),name,address};state.suppliers.push(s);counts.created++}else counts.updated++;s.pickupNote=valueByHeaders(row,['Felrakói megjegyzés','Megjegyzés'])||'';const c=valueByHeaders(row,['Központi telephely','Központi']);s.isCentral=/^(igen|i|true|1)$/i.test(c)||norm(s.pickupNote).includes('kozpont')}
+    const projects=sheetRowsByNames(wb,['Projektek','Projects']);for(const row of projects){const name=valueByHeaders(row,['Projekt neve','Projekt','Név']);if(!name){counts.skipped++;continue}const address=valueByHeaders(row,['Cím','Projekt címe']),receiver=valueByHeaders(row,['Alapértelmezett átvevő','Átvevő']);let p=state.projects.find(x=>norm(x.name)===norm(name));if(!p){p={id:uid(),name,address,defaultRecipientId:''};state.projects.push(p);counts.created++}else counts.updated++;p.address=address;if(receiver)p.defaultRecipientId=state.recipients.find(r=>norm(r.name)===norm(receiver))?.id||p.defaultRecipientId||''}
+    const recipients=sheetRowsByNames(wb,['Átvevők','Recipients']);for(const row of recipients){const name=valueByHeaders(row,['Név','Átvevő neve']),project=valueByHeaders(row,['Projekt','Projekt neve']);if(!name){counts.skipped++;continue}let r=state.recipients.find(x=>norm(x.name)===norm(name)&&norm(x.project||'')===norm(project||''));if(!r){r={id:uid(),name,project};state.recipients.push(r);counts.created++}else counts.updated++;r.phone=valueByHeaders(row,['Telefon','Telefonszám']);r.email=valueByHeaders(row,['E-mail','Email'])}
+    const vehicles=sheetRowsByNames(wb,['Autók','Járművek','Vehicles']);for(const row of vehicles){const driverName=valueByHeaders(row,['Sofőr neve','Fuvaros neve','Sofőr']),vehicleName=valueByHeaders(row,['Jármű neve / rendszám','Jármű neve','Rendszám']);if(!driverName&&!vehicleName){counts.skipped++;continue}let v=state.vehicles.find(x=>(vehicleName&&norm(x.name)===norm(vehicleName))||(!vehicleName&&norm(x.driverName)===norm(driverName)));if(!v){v={id:uid(),driverName,name:vehicleName||driverName,type:VEHICLE_TYPES[0],active:true};state.vehicles.push(v);counts.created++}else counts.updated++;v.driverName=driverName||v.driverName;v.name=vehicleName||v.name;v.type=valueByHeaders(row,['Járműtípus','Típus'])||v.type;v.homeAddress=valueByHeaders(row,['Indulási / lakóhely címe','Lakóhely címe','Indulási cím','Indulási település','Település'])||v.homeAddress||v.homeCity||'';v.homeCity=v.homeAddress;const activeText=valueByHeaders(row,['Aktív']);if(activeText)v.active=/^(igen|i|true|1)$/i.test(activeText)}
+    state.masterDataVersion='v23-excel';await resyncAllMasterData(false);alert(`Törzsadat import és visszamenőleges újraszinkronizálás kész. Új: ${counts.created}, frissítve: ${counts.updated}, kihagyva: ${counts.skipped}.`)
+  }catch(e){console.error(e);alert('A törzsadat Excel nem olvasható. Ellenőrizd a munkalapok és oszlopok nevét.')}
+}
+function exportMasterDataExcel(){
+  const wb=XLSX.utils.book_new(),projects=[['Projekt neve','Cím','Alapértelmezett átvevő']],suppliers=[['Cégnév','Cím','Felrakói megjegyzés','Központi telephely']],recipients=[['Név','Projekt','Telefon','E-mail']],vehicles=[['Sofőr neve','Jármű neve / rendszám','Járműtípus','Indulási / lakóhely címe','Aktív']];
+  (state.projects||[]).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),'hu')).forEach(p=>projects.push([p.name||'',p.address||'',state.recipients.find(r=>r.id===p.defaultRecipientId)?.name||p.receiver||'']));
+  (state.suppliers||[]).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),'hu')||String(a.address).localeCompare(String(b.address),'hu')).forEach(s=>suppliers.push([s.name||'',s.address||'',s.pickupNote||'',s.isCentral?'Igen':'Nem']));
+  (state.recipients||[]).forEach(r=>recipients.push([r.name||'',r.project||'',r.phone||'',r.email||'']));(state.vehicles||[]).forEach(v=>vehicles.push([v.driverName||'',v.name||'',v.type||'',v.homeAddress||v.homeCity||'',v.active!==false?'Igen':'Nem']));
+  [['Projektek',projects],['Beszállítók',suppliers],['Átvevők',recipients],['Autók',vehicles]].forEach(([n,d])=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(d),n));XLSX.writeFile(wb,`torzsadatok_${today()}.xlsx`);
+}
+async function vehicleHome(v){return await geo(v?.homeAddress||v?.homeCity||state.settings.baseAddress)||await geo(state.settings.baseAddress)}
+
+(function installV23Handlers(){
+  const input=$('#masterExcelInput'),exportBtn=$('#exportMastersBtn'),syncBtn=$('#resyncMastersBtn');if(input)input.onchange=async()=>{const file=input.files?.[0];if(file)await importMasterDataExcelV23(file);input.value=''};if(exportBtn)exportBtn.onclick=exportMasterDataExcel;if(syncBtn)syncBtn.onclick=()=>resyncAllMasterData(true);
+  const oldEdit=window.editVehicle||editVehicle;window.editVehicle=id=>{oldEdit(id);const v=state.vehicles.find(x=>x.id===id)||{};if($('#homeCity'))$('#homeCity').value=v.homeAddress||v.homeCity||''};
+  const vf=$('#vehicleForm');if(vf)vf.onsubmit=e=>{e.preventDefault();const id=$('#editVehicleId').value,v={...(state.vehicles.find(x=>x.id===id)||{}),id:id||uid(),driverName:$('#driverName').value,name:$('#vehicleName').value,type:$('#vehicleType').value,homeAddress:$('#homeCity').value,homeCity:$('#homeCity').value,active:$('#vehicleActive').checked};const i=state.vehicles.findIndex(x=>x.id===id);if(i>=0)state.vehicles[i]=v;else state.vehicles.push(v);$('#vehicleDialog').close();save()};
+  state.orders.forEach(o=>syncOrderFromMasters(o));localStorage.setItem(KEY,JSON.stringify(state));
 })();
