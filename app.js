@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION='V28';const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION='V29';const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 let maps={},masterType='projects',currentItemsOrderId='',mediaRecorder=null,audioChunks=[],audioBlob=null,importOrders=[],reviewQueue=[],reviewIndex=0,deferredPrompt=null;
@@ -1154,3 +1154,119 @@ v27BuildRoutePlan=v28BuildRoutePlan;
 
 balance=async function(){try{const result=await v27Distribute();for(const v of activeVehicles())await v28BuildRoutePlan(v.id,result.profiles);save();alert('Fuvarok szétosztva.')}catch(err){console.error(err);alert('A fuvarok szétosztása közben hiba történt: '+(err?.message||err))}};
 optimizeAll=async function(doSave=true){try{for(const v of activeVehicles())await v28BuildRoutePlan(v.id);if(doSave){save();alert('Optimalizálás befejezve.')}}catch(err){console.error(err);alert('Az optimalizálás közben hiba történt: '+(err?.message||err))}};
+
+/* ==================== V29 ====================
+   Útvonal-optimalizálás javítása:
+   - azonos beszállító egyetlen napi megálló
+   - egymáshoz közeli beszállítók összefüggő felrakási blokkot alkotnak
+   - távoli beszállító nem kerülhet két közeli telephely közé
+   - lerakás csak teljesíthető projektként és csak ésszerű útvonali kitérővel kerül közbe
+*/
+function v29FinitePoint(p){return Array.isArray(p)&&p.length===2&&Number.isFinite(p[0])&&Number.isFinite(p[1])}
+function v29Km(a,b){return v29FinitePoint(a)&&v29FinitePoint(b)?dist(a,b):9999}
+
+// Közeli telephelyekből összefüggő csoportokat képez. A lánckapcsolat is számít:
+// ha A közel van B-hez és B közel van C-hez, akkor egy blokk maradnak.
+function v29SupplierClusters(keys,pointFn,thresholdKm=4){
+  const left=new Set(keys),clusters=[];
+  while(left.size){
+    const seed=left.values().next().value;
+    left.delete(seed);
+    const cluster=[seed],queue=[seed];
+    while(queue.length){
+      const a=queue.shift(),ap=pointFn(a);
+      for(const b of [...left]){
+        if(v29Km(ap,pointFn(b))<=thresholdKm){
+          left.delete(b);cluster.push(b);queue.push(b);
+        }
+      }
+    }
+    clusters.push(cluster);
+  }
+  return clusters;
+}
+
+function v29ClusterPoint(cluster,pointFn){
+  const pts=cluster.map(pointFn).filter(v29FinitePoint);
+  if(!pts.length)return null;
+  return [pts.reduce((s,p)=>s+p[0],0)/pts.length,pts.reduce((s,p)=>s+p[1],0)/pts.length];
+}
+
+// A blokk belső sorrendjét legközelebbi szomszéddal rendezi, majd egy egyszerű
+// 2-opt javítással kiküszöböli a fölösleges keresztezéseket/cikázást.
+function v29OrderCluster(cluster,start,pointFn){
+  const left=new Set(cluster),ordered=[];let cur=start;
+  while(left.size){
+    const next=[...left].sort((a,b)=>v29Km(cur,pointFn(a))-v29Km(cur,pointFn(b)))[0];
+    ordered.push(next);left.delete(next);cur=pointFn(next)||cur;
+  }
+  if(ordered.length<4)return ordered;
+  let improved=true,guard=0;
+  while(improved&&guard++<20){
+    improved=false;
+    for(let i=0;i<ordered.length-2;i++)for(let j=i+1;j<ordered.length-1;j++){
+      const a=i===0?start:pointFn(ordered[i-1]),b=pointFn(ordered[i]),c=pointFn(ordered[j]),d=pointFn(ordered[j+1]);
+      const before=v29Km(a,b)+v29Km(c,d),after=v29Km(a,c)+v29Km(b,d);
+      if(after+0.15<before){ordered.splice(i,j-i+1,...ordered.slice(i,j+1).reverse());improved=true}
+    }
+  }
+  return ordered;
+}
+
+async function v29BuildRoutePlan(vehicleId,profiles=null){
+  const vehicle=state.vehicles.find(v=>v.id===vehicleId),home=await vehicleHome(vehicle||{}),orders=dayOrders(vehicleId).slice();
+  if(!profiles){profiles={};for(const o of orders)profiles[o.id]=await orderGeoProfile(o)}
+  const supplierGroups=v27GroupBy(orders,v28SupplierKey),projectGroups=v27GroupBy(orders,v27ProjectKey);
+  const picked=new Set(),delivered=new Set(),events=[];let current=home;
+  const pointOfSupplier=k=>v27GroupPoint(supplierGroups.get(k)||[],profiles,'pickup');
+  const pointOfProject=k=>v27GroupPoint(projectGroups.get(k)||[],profiles,'drop');
+  const projectReady=k=>(projectGroups.get(k)||[]).every(o=>picked.has(o.id))&&!delivered.has(k);
+  const readyProjects=()=>[...projectGroups.keys()].filter(projectReady);
+  const addDrop=k=>{const g=projectGroups.get(k)||[],p=pointOfProject(k);events.push({type:'drop',key:k,name:g[0]?.projectName||'Lerakó',address:g[0]?.dropAddress||'',orders:g.map(o=>o.id),point:p});delivered.add(k);if(p)current=p};
+
+  // 1) Fizikai közelség alapján beszállítói blokkokat képezünk.
+  const pendingClusters=v29SupplierClusters([...supplierGroups.keys()],pointOfSupplier,4);
+
+  while(pendingClusters.length){
+    // 2) A teljes következő blokkot választjuk ki, nem egyetlen pontot. Így egy távoli
+    // Gienger nem kerülhet a közeli Merkapt és Larex közé.
+    pendingClusters.sort((a,b)=>v29Km(current,v29ClusterPoint(a,pointOfSupplier))-v29Km(current,v29ClusterPoint(b,pointOfSupplier)));
+    const cluster=pendingClusters.shift();
+    const orderedSuppliers=v29OrderCluster(cluster,current,pointOfSupplier);
+
+    // 3) A blokk összes felrakója megszakítás nélkül következik egymás után.
+    for(const supplierKey of orderedSuppliers){
+      const supplierOrders=supplierGroups.get(supplierKey)||[],p=pointOfSupplier(supplierKey);
+      events.push({type:'pickup',key:supplierKey,name:supplierOrders[0]?.pickupName||'Felrakó',address:supplierOrders[0]?.pickupAddress||'',orders:supplierOrders.map(o=>o.id),point:p});
+      supplierOrders.forEach(o=>picked.add(o.id));if(p)current=p;
+    }
+
+    // 4) A felrakási blokk után útba eső, már teljes egészében az autón lévő projekt
+    // lerakható. A következő blokkhoz képest csak kis kerülő engedett.
+    let keepDropping=true;
+    while(keepDropping){
+      keepDropping=false;
+      const ready=readyProjects();if(!ready.length)break;
+      const nextCluster=pendingClusters.length?pendingClusters.slice().sort((a,b)=>v29Km(current,v29ClusterPoint(a,pointOfSupplier))-v29Km(current,v29ClusterPoint(b,pointOfSupplier)))[0]:null;
+      const nextPoint=nextCluster?v29ClusterPoint(nextCluster,pointOfSupplier):home;
+      const options=ready.map(k=>{const p=pointOfProject(k),direct=v29Km(current,nextPoint),via=v29Km(current,p)+v29Km(p,nextPoint);return{k,p,detour:via-direct,near:v29Km(current,p)}})
+        .filter(x=>!nextCluster||x.detour<=4)
+        .sort((a,b)=>a.detour-b.detour||a.near-b.near);
+      if(options.length){addDrop(options[0].k);keepDropping=true}
+    }
+  }
+
+  // 5) A nap végén megmaradt teljes projektek optimális, közeli sorrendben kerülnek lerakásra.
+  while(readyProjects().length){
+    const k=readyProjects().sort((a,b)=>v29Km(current,pointOfProject(a))-v29Km(current,pointOfProject(b)))[0];addDrop(k)
+  }
+
+  state.routePlans=state.routePlans||{};state.routePlans[selectedDate()]=state.routePlans[selectedDate()]||{};state.routePlans[selectedDate()][vehicleId]=events;
+  const dropIndex=new Map(events.filter(e=>e.type==='drop').map((e,i)=>[e.key,i])),pickupIndex=new Map(events.filter(e=>e.type==='pickup').map((e,i)=>[e.key,i]));
+  orders.sort((a,b)=>(pickupIndex.get(v28SupplierKey(a))??999)-(pickupIndex.get(v28SupplierKey(b))??999)||(dropIndex.get(v27ProjectKey(a))??999)-(dropIndex.get(v27ProjectKey(b))??999));
+  orders.forEach((o,i)=>o.sequence=i+1);return events;
+}
+
+v27BuildRoutePlan=v29BuildRoutePlan;
+balance=async function(){try{const result=await v27Distribute();for(const v of activeVehicles())await v29BuildRoutePlan(v.id,result.profiles);save();alert('Fuvarok szétosztva.')}catch(err){console.error(err);alert('A fuvarok szétosztása közben hiba történt: '+(err?.message||err))}};
+optimizeAll=async function(doSave=true){try{for(const v of activeVehicles())await v29BuildRoutePlan(v.id);if(doSave){save();alert('Optimalizálás befejezve.')}}catch(err){console.error(err);alert('Az optimalizálás közben hiba történt: '+(err?.message||err))}};

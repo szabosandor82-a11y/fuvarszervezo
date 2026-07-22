@@ -1,4 +1,4 @@
-FUVAR-SZERVEZŐ V28 – GITHUB PAGES VERZIÓ
+FUVAR-SZERVEZŐ V29 – GITHUB PAGES VERZIÓ
 
 V21 javítások:
 - A fejléc, manifest és gyorsítótár verziója V21.
@@ -62,3 +62,11 @@ V28 KIEMELT VÁLTOZÁSOK
 - Egy sofőr ugyanahhoz a beszállítóhoz egy napon belül csak egyszer mehet; egyetlen felrakási blokkban viszi el az összes hozzá rendelt anyagot.
 - Buborékban vagy törzsadatban módosított cím azonnal frissíti a fuvart, a térképet és az útvonaltervet.
 - A kézzel szerkesztett törzsadatok tartós felülírásként mentődnek, és a későbbi Excel-import nem írja felül őket.
+
+
+V29 KIEMELT VÁLTOZÁSOK
+- Közeli beszállítók összefüggő felrakási blokkba kerülnek.
+- Távoli telephely nem kerülhet két közeli beszállító közé.
+- Egy sofőr ugyanahhoz a beszállítóhoz továbbra is csak egyszer megy naponta.
+- Lerakás csak teljesíthető projektként, kis útvonali kitérővel kerülhet a felrakási blokkok közé.
+- A térkép és az útvonalterv ugyanazt a javított sorrendet követi.
