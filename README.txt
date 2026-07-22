@@ -1,4 +1,4 @@
-FUVAR-SZERVEZŐ V24 – GITHUB PAGES VERZIÓ
+FUVAR-SZERVEZŐ V25 – GITHUB PAGES VERZIÓ
 
 V21 javítások:
 - A fejléc, manifest és gyorsítótár verziója V21.
@@ -22,17 +22,17 @@ V21 újdonságok: térkép újraszámítás címváltozáskor; részleges hiány
 
 V21 újdonságok: minden nap teljes fuvaradatának külön, kétszintű törlése; nagyobb hiánymennyiség mező; dátumhoz kötött tételáthelyezés; a Hátralék menüben szerkeszthető dátum és a hozzá tartozó fuvarbuborék áthelyezése.
 
-V24 újdonságok
+V25 újdonságok
 - Törzsadatok Excel exportja és visszaimportja (Projektek, Beszállítók, Átvevők, Autók munkalapok).
 - Beszállítói importnál azonos cégnév alapján a cím frissül, nem jön létre felesleges duplikáció.
 - SERPA importnál a SERPA cégnév változatlan marad; a program csak a pontosan egyező beszállítói törzsadat címét rendeli hozzá.
 - A beszállítói törzs címe használható felrakóként, és pontos cégnévegyezés esetén lerakóként is.
 
 
-V24: projekt- és beszállítói törzs alapján visszamenőleges címszinkron, több telephelyes beszállítók, felrakó+lerakó térkép és optimalizálás, lerakó kimutatás, lakóhely-alapú napi km.
+V25: projekt- és beszállítói törzs alapján visszamenőleges címszinkron, több telephelyes beszállítók, felrakó+lerakó térkép és optimalizálás, lerakó kimutatás, lakóhely-alapú napi km.
 
 
-V24 fő változások:
+V25 fő változások:
 - Martin elsőként kapja a szálanyagos rendeléseket.
 - A maradék rendeléseket Márió és Patrik kapja, páratlan darabszámnál Márió kap eggyel többet.
 - Márió pesti, Patrik budai területi preferenciával kapja a fuvarokat.

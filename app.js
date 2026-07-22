@@ -591,6 +591,49 @@ async function drawMap(id){
   if(home)pts.push(home);
   if(pts.length){const rr=await roadRoute(pts),coords=rr?rr.geometry.coordinates.map(c=>[c[1],c[0]]):pts;const line=L.polyline(coords,{weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[20,20]});state.routeStats=state.routeStats||{};state.routeStats[date]=state.routeStats[date]||{};state.routeStats[date][id]={km:rr?rr.distance/1000:coords.slice(1).reduce((s,p,i)=>s+dist(coords[i],p),0),minutes:rr?rr.duration/60:0};localStorage.setItem(KEY,JSON.stringify(state))}
 }
+async function v25InsertionCost(order, targetOrders, profiles, home){
+  const p=profiles[order.id]||{},pickup=p.pickup,drop=p.drop;
+  if(!pickup&&!drop)return 999;
+  const start=pickup||drop,end=drop||pickup;
+  const anchors=[home];
+  for(const x of targetOrders){const xp=profiles[x.id]||{};if(xp.pickup)anchors.push(xp.pickup);if(xp.drop)anchors.push(xp.drop)}
+  let nearest=999;
+  for(const a of anchors)nearest=Math.min(nearest,dist(a,start));
+  return nearest+dist(start,end);
+}
+async function v25MergeLonelyProjects(mario,patrik,orders,profiles,homes){
+  if(!mario||!patrik)return 0;
+  let moved=0,changed=true,guard=0;
+  while(changed&&guard++<8){
+    changed=false;
+    for(const source of [mario,patrik]){
+      const target=source.id===mario.id?patrik:mario;
+      const sourceOrders=orders.filter(o=>o.vehicleId===source.id&&!o.longMaterialReason);
+      const targetOrders=orders.filter(o=>o.vehicleId===target.id&&!o.longMaterialReason);
+      const groups=new Map();
+      for(const o of sourceOrders){const k=norm(o.projectName||o.dropAddress||'');if(!groups.has(k))groups.set(k,[]);groups.get(k).push(o)}
+      const lonely=[...groups.values()].filter(g=>g.length===1).map(g=>g[0]);
+      for(const o of lonely){
+        const key=norm(o.projectName||o.dropAddress||'');
+        const targetAlreadyGoes=targetOrders.some(x=>norm(x.projectName||x.dropAddress||'')===key);
+        const sourceWithout=sourceOrders.filter(x=>x.id!==o.id);
+        const sourceCost=await v25InsertionCost(o,sourceWithout,profiles,homes[source.id]);
+        const targetCost=await v25InsertionCost(o,targetOrders,profiles,homes[target.id]);
+        // Azonos projekt esetén szinte mindig összevonjuk. Egyébként csak kis kerülőnél,
+        // és akkor, ha ténylegesen csökkenti az egyetlen rendelés miatti külön kitérőt.
+        const acceptable=targetAlreadyGoes || (targetCost<=10 && targetCost+2<sourceCost);
+        if(!acceptable)continue;
+        // Ne borítsa fel durván az igazságos elosztást; Márió legfeljebb kettővel kaphat többet.
+        const afterTarget=targetOrders.length+1,afterSource=sourceOrders.length-1;
+        if(target.id===mario.id && afterTarget-afterSource>2 && !targetAlreadyGoes)continue;
+        if(target.id===patrik.id && afterTarget-afterSource>1 && !targetAlreadyGoes)continue;
+        o.vehicleId=target.id;moved++;changed=true;break;
+      }
+      if(changed)break;
+    }
+  }
+  return moved;
+}
 async function balance(){
   const active=activeVehicles();if(!active.length)return alert('Nincs aktív jármű.');
   const orders=state.orders.filter(o=>o.scheduleDate===selectedDate());
@@ -599,12 +642,12 @@ async function balance(){
   const patrik=active.find(v=>v24DriverKey(v)==='patrik');
   const profiles={};
   for(const o of orders){syncOrderFromMasters(o);profiles[o.id]=await orderGeoProfile(o)}
-  // 1. Szálanyagok Martinra, amennyiben a jármű alkalmas.
   for(const o of orders.filter(x=>x.longMaterialReason)){
     const target=(martin&&canCarryLong(martin))?martin:active.filter(canCarryLong)[0];
     if(target)o.vehicleId=target.id;
   }
   const remaining=orders.filter(o=>!o.longMaterialReason);
+  let merged=0;
   if(!mario||!patrik){
     const candidates=[mario,patrik].filter(Boolean);
     remaining.forEach((o,i)=>o.vehicleId=(candidates[i%candidates.length]||active[i%active.length]).id);
@@ -613,17 +656,13 @@ async function balance(){
     const quota={[mario.id]:targetMario,[patrik.id]:targetPatrik},assigned={[mario.id]:0,[patrik.id]:0};
     const homes={[mario.id]:await vehicleHome(mario),[patrik.id]:await vehicleHome(patrik)};
     const load={[mario.id]:{pickups:new Set(),drops:new Set(),km:0},[patrik.id]:{pickups:new Set(),drops:new Set(),km:0}};
-    // Az egyértelműen budai/pesti lerakókat először dolgozzuk fel.
     const sorted=remaining.slice().sort((a,b)=>{const sa=v24BudapestSide(profiles[a.id]?.drop),sb=v24BudapestSide(profiles[b.id]?.drop);return (sa==='unknown'||sa==='outside'?1:0)-(sb==='unknown'||sb==='outside'?1:0)});
     for(const o of sorted){
       const p=profiles[o.id]||{},side=v24BudapestSide(p.drop),choices=[mario,patrik].filter(v=>assigned[v.id]<quota[v.id]);
       const available=choices.length?choices:[mario,patrik];
       const ranked=available.map(v=>{
-        const key=v24DriverKey(v),l=load[v.id];
-        const travel=dist(homes[v.id],p.pickup)+dist(p.pickup,p.drop);
-        let territoryPenalty=0;
-        if(side==='pest'&&key==='patrik')territoryPenalty=45;
-        if(side==='buda'&&key==='mario')territoryPenalty=45;
+        const key=v24DriverKey(v),l=load[v.id],travel=dist(homes[v.id],p.pickup)+dist(p.pickup,p.drop);
+        let territoryPenalty=0;if(side==='pest'&&key==='patrik')territoryPenalty=45;if(side==='buda'&&key==='mario')territoryPenalty=45;
         const duplicateBonus=(l.pickups.has(norm(o.pickupAddress))?9:0)+(l.drops.has(norm(o.dropAddress))?12:0);
         const workload=l.km*.45+l.pickups.size*4+l.drops.size*5;
         return{v,score:travel+territoryPenalty+workload-duplicateBonus,travel};
@@ -631,11 +670,12 @@ async function balance(){
       const best=ranked[0];o.vehicleId=best.v.id;assigned[best.v.id]++;
       const l=load[best.v.id];l.km+=best.travel;l.pickups.add(norm(o.pickupAddress));l.drops.add(norm(o.dropAddress));
     }
+    // V25: az egyetlen rendeléses, „magányos” projekteket kis kerülő esetén
+    // átvisszük ahhoz a sofőrhöz, akinek az útvonalába jobban illeszkednek.
+    merged=await v25MergeLonelyProjects(mario,patrik,remaining,profiles,homes);
   }
-  // Martin szálanyagainak és a két dobozos autónak külön optimalizált sorrend.
-  await optimizeAll(false);
-  save();
-  alert('Elosztás kész: a szálanyagok Martinra kerültek, a többi fuvar Márió és Patrik között felezve, pesti/budai területi preferenciával lett kiosztva.');
+  await optimizeAll(false);save();
+  alert(`Elosztás kész. Szálanyagok: Martin; Pest: elsősorban Márió; Buda: elsősorban Patrik. Magányos projektből ${merged} fuvar került kedvezőbb útvonalra.`);
 }
 async function optimizeAll(doSave=true){
   for(const v of activeVehicles()){
@@ -654,4 +694,43 @@ async function optimizeAll(doSave=true){
     ordered.forEach((o,i)=>o.sequence=i+1);
   }
   if(doSave)save();
+}
+
+
+// V25 – húzás közbeni automatikus képernyőgörgetés
+let v25DragActive=false,v25PointerY=0,v25ScrollFrame=0;
+function v25AutoScrollLoop(){
+  if(!v25DragActive){v25ScrollFrame=0;return}
+  const edge=Math.min(140,Math.max(80,window.innerHeight*.16));
+  let speed=0;
+  if(v25PointerY<edge)speed=-Math.ceil((edge-v25PointerY)/edge*24);
+  else if(v25PointerY>window.innerHeight-edge)speed=Math.ceil((v25PointerY-(window.innerHeight-edge))/edge*24);
+  if(speed)window.scrollBy(0,speed);
+  v25ScrollFrame=requestAnimationFrame(v25AutoScrollLoop);
+}
+function v25TrackPointer(e){
+  const t=e.touches?.[0]||e.changedTouches?.[0]||e;
+  if(Number.isFinite(t.clientY))v25PointerY=t.clientY;
+}
+if(!window.__v25DragScrollBound){
+  window.__v25DragScrollBound=true;
+  document.addEventListener('pointermove',v25TrackPointer,{passive:true});
+  document.addEventListener('touchmove',v25TrackPointer,{passive:true});
+}
+function initSortables(){
+  activeVehicles().forEach(v=>{
+    const el=$('#route-'+v.id);if(!el)return;
+    new Sortable(el,{
+      group:'vehicles',animation:180,handle:'.drag',
+      scroll:true,bubbleScroll:true,scrollSensitivity:120,scrollSpeed:20,
+      fallbackOnBody:true,forceFallback:false,delayOnTouchOnly:true,delay:120,touchStartThreshold:4,
+      onStart:e=>{v25DragActive=true;const r=e.originalEvent||{};v25TrackPointer(r);if(!v25ScrollFrame)v25ScrollFrame=requestAnimationFrame(v25AutoScrollLoop)},
+      onMove:e=>{v25TrackPointer(e.originalEvent||{});return true},
+      onEnd:e=>{
+        v25DragActive=false;if(v25ScrollFrame){cancelAnimationFrame(v25ScrollFrame);v25ScrollFrame=0}
+        const o=state.orders.find(x=>x.id===e.item.dataset.id);if(o)o.vehicleId=e.to.id.replace('route-','');
+        activeVehicles().forEach(x=>{$$('#route-'+x.id+' .bubble').forEach((n,i)=>{const r=state.orders.find(o=>o.id===n.dataset.id);if(r)r.sequence=i+1})});save();
+      }
+    })
+  })
 }
