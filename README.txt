@@ -1,4 +1,4 @@
-FUVAR-SZERVEZŐ V21 – GITHUB PAGES VERZIÓ
+FUVAR-SZERVEZŐ V22 – GITHUB PAGES VERZIÓ
 
 V21 javítások:
 - A fejléc, manifest és gyorsítótár verziója V21.
@@ -21,3 +21,9 @@ V21 újdonságok: térkép újraszámítás címváltozáskor; részleges hiány
 
 
 V21 újdonságok: minden nap teljes fuvaradatának külön, kétszintű törlése; nagyobb hiánymennyiség mező; dátumhoz kötött tételáthelyezés; a Hátralék menüben szerkeszthető dátum és a hozzá tartozó fuvarbuborék áthelyezése.
+
+V22 újdonságok
+- Törzsadatok Excel exportja és visszaimportja (Projektek, Beszállítók, Átvevők, Autók munkalapok).
+- Beszállítói importnál azonos cégnév alapján a cím frissül, nem jön létre felesleges duplikáció.
+- SERPA importnál a SERPA cégnév változatlan marad; a program csak a pontosan egyező beszállítói törzsadat címét rendeli hozzá.
+- A beszállítói törzs címe használható felrakóként, és pontos cégnévegyezés esetén lerakóként is.

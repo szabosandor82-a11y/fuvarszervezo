@@ -14,3 +14,8 @@
 /* ==================== V21 ==================== */
 .delete-everything-btn{margin-top:12px;background:#761f1f!important;border:2px solid #3f0c0c!important}
 .items-head-content{flex:1;min-width:0}.sticky-dialog-head{align-items:flex-start}.item-move-panel{margin-top:8px}.item-move-panel .move-controls{display:grid;grid-template-columns:minmax(260px,420px) auto;gap:8px;align-items:center}.item-move-panel .date-parts{margin:0}.item-move-panel .move-items-btn:disabled{opacity:.45;cursor:not-allowed}.missing-qty-wrap{display:block!important;max-width:260px}.missing-qty-wrap.hidden{display:none!important}.item-row .missing-qty-wrap input.missing-qty-input{width:180px!important;height:48px!important;min-width:180px!important;font-size:20px!important;font-weight:800!important;padding:10px 12px!important;margin-top:7px!important}.backlog-date-editor{display:grid;grid-template-columns:72px 48px 48px auto;gap:4px;align-items:center;min-width:250px}.backlog-date-editor input{padding:7px 5px;text-align:center;border-radius:9px}.backlog-date-editor button{padding:7px 9px;font-size:11px}.backlog-row td:last-child{min-width:270px}@media(max-width:760px){.item-move-panel .move-controls{grid-template-columns:1fr}.item-row .missing-qty-wrap input.missing-qty-input{width:100%!important;min-width:0!important}.backlog-date-editor{grid-template-columns:1.4fr 1fr 1fr}.backlog-date-editor button{grid-column:1/-1}}
+
+/* V22 – törzsadat Excel import/export */
+.master-excel-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.master-excel-actions small{flex-basis:100%;opacity:.75}
+.master-import-label{margin:0;display:inline-flex;align-items:center;justify-content:center}

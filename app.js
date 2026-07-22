@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION='V20';const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION='V22';const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 let maps={},masterType='projects',currentItemsOrderId='',mediaRecorder=null,audioChunks=[],audioBlob=null,importOrders=[],reviewQueue=[],reviewIndex=0,deferredPrompt=null;
@@ -13,7 +13,7 @@ function setScheduleParts(value=''){setDateParts('schedule',value)}
 function syncScheduleDate(){return syncDateParts('schedule',true)}
 function bindDateParts(prefix){const y=$('#'+prefix+'Year'),m=$('#'+prefix+'Month'),d=$('#'+prefix+'Day');[[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next])=>{if(!el)return;el.addEventListener('input',()=>{el.value=el.value.replace(/\D/g,'').slice(0,max);if(el.value.length===max&&next){next.focus();next.select()}});el.addEventListener('keydown',e=>{if(e.key==='Backspace'&&!el.value){const prev=el===d?m:el===m?y:null;if(prev){e.preventDefault();prev.focus();prev.setSelectionRange(prev.value.length,prev.value.length)}}})})}
 function defaultVehicles(){return[{id:'v-mario',driverName:'Márió',name:'Dobozos 1',type:'3.5 T dobozos autó',homeCity:'Vác',active:true},{id:'v-patrik',driverName:'Patrik',name:'Dobozos 2',type:'3.5 T dobozos autó',homeCity:'Kispest',active:true},{id:'v-martin',driverName:'Martin',name:'Ponyvás',type:'3.5 T plató autó',homeCity:'Felcsút',active:true}]}
-function refreshMasterData(){if(state.masterDataVersion==='v14-20260717')return;state.recipients=(state.recipients?.length?state.recipients:(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i})));state.projects=(SEED_DATA.projects||[]).map((x,i)=>({...x,id:'p'+i,defaultRecipientId:''}));state.suppliers=(SEED_DATA.suppliers||[]).map((x,i)=>({...x,id:'s'+i,isCentral:!!x.site&&norm(x.site)==='kozpont',pickupNote:x.note||''}));state.projects.forEach(p=>{const r=state.recipients.find(x=>norm(x.project)===norm(p.name))||state.recipients.find(x=>norm(x.name)===norm(p.receiver));p.defaultRecipientId=r?.id||''});(state.orders||[]).forEach(o=>{const p=state.projects.find(x=>norm(x.name)===norm(o.projectName));if(p)o.projectId=p.id;const matches=state.suppliers.filter(x=>norm(x.name)===norm(o.pickupName));if(matches.length===1)o.supplierId=matches[0].id});state.aliases={projects:{},suppliers:{}};state.masterDataVersion='v14-20260717'}function load(){const raw=localStorage.getItem(KEY);if(raw){state=JSON.parse(raw);state.aliases=state.aliases||{projects:{},suppliers:{}};state.vehicles=state.vehicles||defaultVehicles();state.orders=state.orders||[];state.backlog=state.backlog||[];refreshMasterData();save(false);return}state.recipients=(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i}));state.vehicles=defaultVehicles();state.orders=[];refreshMasterData();save(false)}
+function refreshMasterData(){if(state.masterDataVersion==='v14-20260717'||state.masterDataVersion==='v22-excel')return;state.recipients=(state.recipients?.length?state.recipients:(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i})));state.projects=(SEED_DATA.projects||[]).map((x,i)=>({...x,id:'p'+i,defaultRecipientId:''}));state.suppliers=(SEED_DATA.suppliers||[]).map((x,i)=>({...x,id:'s'+i,isCentral:!!x.site&&norm(x.site)==='kozpont',pickupNote:x.note||''}));state.projects.forEach(p=>{const r=state.recipients.find(x=>norm(x.project)===norm(p.name))||state.recipients.find(x=>norm(x.name)===norm(p.receiver));p.defaultRecipientId=r?.id||''});(state.orders||[]).forEach(o=>{const p=state.projects.find(x=>norm(x.name)===norm(o.projectName));if(p)o.projectId=p.id;const matches=state.suppliers.filter(x=>norm(x.name)===norm(o.pickupName));if(matches.length===1)o.supplierId=matches[0].id});state.aliases={projects:{},suppliers:{}};state.masterDataVersion='v14-20260717'}function load(){const raw=localStorage.getItem(KEY);if(raw){state=JSON.parse(raw);state.aliases=state.aliases||{projects:{},suppliers:{}};state.vehicles=state.vehicles||defaultVehicles();state.orders=state.orders||[];state.backlog=state.backlog||[];refreshMasterData();save(false);return}state.recipients=(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i}));state.vehicles=defaultVehicles();state.orders=[];refreshMasterData();save(false)}
 function save(renderNow=true){localStorage.setItem(KEY,JSON.stringify(state));if(renderNow)render()}
 function activeVehicles(){return state.vehicles.filter(v=>v.active)}
 function marioVehicle(){return activeVehicles().find(v=>norm(v.driverName).includes('mario'))||state.vehicles.find(v=>norm(v.driverName).includes('mario'))||null}
@@ -85,7 +85,7 @@ function headerMap(headers){const normalized=headers.map(norm),find=names=>norma
 function similarity(a,b){a=norm(a);b=norm(b);if(a===b)return 1;const aw=a.split(' '),bw=b.split(' '),common=aw.filter(x=>bw.includes(x)).length;return common/Math.max(aw.length,bw.length)}
 function projectMatch(topic){const alias=state.aliases.projects[norm(topic)];if(alias)return state.projects.find(p=>p.id===alias);const scores=state.projects.map(p=>({p,s:similarity(topic,p.name)})).sort((a,b)=>b.s-a.s);return scores[0]?.s>=.75&&(!scores[1]||scores[0].s-scores[1].s>.15)?scores[0].p:null}
 function supplierMatch(name){const alias=state.aliases.suppliers[norm(name)];if(alias)return state.suppliers.find(s=>s.id===alias);const exact=state.suppliers.filter(s=>norm(s.name)===norm(name));if(exact.length===1)return exact[0];if(exact.length>1){const central=exact.filter(s=>s.isCentral);return central.length===1?central[0]:null}const companies=[...new Set(state.suppliers.map(s=>s.name))].filter(n=>norm(name).includes(norm(n))||norm(n).includes(norm(name)));if(companies.length!==1)return null;const matches=state.suppliers.filter(s=>norm(s.name)===norm(companies[0]));if(matches.length===1)return matches[0];const central=matches.filter(s=>s.isCentral);return central.length===1?central[0]:null}
-async function readExcel(file){const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true}),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}),h=headerMap(rows[0].map(String));if(h.topic<0||h.supplier<0)return alert('Hiányzó kötelező SERPA oszlop: Témaszám név vagy Ügyfél/raktár név.');if(h.date<0||norm(rows[0][h.date])!=='datum')return alert('Nem található a SERPA Dátum oszlopa.');const g={};for(const r of rows.slice(1)){const date=dateVal(r[h.date]);if(!date)continue;const no=last5(r[h.doc]),topic=String(r[h.topic]||''),sup=String(r[h.supplier]||''),key=[date,no,topic,sup].join('|'),lr=longReason(r[h.product]);if(!g[key])g[key]={id:uid(),scheduleDate:date,vehicleId:'',sequence:999,orderNo:no,topicName:topic,pickupName:sup,pickupAddress:'',pickupNote:'',projectName:'',dropAddress:'',recipientName:'',recipientPhone:'',recipientEmail:'',requestedDeadline:dateVal(r[h.deadline]),note:h.note>=0?String(r[h.note]||''):'',items:[],longMaterialReason:''};if(lr)g[key].longMaterialReason=lr;g[key].items.push({code:String(r[h.code]||''),name:String(r[h.product]||''),qty:r[h.qty],unit:String(r[h.unit]||''),itemNote:h.itemNote>=0?String(r[h.itemNote]||''):'',longMaterial:!!lr,received:false});if(h.driver>=0&&norm(r[h.driver]).includes('martin'))g[key].markedMartin=true}importOrders=Object.values(g);importOrders.forEach(o=>{const p=projectMatch(o.topicName),s=supplierMatch(o.pickupName);if(p){o.projectId=p.id;o.projectName=p.name;o.dropAddress=p.address;const rec=state.recipients.find(r=>r.id===p.defaultRecipientId);if(rec){o.recipientId=rec.id;o.recipientName=rec.name;o.recipientPhone=rec.phone;o.recipientEmail=rec.email}}if(s){o.supplierId=s.id;o.pickupName=s.name;o.pickupAddress=s.address;o.pickupNote=s.pickupNote||''}});const longCars=activeVehicles().filter(canCarryLong),martin=longCars.find(v=>norm(v.driverName).includes('martin'))||longCars[0];importOrders.forEach(o=>{if(o.markedMartin||o.longMaterialReason)o.vehicleId=martin?.id||''});$('#importPreview').textContent=`${importOrders.length} összesített rendelés. Bizonytalan/hiányos: ${importOrders.filter(needsReview).length}.`;$('#startReviewBtn').disabled=false}
+async function readExcel(file){const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true}),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}),h=headerMap(rows[0].map(String));if(h.topic<0||h.supplier<0)return alert('Hiányzó kötelező SERPA oszlop: Témaszám név vagy Ügyfél/raktár név.');if(h.date<0||norm(rows[0][h.date])!=='datum')return alert('Nem található a SERPA Dátum oszlopa.');const g={};for(const r of rows.slice(1)){const date=dateVal(r[h.date]);if(!date)continue;const no=last5(r[h.doc]),topic=String(r[h.topic]||''),sup=String(r[h.supplier]||''),key=[date,no,topic,sup].join('|'),lr=longReason(r[h.product]);if(!g[key])g[key]={id:uid(),scheduleDate:date,vehicleId:'',sequence:999,orderNo:no,topicName:topic,pickupName:sup,pickupAddress:'',pickupNote:'',projectName:'',dropAddress:'',recipientName:'',recipientPhone:'',recipientEmail:'',requestedDeadline:dateVal(r[h.deadline]),note:h.note>=0?String(r[h.note]||''):'',items:[],longMaterialReason:''};if(lr)g[key].longMaterialReason=lr;g[key].items.push({code:String(r[h.code]||''),name:String(r[h.product]||''),qty:r[h.qty],unit:String(r[h.unit]||''),itemNote:h.itemNote>=0?String(r[h.itemNote]||''):'',longMaterial:!!lr,received:false});if(h.driver>=0&&norm(r[h.driver]).includes('martin'))g[key].markedMartin=true}importOrders=Object.values(g);importOrders.forEach(o=>{const p=projectMatch(o.topicName),s=supplierMatch(o.pickupName);if(p){o.projectId=p.id;o.projectName=p.name;o.dropAddress=p.address;const rec=state.recipients.find(r=>r.id===p.defaultRecipientId);if(rec){o.recipientId=rec.id;o.recipientName=rec.name;o.recipientPhone=rec.phone;o.recipientEmail=rec.email}}if(s){o.supplierId=s.id;o.pickupAddress=s.address||'';o.pickupNote=s.pickupNote||''}const dropSupplier=exactSupplierMaster(o.topicName);if(!p&&dropSupplier){o.projectName=o.topicName;o.dropAddress=dropSupplier.address||''}});const longCars=activeVehicles().filter(canCarryLong),martin=longCars.find(v=>norm(v.driverName).includes('martin'))||longCars[0];importOrders.forEach(o=>{if(o.markedMartin||o.longMaterialReason)o.vehicleId=martin?.id||''});$('#importPreview').textContent=`${importOrders.length} összesített rendelés. Bizonytalan/hiányos: ${importOrders.filter(needsReview).length}.`;$('#startReviewBtn').disabled=false}
 function needsReview(o){return!o.projectId||!o.supplierId||!o.pickupAddress||!o.dropAddress||!o.vehicleId}
 function startReview(){reviewQueue=importOrders.filter(needsReview);reviewIndex=0;if(!reviewQueue.length){finalizeImport();return}showReview()}
 function showReview(){const o=reviewQueue[reviewIndex];$('#reviewTitle').textContent=`${o.orderNo} · ${o.topicName||'Egyedi'}`;$('#reviewCounter').textContent=`${reviewIndex+1} / ${reviewQueue.length}`;$('#reviewFields').innerHTML=`<label>Projekt<select id="rvProject" onchange="reviewProjectChanged()" class="${o.projectId?'':'review-error'}">${projectOptions(o.projectId)}</select></label><label>Lerakó cím<input id="rvDrop" class="${o.dropAddress?'':'review-error'}" value="${esc(o.dropAddress||'')}"></label><label>Beszállító<select id="rvSupplier" onchange="reviewSupplierChanged()" class="${o.supplierId?'':'review-error'}">${supplierOptions(o.supplierId)}</select></label><label>Felrakó cím<input id="rvPickup" class="${o.pickupAddress?'':'review-error'}" value="${esc(o.pickupAddress||'')}"></label><label>Jármű<select id="rvVehicle" class="${o.vehicleId?'':'review-error'}"><option value="">Később osztom ki</option>${activeVehicles().map(v=>option(v.id,`${v.driverName} · ${v.name}`,o.vehicleId)).join('')}</select></label><label>Fuvar megjegyzés<textarea id="rvNote">${esc(o.note||'')}</textarea></label>`;$('#reviewDialog').showModal()}
@@ -320,4 +320,83 @@ function deleteEveryOrder(){
 (function installV21Handlers(){
   const btn=$('#deleteEveryOrderBtn');if(btn)btn.onclick=deleteEveryOrder;
   renderBacklog();
+})();
+
+/* ==================== V22 PATCH ==================== */
+const V22_VERSION='V22';
+
+function masterHeaderKey(v=''){return norm(v).replace(/\s+/g,' ')}
+function sheetRowsByNames(wb,names){
+  const target=wb.SheetNames.find(n=>names.some(x=>norm(n)===norm(x)))||wb.SheetNames.find(n=>names.some(x=>norm(n).includes(norm(x))));
+  return target?XLSX.utils.sheet_to_json(wb.Sheets[target],{defval:''}):[];
+}
+function valueByHeaders(row,names){
+  const entries=Object.entries(row);for(const name of names){const hit=entries.find(([k])=>masterHeaderKey(k)===masterHeaderKey(name));if(hit)return String(hit[1]??'').trim()}
+  return '';
+}
+function exportMasterDataExcel(){
+  const wb=XLSX.utils.book_new();
+  const projects=[['Projekt neve','Cím','Alapértelmezett átvevő']];
+  (state.projects||[]).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),'hu')).forEach(p=>projects.push([p.name||'',p.address||'',state.recipients.find(r=>r.id===p.defaultRecipientId)?.name||p.receiver||'']));
+  const suppliers=[['Cégnév','Cím','Felrakói megjegyzés','Központi telephely']];
+  (state.suppliers||[]).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),'hu')).forEach(s=>suppliers.push([s.name||'',s.address||'',s.pickupNote||'',s.isCentral?'Igen':'Nem']));
+  const recipients=[['Név','Projekt','Telefon','E-mail']];
+  (state.recipients||[]).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),'hu')).forEach(r=>recipients.push([r.name||'',r.project||'',r.phone||'',r.email||'']));
+  const vehicles=[['Sofőr neve','Jármű neve / rendszám','Járműtípus','Indulási település','Aktív']];
+  (state.vehicles||[]).forEach(v=>vehicles.push([v.driverName||'',v.name||'',v.type||'',v.homeCity||'',v.active!==false?'Igen':'Nem']));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(projects),'Projektek');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(suppliers),'Beszállítók');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(recipients),'Átvevők');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(vehicles),'Autók');
+  XLSX.writeFile(wb,`torzsadatok_${today()}.xlsx`);
+}
+function upsertByName(list,name,create,update){
+  const existing=list.find(x=>norm(x.name)===norm(name));
+  if(existing){update(existing);return 'updated'}list.push(create());return 'created';
+}
+async function importMasterDataExcel(file){
+  try{
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
+    const counts={created:0,updated:0,skipped:0};
+    const suppliers=sheetRowsByNames(wb,['Beszállítók','Beszállítók törzs','Suppliers']);
+    for(const row of suppliers){
+      const name=valueByHeaders(row,['Cégnév','Cég neve','Beszállító','Név']);const address=valueByHeaders(row,['Cím','Telephely címe','Szállítási cím']);
+      if(!name){counts.skipped++;continue}
+      const result=upsertByName(state.suppliers,name,()=>({id:uid(),name,address,pickupNote:valueByHeaders(row,['Felrakói megjegyzés','Megjegyzés']),isCentral:/^(igen|i|true|1)$/i.test(valueByHeaders(row,['Központi telephely','Központi']))}),s=>{s.address=address;s.pickupNote=valueByHeaders(row,['Felrakói megjegyzés','Megjegyzés'])||s.pickupNote||'';const c=valueByHeaders(row,['Központi telephely','Központi']);if(c)s.isCentral=/^(igen|i|true|1)$/i.test(c)});counts[result]++;
+    }
+    const projects=sheetRowsByNames(wb,['Projektek','Projects']);
+    for(const row of projects){
+      const name=valueByHeaders(row,['Projekt neve','Projekt','Név']);if(!name){counts.skipped++;continue}const address=valueByHeaders(row,['Cím','Projekt címe']);const receiver=valueByHeaders(row,['Alapértelmezett átvevő','Átvevő']);
+      const result=upsertByName(state.projects,name,()=>({id:uid(),name,address,defaultRecipientId:state.recipients.find(r=>norm(r.name)===norm(receiver))?.id||''}),p=>{p.address=address;if(receiver)p.defaultRecipientId=state.recipients.find(r=>norm(r.name)===norm(receiver))?.id||p.defaultRecipientId||''});counts[result]++;
+    }
+    const recipients=sheetRowsByNames(wb,['Átvevők','Recipients']);
+    for(const row of recipients){
+      const name=valueByHeaders(row,['Név','Átvevő neve']);const project=valueByHeaders(row,['Projekt','Projekt neve']);if(!name){counts.skipped++;continue}
+      let r=state.recipients.find(x=>norm(x.name)===norm(name)&&norm(x.project||'')===norm(project||''));
+      if(r){r.phone=valueByHeaders(row,['Telefon','Telefonszám']);r.email=valueByHeaders(row,['E-mail','Email']);counts.updated++}else{state.recipients.push({id:uid(),name,project,phone:valueByHeaders(row,['Telefon','Telefonszám']),email:valueByHeaders(row,['E-mail','Email'])});counts.created++}
+    }
+    const vehicles=sheetRowsByNames(wb,['Autók','Járművek','Vehicles']);
+    for(const row of vehicles){
+      const driverName=valueByHeaders(row,['Sofőr neve','Fuvaros neve','Sofőr']);const vehicleName=valueByHeaders(row,['Jármű neve / rendszám','Jármű neve','Rendszám']);if(!driverName&&!vehicleName){counts.skipped++;continue}
+      let v=state.vehicles.find(x=>(vehicleName&&norm(x.name)===norm(vehicleName))||(!vehicleName&&norm(x.driverName)===norm(driverName)));
+      const activeText=valueByHeaders(row,['Aktív']);const active=activeText?/^(igen|i|true|1)$/i.test(activeText):true;
+      if(v){v.driverName=driverName||v.driverName;v.name=vehicleName||v.name;v.type=valueByHeaders(row,['Járműtípus','Típus'])||v.type;v.homeCity=valueByHeaders(row,['Indulási település','Település'])||v.homeCity;v.active=active;counts.updated++}else{state.vehicles.push({id:uid(),driverName,name:vehicleName||driverName,type:valueByHeaders(row,['Járműtípus','Típus'])||VEHICLE_TYPES[0],homeCity:valueByHeaders(row,['Indulási település','Település']),active});counts.created++}
+    }
+    state.masterDataVersion='v22-excel';state.aliases=state.aliases||{projects:{},suppliers:{}};
+    save();alert(`Törzsadat import kész. Új: ${counts.created}, frissítve: ${counts.updated}, kihagyva: ${counts.skipped}.`)
+  }catch(e){console.error(e);alert('A törzsadat Excel nem olvasható. Ellenőrizd a munkalapok és oszlopok nevét.')}
+}
+
+/* A SERPA cégnévhez kizárólag a törzsben tárolt címet rendeljük hozzá; a SERPA név változatlan marad. */
+function exactSupplierMaster(name){
+  const matches=(state.suppliers||[]).filter(s=>norm(s.name)===norm(name));
+  if(matches.length===1)return matches[0];
+  return matches.find(s=>s.isCentral)||matches.find(s=>s.address)||null;
+}
+supplierMatch=exactSupplierMaster;
+
+(function installV22Handlers(){
+  const exportBtn=$('#exportMastersBtn'),input=$('#masterExcelInput');
+  if(exportBtn)exportBtn.onclick=exportMasterDataExcel;
+  if(input)input.onchange=async()=>{const file=input.files?.[0];if(file)await importMasterDataExcel(file);input.value=''};
 })();
