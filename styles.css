@@ -22,3 +22,16 @@
 
 /* V23 */
 .master-highlight{background:#e8f5ff;border:1px solid #7db8df;border-radius:10px;padding:8px 10px;margin:7px 0}.drop-highlight{background:#eef9e8;border-color:#87bd72}.supplier-location-select{width:100%;margin-top:6px;font-weight:700;background:#fff8cf;border:2px solid #d4a900}.master-address-value{display:inline-block;margin-top:4px;font-weight:700}.master-warning{background:#ffe2e2;color:#8a1111;border:1px solid #e58a8a;border-radius:8px;padding:7px 9px;margin:6px 0;font-weight:700}.master-excel-actions{display:flex;gap:10px;flex-wrap:wrap}.report-table th,.report-table td{white-space:nowrap}
+
+/* V24 – területi elosztás és külön lerakó összesítő */
+.dropoff-summary{margin:16px 0 2px;padding:14px 15px;border-radius:18px;background:linear-gradient(135deg,#fff1d8,#ffe0aa);border:2px solid #e1a33b;box-shadow:0 8px 22px #7d4b151f;position:relative}
+.dropoff-summary::before{content:"";position:absolute;left:16px;right:16px;top:-9px;border-top:2px dashed #d0a461}
+.dropoff-summary h3{margin:0 0 10px;color:#704514;font-size:15px;letter-spacing:.04em;text-transform:uppercase}
+.dropoff-summary-list{display:grid;gap:8px}
+.dropoff-stop{background:#fffaf1;border:1px solid #edc987;border-radius:12px;padding:9px 10px}
+.dropoff-stop b{display:block;color:#5f3a10;margin-bottom:3px}
+.dropoff-stop span{display:block;color:#76552f;font-size:12px;font-weight:750;line-height:1.45}
+.dropoff-empty{color:#806747;font-size:12px}
+.route[data-driver="mario"] .dropoff-summary{background:linear-gradient(135deg,#e7f5ff,#caeaff);border-color:#4b9bd0}
+.route[data-driver="patrik"] .dropoff-summary{background:linear-gradient(135deg,#f1eaff,#dfd0ff);border-color:#8a66c5}
+.route[data-driver="martin"] .dropoff-summary{background:linear-gradient(135deg,#eaf8e6,#d1efc7);border-color:#68a954}

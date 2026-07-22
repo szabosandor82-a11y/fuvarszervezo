@@ -552,3 +552,106 @@ async function vehicleHome(v){return await geo(v?.homeAddress||v?.homeCity||stat
   const vf=$('#vehicleForm');if(vf)vf.onsubmit=e=>{e.preventDefault();const id=$('#editVehicleId').value,v={...(state.vehicles.find(x=>x.id===id)||{}),id:id||uid(),driverName:$('#driverName').value,name:$('#vehicleName').value,type:$('#vehicleType').value,homeAddress:$('#homeCity').value,homeCity:$('#homeCity').value,active:$('#vehicleActive').checked};const i=state.vehicles.findIndex(x=>x.id===id);if(i>=0)state.vehicles[i]=v;else state.vehicles.push(v);$('#vehicleDialog').close();save()};
   state.orders.forEach(o=>syncOrderFromMasters(o));localStorage.setItem(KEY,JSON.stringify(state));
 })();
+
+/* ==================== V24 ==================== */
+function v24DriverKey(v){const n=norm(v?.driverName||'');return n.includes('martin')?'martin':n.includes('mario')?'mario':n.includes('patrik')?'patrik':'other'}
+function v24FinitePoint(p){return Array.isArray(p)&&Number.isFinite(+p[0])&&Number.isFinite(+p[1])}
+function v24BudapestSide(point){
+  if(!v24FinitePoint(point))return 'unknown';
+  const lat=+point[0],lng=+point[1];
+  // Budapest és közvetlen agglomeráció: a Duna közelítő választóvonala.
+  if(lat>=47.30&&lat<=47.70&&lng>=18.75&&lng<=19.35)return lng<19.045?'buda':'pest';
+  return 'outside';
+}
+function v24DropoffSummary(list){
+  if(!list.length)return '<aside class="dropoff-summary"><h3>Lerakók</h3><div class="dropoff-empty">Nincs lerakó az adott napon.</div></aside>';
+  const groups=[];
+  for(const o of list.slice().sort((a,b)=>(+a.sequence||999)-(+b.sequence||999))){
+    const key=norm(o.projectName||o.dropAddress||'Egyedi úticél');
+    let g=groups.find(x=>x.key===key);
+    if(!g){g={key,name:o.projectName||o.dropAddress||'Egyedi úticél',address:o.dropAddress||'',orders:[]};groups.push(g)}
+    if(o.orderNo&&!g.orders.includes(o.orderNo))g.orders.push(o.orderNo);
+  }
+  return `<aside class="dropoff-summary"><h3>Lerakók · optimalizált sorrend</h3><div class="dropoff-summary-list">${groups.map((g,i)=>`<div class="dropoff-stop"><b>${i+1}. ${esc(g.name)}</b><span>${esc(g.orders.join(', '))}</span>${g.address?`<span>${esc(g.address)}</span>`:''}</div>`).join('')}</div></aside>`;
+}
+function renderRoutes(){
+  const vehicles=activeVehicles();
+  $('#routes').innerHTML=vehicles.map(v=>{const list=dayOrders(v.id).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999));return`<section class="route" data-driver="${v24DriverKey(v)}"><header class="route-head"><h2><input value="${esc(v.driverName)}" onchange="renameDriver('${v.id}',this.value)"></h2><small>${esc(v.name)} · ${esc(v.type)} · ${list.length} fuvar</small><div class="route-summary" id="summary-${v.id}"></div></header><div id="map-${v.id}" class="map"></div><div id="route-${v.id}" class="route-list">${bubbles(list)}</div>${v24DropoffSummary(list)}</section>`}).join('')||'<div class="notice">Nincs aktív jármű.</div>';
+  setTimeout(initMaps,30);setTimeout(initSortables,40);setTimeout(updateSummaries,60)
+}
+async function drawMap(id){
+  const map=maps[id],pts=[],date=selectedDate();if(!map)return;
+  const v=state.vehicles.find(x=>x.id===id),home=await vehicleHome(v||{});if(home)pts.push(home);
+  for(const o of dayOrders(id).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999))){
+    const pickup=await geo(o.pickupAddress),drop=await geo(o.dropAddress);
+    if(pickup){pts.push(pickup);L.marker(pickup,{title:`Felrakó: ${o.pickupName||''}`}).addTo(map).bindPopup(`<b>Felrakó · ${esc(o.orderNo)}</b><br>${esc(o.pickupName||'')}<br>${esc(o.pickupAddress||'')}`)}
+    // A lerakó az útvonalban szerepel, de külön térképi marker nélkül.
+    if(drop)pts.push(drop);
+  }
+  if(home)pts.push(home);
+  if(pts.length){const rr=await roadRoute(pts),coords=rr?rr.geometry.coordinates.map(c=>[c[1],c[0]]):pts;const line=L.polyline(coords,{weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[20,20]});state.routeStats=state.routeStats||{};state.routeStats[date]=state.routeStats[date]||{};state.routeStats[date][id]={km:rr?rr.distance/1000:coords.slice(1).reduce((s,p,i)=>s+dist(coords[i],p),0),minutes:rr?rr.duration/60:0};localStorage.setItem(KEY,JSON.stringify(state))}
+}
+async function balance(){
+  const active=activeVehicles();if(!active.length)return alert('Nincs aktív jármű.');
+  const orders=state.orders.filter(o=>o.scheduleDate===selectedDate());
+  const martin=active.find(v=>v24DriverKey(v)==='martin');
+  const mario=active.find(v=>v24DriverKey(v)==='mario');
+  const patrik=active.find(v=>v24DriverKey(v)==='patrik');
+  const profiles={};
+  for(const o of orders){syncOrderFromMasters(o);profiles[o.id]=await orderGeoProfile(o)}
+  // 1. Szálanyagok Martinra, amennyiben a jármű alkalmas.
+  for(const o of orders.filter(x=>x.longMaterialReason)){
+    const target=(martin&&canCarryLong(martin))?martin:active.filter(canCarryLong)[0];
+    if(target)o.vehicleId=target.id;
+  }
+  const remaining=orders.filter(o=>!o.longMaterialReason);
+  if(!mario||!patrik){
+    const candidates=[mario,patrik].filter(Boolean);
+    remaining.forEach((o,i)=>o.vehicleId=(candidates[i%candidates.length]||active[i%active.length]).id);
+  }else{
+    const targetMario=Math.ceil(remaining.length/2),targetPatrik=Math.floor(remaining.length/2);
+    const quota={[mario.id]:targetMario,[patrik.id]:targetPatrik},assigned={[mario.id]:0,[patrik.id]:0};
+    const homes={[mario.id]:await vehicleHome(mario),[patrik.id]:await vehicleHome(patrik)};
+    const load={[mario.id]:{pickups:new Set(),drops:new Set(),km:0},[patrik.id]:{pickups:new Set(),drops:new Set(),km:0}};
+    // Az egyértelműen budai/pesti lerakókat először dolgozzuk fel.
+    const sorted=remaining.slice().sort((a,b)=>{const sa=v24BudapestSide(profiles[a.id]?.drop),sb=v24BudapestSide(profiles[b.id]?.drop);return (sa==='unknown'||sa==='outside'?1:0)-(sb==='unknown'||sb==='outside'?1:0)});
+    for(const o of sorted){
+      const p=profiles[o.id]||{},side=v24BudapestSide(p.drop),choices=[mario,patrik].filter(v=>assigned[v.id]<quota[v.id]);
+      const available=choices.length?choices:[mario,patrik];
+      const ranked=available.map(v=>{
+        const key=v24DriverKey(v),l=load[v.id];
+        const travel=dist(homes[v.id],p.pickup)+dist(p.pickup,p.drop);
+        let territoryPenalty=0;
+        if(side==='pest'&&key==='patrik')territoryPenalty=45;
+        if(side==='buda'&&key==='mario')territoryPenalty=45;
+        const duplicateBonus=(l.pickups.has(norm(o.pickupAddress))?9:0)+(l.drops.has(norm(o.dropAddress))?12:0);
+        const workload=l.km*.45+l.pickups.size*4+l.drops.size*5;
+        return{v,score:travel+territoryPenalty+workload-duplicateBonus,travel};
+      }).sort((a,b)=>a.score-b.score);
+      const best=ranked[0];o.vehicleId=best.v.id;assigned[best.v.id]++;
+      const l=load[best.v.id];l.km+=best.travel;l.pickups.add(norm(o.pickupAddress));l.drops.add(norm(o.dropAddress));
+    }
+  }
+  // Martin szálanyagainak és a két dobozos autónak külön optimalizált sorrend.
+  await optimizeAll(false);
+  save();
+  alert('Elosztás kész: a szálanyagok Martinra kerültek, a többi fuvar Márió és Patrik között felezve, pesti/budai területi preferenciával lett kiosztva.');
+}
+async function optimizeAll(doSave=true){
+  for(const v of activeVehicles()){
+    const orders=dayOrders(v.id),home=await vehicleHome(v),left=[];let current=home;
+    for(const o of orders)left.push({o,pickup:await geo(o.pickupAddress),drop:await geo(o.dropAddress)});
+    const ordered=[];
+    while(left.length){
+      left.sort((a,b)=>{
+        const ac=dist(current,a.pickup)+dist(a.pickup,a.drop),bc=dist(current,b.pickup)+dist(b.pickup,b.drop);
+        const aNext=left.length>1?Math.min(...left.filter(x=>x!==a).map(x=>dist(a.drop||a.pickup,x.pickup))):dist(a.drop||a.pickup,home);
+        const bNext=left.length>1?Math.min(...left.filter(x=>x!==b).map(x=>dist(b.drop||b.pickup,x.pickup))):dist(b.drop||b.pickup,home);
+        return (ac+aNext*.35)-(bc+bNext*.35);
+      });
+      const n=left.shift();ordered.push(n.o);current=n.drop||n.pickup||current;
+    }
+    ordered.forEach((o,i)=>o.sequence=i+1);
+  }
+  if(doSave)save();
+}
