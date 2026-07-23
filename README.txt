@@ -1,31 +1,66 @@
-Fuvarszervező V32 – GitHub Pages
+Fuvarszervező V33 – GitHub Pages
 
-A V32 fő változása, hogy az új optimalizáló külön planner-v32.js modulban fut, és a két főoldali művelet szigorúan különválik.
+FŐ MUNKAFOLYAMAT
+1. SERPA import
+2. Fuvar szétosztása
+3. Útvonal optimalizálása
 
-1. Fuvarok szétosztása
-- Csak azt dönti el, melyik sofőrhöz melyik fuvar kerüljön.
-- Nem optimalizál útvonalsorrendet.
-- Az átlagos fuvarszámhoz közelít; egyszerű, mozgatható egységeknél a különbség célértéke legfeljebb 1, kötött nagy blokkoknál legfeljebb 2.
-- A hosszú/szálas anyag Martin platós autójára kerül.
-- A beszállító+projekt egységeket nem töri szét.
-- Figyelembe veszi a projekt- és beszállítói összetartozást.
+A „Fuvar szétosztása” csak sofőrt választ.
+Az „Útvonal optimalizálása” csak a már kiosztott fuvarok sorrendjét rendezi, sofőrt nem változtat.
 
-2. Útvonal optimalizálása
-- Nem osztja át a fuvarokat másik sofőrhöz.
-- Egy sofőr ugyanahhoz a beszállítóhoz naponta egyszer megy, és ott minden hozzá rendelt anyagot felvesz.
-- Nap elején a felrakók dominálnak, a lerakók alaphelyzetben csak az összes felrakás után következnek.
-- A lerakók sorrendje a sofőr lakhelye felé zárja a napot.
-- Teljes autónyi rakomány esetén a felrakó→lerakó megszakíthatatlan blokk minden normál felrakás elé kerül.
-- Martin és Patrik általában a Központi raktárban kezdenek.
-- Martin a Felcsút felől útba eső hosszú/szálas felrakót a Központi raktár előtt veszi fel; ilyenkor a raktár közvetlen környezetében lévő felrakó is bekerülhet elé.
-- Máriónál a rendszer összehasonlítja a lakhelyhez közeli felrakóval induló és a Központi raktár felé haladó útvonalat. Kistarcsa Ferenczi és Szerelvénybolt Üllő 807 jellegű, később nagy visszautat okozó pontot befelé menet kezeli.
-- Közúti távolságmátrixot kér az OSRM-től; ha ez nem elérhető, légvonalas tartalék számítást használ.
+V33 ÚJDONSÁGOK
 
-Teljes autónyi rakomány jelölése
-A fuvar vagy tétel megjegyzésében szerepeljen például: „teljes autónyi rakomány”.
+1. Rögzítő zászló
+- Minden csoportosított fuvarbuborékon van zászló ikon.
+- A buborék kézzel a kívánt helyre húzható, majd rögzíthető.
+- Optimalizáláskor a rögzített buborék ugyanannál a sofőrnél és ugyanazon a helyen marad.
+- A többi buborék a rögzített pontok körül optimalizálódik.
+- A zászló újbóli megnyomásával a rögzítés feloldható.
 
-Ellenőrzés
-A V32 modulon 12 kanonikus útvonal- és szabályteszt, egy teljes Martin-integrációs teszt és egy 22 fuvaros szétosztási teszt futott le sikeresen. A részletek a TESZTEREDMENY_V32.txt fájlban találhatók.
+2. Teljes autós rakomány
+- Minden buborékon külön teherautó gomb található.
+- Bekapcsoláskor a felrakóbuborék alatt azonnal megjelenik a kötelező lerakóbuborék.
+- A felrakó és a lerakó megszakíthatatlan pár.
+- A sofőr a lerakás előtt nem vehet fel újabb anyagot.
 
-Feltöltés
-A ZIP tartalmát kell a GitHub Pages tárhely gyökerébe feltölteni, a korábbi fájlok felülírásával. Feltöltés után Ctrl+F5 javasolt.
+3. Buborékok csoportosítása
+- Azonos felrakó és azonos lerakó esetén csak egy buborék jelenik meg.
+- A buborék alatt az összes rendelési szám látható.
+- A háttérben a rendelések és a tételek külön maradnak.
+- A Tételek ablak a csoport rendelésszámait külön szakaszokban mutatja, a korábbi pipálási, hiány- és megjegyzésfunkciókkal.
+
+4. Buborék tartalma
+A főoldali sorrend:
+- Felrakó
+- Lerakó
+- Rendelésszám(ok)
+
+A tételmegjegyzések nem látszanak a főoldalon, csak a Tételek nézetben.
+
+5. SERPA import utáni előbesorolás
+Az elsődleges szabály a felrakó földrajzi oldala:
+- Buda: elsősorban Patrik
+- Pest: elsősorban Márió
+- Hosszú/szálas anyag: Martin
+- Központi raktár és semleges felrakók: súlyozott terheléskiegyenlítés
+
+Ha Patrik budai terhelése nagyon nagy, Martin budai fuvarokkal besegíthet, de csak akkor, ha nincs sok hosszú/szálas anyaga.
+A terhelés súlyozott: egy teljes autós vagy szálas fuvar többet számít, mint egy egyszerű rendelés.
+
+6. Lerakók összesítése
+- A főoldal aljáról az állandó lerakó-összesítés kikerült.
+- Minden sofőr fejlécében külön „Lerakók” gomb van.
+- A gomb megnyomására felugró ablakban jelenik meg a lerakási sorrend.
+
+7. Térkép
+- A térkép kizárólag felrakókat mutat.
+- A lerakók nem kapnak markert.
+- A lerakók nem kerülnek bele a térképi útvonalvonalba.
+- Azonos felrakó csak egyszer jelenik meg.
+
+TESZTELÉS
+A TEST_V33.js nyolc automatikus szabálytesztet tartalmaz. A futtatott eredmények a TESZTEREDMENY_V33.txt fájlban találhatók.
+
+FELTÖLTÉS
+A ZIP teljes tartalmát töltsd fel a GitHub Pages tárhely gyökerébe, a korábbi fájlok felülírásával.
+Feltöltés után egyszer Ctrl+F5 szükséges. Telefonon az oldal teljes bezárása és újbóli megnyitása javasolt.
