@@ -1,28 +1,17 @@
-FUVAR-SZERVEZŐ V34 – GITHUB PAGES
+Fuvarszervező V31 – GitHub Pages
 
-A V34 fő változása a SERPA „Autó” oszlopának elsődleges használata.
+Kritikus javítások:
+- A „Fuvar szétosztása” gomb most biztosan a legújabb, kétlépcsős V30/V31 szétosztási algoritmust hívja.
+- Az „Útvonal optimalizálása” gomb most biztosan a legújabb útvonalépítőt hívja.
+- A korábbi közvetlen függvényreferenciás eseménykezelés megszűnt; a gombok mindig az aktuális balance() és optimizeAll() függvényt futtatják.
+- A helyi fájlok verzióparamétert kaptak, így a böngésző nem keveri össze a V30 és V31 app.js/data.js/styles.css fájlokat.
+- A service worker V31 gyorsítótára törli a régi cache-eket.
+- Az alkalmazás fő fájljai hálózat-első frissítést használnak, ezért új GitHub-verzió feltöltésekor nem ragad bent tartósan a régi kód.
+- Beépített diagnosztika: a böngésző konzoljában a getFuvarszervezoDiagnostics() megmutatja, hogy a V31 gombkezelők aktívak-e.
 
-Engedélyezett értékek:
-- Patrik
-- Márió
-- Martin
-- Dobozos
-
-Szabályok:
-1. A névre jelölt fuvar közvetlenül és rögzítetten az adott sofőrhöz kerül.
-2. A „Fuvarok szétosztása” ezeket nem mozgathatja át.
-3. A Dobozos fuvarokat a program osztja szét:
-   - budai felrakó elsősorban Patrik;
-   - pesti felrakó elsősorban Márió;
-   - központi/semleges felrakók terheléskiegyenlítésre használhatók;
-   - Martin csak akkor kap Dobozos fuvart, ha a névre szóló terhelése jelentősen kevés, és nincs sok szálas anyaga.
-4. Az optimalizálás továbbra is csak a sorrendet módosítja, sofőrt nem.
-5. A V33 funkciói megmaradtak: csoportosított buborékok, zászlós rögzítés, teljes autós megszakíthatatlan blokk, csak felrakókat használó térkép.
-
-FELTÖLTÉS GITHUB PAGESRE
-A ZIP tartalmát töltsd fel a repository gyökerébe a korábbi fájlok felülírásával.
-Feltöltés után érdemes Ctrl+F5 teljes frissítést végezni.
-
-TESZTEK
-- TEST_V34.js: Node.js automatikus tesztek
-- TESZTEREDMENY_V34.txt: eredmények összefoglalója
+Megmaradt működés:
+- Igazságosabb, kétlépcsős fuvarszétosztás.
+- Hosszú anyag megfelelő autóra kerül.
+- Sofőrönkénti útvonal a saját indulási címtől.
+- Egyszeri beszállító-látogatás és összefüggő felrakási blokkok.
+- Lerakás csak a szükséges felrakások után.
