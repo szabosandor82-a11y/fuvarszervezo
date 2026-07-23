@@ -1,0 +1,40 @@
+FUVAR-SZERVEZŐ V34 – TESZTEREDMÉNYEK
+Dátum: 2026-07-23
+
+Automatikus V34 tesztek: 8/8 sikeres
+
+1. Autó oszlop kategóriái
+   - Patrik, Márió, Martin és Dobozos felismerése sikeres.
+   - Üres vagy ismeretlen érték hibásként kerül felülvizsgálatra.
+
+2. Névre szóló kiosztás
+   - A névre jelölt fuvar akkor is a megadott sofőrhöz került, ha a felrakó területe más sofőrhöz illene.
+   - A névre jelölt fuvar rögzített maradt.
+
+3. Dobozos területi alapbesorolás
+   - Budai felrakó Patrikhoz került.
+   - Pesti felrakó Márióhoz került.
+
+4. Martin terheléskiegyenlítése
+   - Kevés fix martini fuvar mellett Martin kapott Dobozos fuvarokat.
+
+5. Martin szálasanyag-védelme
+   - Sok fix szálas fuvar mellett Martin nem kapott további Dobozos fuvarokat.
+
+6. Azonos felrakó és lerakó, eltérő névre szóló kiosztás
+   - A két rendelés nem húzta át egymást másik sofőrhöz.
+
+7. Központi raktári Dobozos fuvarok
+   - 9 semleges fuvar 3–3–3 arányban oszlott meg.
+
+8. Optimalizálás
+   - Az optimalizálás nem változtatta meg a kiosztott sofőrt.
+
+Statikus ellenőrzések:
+- app.js szintaxis: sikeres
+- planner-v32.js szintaxis: sikeres
+- planner-v33.js szintaxis: sikeres
+- planner-v34.js szintaxis: sikeres
+- sw.js szintaxis: sikeres
+- index.html a planner-v34.js fájlt utolsó tervezőmodulként tölti be
+- service worker gyorsítótár verziója: V34
