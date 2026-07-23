@@ -1,0 +1,50 @@
+FUVAR- ÉS ÚTVONALTERVEZŐ V35 – MINTAELEMZÉS
+
+Forrás: Sablon - szállítások.xlsx / Fuvarok lap, valamint a feltöltött napi szállítási üzenetek.
+A történeti mintában a felrakók sorrendje és az egyedi felrakóhelyek száma volt az elsődleges.
+
+MARTIN
+2026-07-08: 9 rendelés / 3 felrakó: Egrokorr → KRPR → Ryng
+2026-07-09: 19 rendelés / 8 felrakó: Heat Hungary → KRPR → Néber → Ryng → Sebők és Társa kp → Sofitel → Soudal → Türk
+2026-07-10: 10 rendelés / 6 felrakó: Airvent → KRPR → Lambda kp → Néber → Ryng → Sikla
+2026-07-13: 20 rendelés / 7 felrakó: Air-Technik → Egrokorr → KRPR → Lambda kp → Remeha ALG → Sebők és Társa kp → Sikla
+2026-07-14: 20 rendelés / 4 felrakó: Cairox → Gienger kp → KRPR → Szatmári kp
+2026-07-15: 15 rendelés / 6 felrakó: Lindab → KRPR → Niczuk → Lambda kp → Müpro → Szatmári kp
+2026-07-16: 17 rendelés / 3 felrakó: Egrokorr → KRPR → Ryng
+2026-07-17: 3 rendelés / 2 felrakó: KRPR → Pál-Ferr-Box
+2026-07-20: 8 rendelés / 4 felrakó: Egrokorr → Attacső → KRPR → Ryng
+2026-07-21: 13 rendelés / 2 felrakó: KRPR → Attacső
+2026-07-22: 21 rendelés / 7 felrakó: Sebők és Társa kp → Egrokorr → KRPR → Attacső → Merkapt kp → DT Közmű → Kincsem K6
+
+MÁRIÓ
+2026-07-13: 20 rendelés / 9 felrakó: Ezerker kp → Fogarasi kp → KRPR → Larex → Merkapt kp → Niczuk → Ryng → Szatmári kp → Szögker
+2026-07-14: 18 rendelés / 6 felrakó: Duna-Armatúra → Ezerker kp → Hofstädter → KRPR → Szatmári kp → Szerelvénybolt kp
+2026-07-15: 15 rendelés / 5 felrakó: Szatmári kp → Merkapt kp → Ezerker kp → Fogarasi kp → KRPR
+2026-07-16: 18 rendelés / 7 felrakó: Ferenczi kt → Merkapt kp → Ezerker kp → Fogarasi kp → Szögker → KRPR → Metrodome
+2026-07-17: 19 rendelés / 8 felrakó: KRPR → Niczuk → Szögker → Fogarasi kp → Merkapt kp → Szatmári kp → Néber → Rankl
+2026-07-20: 35 rendelés / 6 felrakó: Szerelvénybolt kp → KRPR → Fogarasi kp → Ezerker kp → Merkapt kp → Szatmári kp
+2026-07-21: 9 rendelés / 7 felrakó: Néber → Szatmári kp → RTP → Ryng → Merkapt kp → Airvent → Moxy VUC
+2026-07-22: 21 rendelés / 5 felrakó: Szatmári kp → Ezerker kp → Szerelvénybolt kp → Fogarasi kp → KRPR
+
+PATRIK
+2026-07-08: 24 rendelés / 10 felrakó: Cosmo → Ezerker kp → ferenczi kt → Fogarasi kp → Gienger kp → KRPR → Merkapt kp → Sofitel → Szerelvénybolt kp → Szögker
+2026-07-09: 28 rendelés / 9 felrakó: Drain Center → Ezerker kp → Korlát Sziget → KRPR → Merkapt kp → Mvv → Niczuk → Szatmári kp → Würth Shop
+2026-07-10: 21 rendelés / 7 felrakó: KRPR → Merkapt kp → Soós és Társa → Szatmári kp → Szerelvénydélpest → Szögker → Vörsas
+2026-07-13: 12 rendelés / 6 felrakó: Empack → Gienger kp → KRPR → Lambda kp → Niczuk → Sikla
+2026-07-14: 27 rendelés / 7 felrakó: Fogarasi Hunyadi → KRPR → Lambda kp → Merkapt kp → Moxy VUC → Niczuk → Ryng
+2026-07-15: 14 rendelés / 5 felrakó: KRPR → Niczuk → Gienger kp → Sebők és Társa kp → Cairox
+2026-07-16: 12 rendelés / 5 felrakó: KRPR → Niczuk → Gienger kp → Sebők és Társa kp → Azimut
+2026-07-17: 10 rendelés / 5 felrakó: Zenner → Gienger kp → Sebők és Társa kp → Azimut → Lambda kp
+2026-07-20: 16 rendelés / 7 felrakó: KRPR → Niczuk → Kamleithner → Gienger kp → Lambda kp → Sebők és Társa kp → Moxy VUC
+2026-07-21: 10 rendelés / 8 felrakó: Sebők és Társa kp → Maxkamin → Tricox → Cairox → Hegedűs Hunyadi → Geberit → Szögker → Fogarasi kp
+2026-07-22: 17 rendelés / 8 felrakó: KRPR → Niczuk → Gienger kp → Lambda kp → Larex → Szögker → Ezerker kp → Cosmo
+
+V35-ben alkalmazott következtetések:
+- A rendelésdarabszám helyett a külön felrakóhely a legerősebb terhelési tényező.
+- Külső Dobozos felrakó teljes blokkban kerül egy sofőrhöz.
+- A központi raktár projektblokkjai külön oszthatók, mert ott mindhárom autó rakodhat.
+- Patrik jellemzően központi raktárral kezd, majd budai/dél-budai íven halad.
+- Máriónál két útvonalváltozat versenyez: lakhely felől gyűjtő kör, vagy útba eső különálló felrakó után központi raktáros kör.
+- Martin általában központi raktárral kezd, de hosszú/nagyterjedelmű, befelé eső felrakót előtte vesz fel.
+- Normál lerakó nem vesz részt a felrakási optimalizálásban.
+- Teljes autós rakomány után kötelező azonnali lerakás.

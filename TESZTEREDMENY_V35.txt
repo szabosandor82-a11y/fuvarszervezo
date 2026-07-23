@@ -1,0 +1,39 @@
+FUVAR- ÉS ÚTVONALTERVEZŐ V35 – TESZTEREDMÉNY
+
+Futtatás dátuma: 2026-07-23
+
+OK A Dobozos azonos külső felrakója egy sofőrnél marad
+OK Névre jelölt fuvar fix marad
+OK Terhelésnél a külön felrakók fontosabbak a rendelésdarabszámnál
+OK Martin normál példája: Központi -> Attacső -> Merkapt -> DT Közmű
+OK Martin befelé szálas példája: Sebők -> Niczuk -> Központi -> Empack -> Lambda
+OK Márió lakhely felőli példa
+OK Patrik példa: Központi -> Niczuk -> Cairox -> Sebők -> Fogarasi
+OK Teljes autós blokk után azonnali lerakó esemény következik
+OK Normál lerakók nem kerülnek bele az útvonaltervbe
+OK A jóváhagyott teljes autós Márió-minta sorrendje
+OK A 2026.07.22-i három felrakási minta reprodukálható
+
+Sikeres tesztek: 11/11
+
+Kompatibilitási tesztek:
+OK Azonos felrakó+lerakó egy buborék
+OK Rögzített buborék megőrzi a pozícióját
+OK Kézi teljes autó jelölés felismerése
+OK Buda Patrikhoz, Pest Márióhoz kerül
+OK Budai túlterhelésnél Martin besegít, ha nincs sok szálas anyag
+OK Sok szálas anyagnál Martin nem kap további budai túlterhelést
+OK Optimalizálás nem változtat sofőrt és tiszteletben tartja a rögzített első helyet
+OK Teljes autós blokkban a lerakó közvetlenül a felrakó után következik
+
+Sikeres tesztek: 8/8
+OK Autó kategóriák felismerése
+OK Névre jelölt fuvarok fixen a megadott sofőrhöz kerülnek
+OK Dobozos: Buda Patrik, Pest Márió
+OK Kevés martini fix fuvarnál Martin is kap Dobozos terhelést
+OK Sok martini szálas tehernél Martin nem kap Dobozos fuvart
+OK Azonos felrakó+lerakó, eltérő névre jelölés nem húzza át egymást
+OK Központi Dobozos fuvarok közel igazságosan oszlanak
+OK Az optimalizálás nem változtatja meg a kiosztott sofőrt
+
+Sikeres tesztek: 8/8

@@ -1,17 +1,30 @@
-Fuvarszervező V31 – GitHub Pages
+FUVAR- ÉS ÚTVONALTERVEZŐ V35
 
-Kritikus javítások:
-- A „Fuvar szétosztása” gomb most biztosan a legújabb, kétlépcsős V30/V31 szétosztási algoritmust hívja.
-- Az „Útvonal optimalizálása” gomb most biztosan a legújabb útvonalépítőt hívja.
-- A korábbi közvetlen függvényreferenciás eseménykezelés megszűnt; a gombok mindig az aktuális balance() és optimizeAll() függvényt futtatják.
-- A helyi fájlok verzióparamétert kaptak, így a böngésző nem keveri össze a V30 és V31 app.js/data.js/styles.css fájlokat.
-- A service worker V31 gyorsítótára törli a régi cache-eket.
-- Az alkalmazás fő fájljai hálózat-első frissítést használnak, ezért új GitHub-verzió feltöltésekor nem ragad bent tartósan a régi kód.
-- Beépített diagnosztika: a böngésző konzoljában a getFuvarszervezoDiagnostics() megmutatja, hogy a V31 gombkezelők aktívak-e.
+GitHub Pages feltöltés:
+1. A ZIP tartalmát csomagold ki.
+2. A fájlokat a repository gyökérkönyvtárába töltsd fel.
+3. GitHub Pages: Deploy from branch / main / root.
+4. Feltöltés után egyszer Ctrl+F5 frissítés javasolt.
 
-Megmaradt működés:
-- Igazságosabb, kétlépcsős fuvarszétosztás.
-- Hosszú anyag megfelelő autóra kerül.
-- Sofőrönkénti útvonal a saját indulási címtől.
-- Egyszeri beszállító-látogatás és összefüggő felrakási blokkok.
-- Lerakás csak a szükséges felrakások után.
+V35 fő változásai:
+- A szétosztás alapegysége elsősorban a külön felrakóhely, nem a rendelésdarabszám.
+- Az Autó oszlop Patrik/Márió/Martin értékei továbbra is fixek.
+- A Dobozos tételek egész külső felrakóblokkokban oszlanak szét.
+- Ugyanazon külső felrakó Dobozos rendelései nem szakadnak több sofőrre.
+- A Központi raktár projektblokkjai terheléskiegyenlítéshez külön oszthatók.
+- Martin csak valódi alulterhelésnél és alacsony hosszú/nagyterjedelmű terhelésnél kap Dobozos blokkot.
+- A tételek neve és megjegyzése alapján szélesebb hosszú- és nagyterjedelműanyag-felismerés működik.
+- Az optimalizálás normál esetben kizárólag a felrakók sorrendjét tervezi.
+- A normál lerakók nem befolyásolják a térképet vagy a felrakási sorrendet.
+- Teljes autós rakomány esetén a felrakás után kötelező azonnali lerakás marad.
+- A sorrendmotor a feltöltött kézi fuvarnapokból származó történeti mintákat, a sofőrprofilokat és a közúti távolságot együtt használja.
+- A rögzítő zászlók helye változatlanul elsőbbséget élvez.
+
+A V35 tesztjei:
+- Névre jelölt fuvar nem mozdul.
+- Azonos külső felrakó Dobozos rendelései együtt maradnak.
+- A külön felrakók száma erősebb terhelési tényező, mint a rendelésdarabszám.
+- Martin, Márió és Patrik jóváhagyott példái reprodukálhatók.
+- A 2026.07.22-i három kézi felrakási minta reprodukálható.
+- Teljes autós felrakó után közvetlenül kötelező lerakó esemény következik.
+- Normál lerakó nem kerül bele az útvonaltervbe.
