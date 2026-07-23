@@ -1,0 +1,42 @@
+FUVAR-SZERVEZŐ V32 – TESZTEREDMÉNYEK
+Dátum: 2026-07-23
+
+Sikeres tesztek: 14/14
+
+KANONIKUS ÚTVONALTESZTEK – 12/12
+1. Martin felrakók:
+   Attacső → Merkapt → DT Közmű
+2. Márió felrakók:
+   Szatmári → Larex → Ezerker → Fogarasi → Atta
+3. Patrik felrakók:
+   Niczuk → Cairox → Sebők → Fogarasi
+4. Patrik bővített felrakók:
+   Niczuk → Cairox → Gienger → Lambda → Szögker → Szerelvénybolt
+5. Márió teljes rakomány utáni felrakók:
+   Néber → Szatmári → Merkapt → Ezerker → Ryng → Központi raktár
+6. Martin lerakók:
+   Le Jardin → Metrodome
+7. Martin lerakók:
+   Moxy VUC → Sofitel → Waterfront
+8. Márió lerakók:
+   Sofitel → Kincsem
+9. Patrik lerakók:
+   Moxy VUC → Metrodome
+10. Márió teljes példájának későbbi lerakói:
+    Kincsem K6 → M76 → Moxy VUC → Sofitel → Cosmo → Metrodome
+11. Martin befelé eső, szálas Sebők-felrakójának felismerése: sikeres
+12. „Teljes autónyi rakomány” megjegyzés felismerése: sikeres
+
+INTEGRÁCIÓS TESZT – 1/1
+Martin teljes sorrend:
+Sebők → Niczuk → Központi raktár → Empack → Lambda → Le Jardin → Metrodome
+Eredmény: sikeres
+
+SZÉTOSZTÁSI TESZT – 1/1
+22 külön fuvar, 3 sofőr:
+Márió 7, Patrik 8, Martin 7
+Eltérés: 1 fuvar
+Eredmény: sikeres
+
+Megjegyzés:
+Az integrációs tesztben az internetes OSRM szolgáltatás nem volt elérhető, ezért a program automatikus légvonalas tartalék számítása futott. A sorrend így is megfelelt az elvárt eredménynek.
