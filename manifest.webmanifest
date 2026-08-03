@@ -1,22 +1,12 @@
 {
-  "name": "Fuvarszervező V35",
-  "short_name": "Fuvarszervező V35",
+  "name": "Fuvarszervező V36",
+  "short_name": "Fuvarszervező V36",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#f1f5f7",
-  "theme_color": "#103A56",
+  "background_color": "#f5f7fb",
+  "theme_color": "#082d59",
   "icons": [
-    {
-      "src": "icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    {"src":"icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
+    {"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
   ]
 }

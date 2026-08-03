@@ -1,30 +1,19 @@
-FUVAR- ÉS ÚTVONALTERVEZŐ V35
+FUVAR- ÉS ÚTVONALTERVEZŐ V36
 
-GitHub Pages feltöltés:
-1. A ZIP tartalmát csomagold ki.
-2. A fájlokat a repository gyökérkönyvtárába töltsd fel.
-3. GitHub Pages: Deploy from branch / main / root.
-4. Feltöltés után egyszer Ctrl+F5 frissítés javasolt.
+Telepítés GitHub Pages-re:
+1. A ZIP teljes tartalmát másold a GitHub repository gyökerébe.
+2. A régi fájlokat cseréld le.
+3. GitHub: Settings -> Pages -> Deploy from a branch -> main / root.
+4. Feltöltés után használj Ctrl+F5 frissítést. Telefonon zárd be, majd nyisd meg újra az alkalmazást.
 
-V35 fő változásai:
-- A szétosztás alapegysége elsősorban a külön felrakóhely, nem a rendelésdarabszám.
-- Az Autó oszlop Patrik/Márió/Martin értékei továbbra is fixek.
-- A Dobozos tételek egész külső felrakóblokkokban oszlanak szét.
-- Ugyanazon külső felrakó Dobozos rendelései nem szakadnak több sofőrre.
-- A Központi raktár projektblokkjai terheléskiegyenlítéshez külön oszthatók.
-- Martin csak valódi alulterhelésnél és alacsony hosszú/nagyterjedelmű terhelésnél kap Dobozos blokkot.
-- A tételek neve és megjegyzése alapján szélesebb hosszú- és nagyterjedelműanyag-felismerés működik.
-- Az optimalizálás normál esetben kizárólag a felrakók sorrendjét tervezi.
-- A normál lerakók nem befolyásolják a térképet vagy a felrakási sorrendet.
-- Teljes autós rakomány esetén a felrakás után kötelező azonnali lerakás marad.
-- A sorrendmotor a feltöltött kézi fuvarnapokból származó történeti mintákat, a sofőrprofilokat és a közúti távolságot együtt használja.
-- A rögzítő zászlók helye változatlanul elsőbbséget élvez.
-
-A V35 tesztjei:
-- Névre jelölt fuvar nem mozdul.
-- Azonos külső felrakó Dobozos rendelései együtt maradnak.
-- A külön felrakók száma erősebb terhelési tényező, mint a rendelésdarabszám.
-- Martin, Márió és Patrik jóváhagyott példái reprodukálhatók.
-- A 2026.07.22-i három kézi felrakási minta reprodukálható.
-- Teljes autós felrakó után közvetlenül kötelező lerakó esemény következik.
-- Normál lerakó nem kerül bele az útvonaltervbe.
+V36 fő változások:
+- új, letisztult világos felület és sötétkék asztali oldalsáv;
+- sofőrönként külön „Nézet” ablak saját térképpel és szerkeszthető fuvarlistával;
+- a külön nézet és a főoldal ugyanazt az adatállapotot használja;
+- a buborék húzásakor automatikus fel- és lefelé görgetés;
+- a térképi nagyítás/kicsinyítés vezérlők a térképkonténerben maradnak;
+- teljesített hátralék kikerül a Hátralék listából, és szürke „Elintézve” állapotban marad;
+- az elintézett hátralék szerkeszthető, de nem vesz részt az optimalizálásban;
+- sofőrönként eltérő útvonalirány: Patrik a Központi raktárból, Martin és Márió a lakhelyük felől;
+- Ryng helyes alapcíme: 1173 Budapest, Flamingó köz 4.;
+- a térkép továbbra is kizárólag a felrakókat használja.
