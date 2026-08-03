@@ -76,3 +76,27 @@ main{max-width:1900px;padding:18px 18px calc(92px + env(safe-area-inset-bottom))
 @media(max-width:760px){
   .topbar{padding:12px;align-items:flex-start}.topbar h1{font-size:18px}.top-buttons{gap:4px}.ghost{padding:7px 8px;font-size:9px}.toolbar{padding:10px}.route-view-actions{min-width:80px}.dropoff-button,.driver-view-button{padding:7px 8px}.map{height:220px}.driver-focus-dialog{width:100vw;height:100vh;max-height:100vh;border-radius:0}.driver-focus-content{grid-template-columns:1fr;padding:9px}.driver-focus-map{height:310px;min-height:310px}.driver-focus-route{min-height:300px}.driver-focus-head{padding:12px}.routes{grid-template-columns:1fr}
 }
+
+/* ==================== V37 – rögzített Nézet térkép és felrakási blokkok ==================== */
+.v37-numbered-marker{background:transparent;border:0}.v37-numbered-marker span{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--blue);color:#fff;font-weight:900;border:3px solid #fff;box-shadow:0 3px 10px #0b315455}
+.driver-focus-head{position:relative;z-index:100;flex:0 0 auto}
+.driver-focus-content{position:relative;align-items:start;scroll-behavior:smooth}
+.driver-focus-map{position:sticky;top:0;align-self:start;height:calc(min(94vh,980px) - 112px);min-height:520px;max-height:850px;z-index:25;background:#e8eef5;box-shadow:0 5px 18px #18385814}
+.driver-focus-map .leaflet-control-container{z-index:30}
+.pickup-move-block{margin-bottom:12px;padding:8px;border:1px solid #cddceb;border-radius:16px;background:#eef5fc;box-shadow:0 3px 12px #1838580b}
+.pickup-move-block.sortable-ghost{opacity:.38}.pickup-move-block.sortable-drag{box-shadow:0 18px 45px #102c3c40}
+.pickup-group-bar{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:9px;margin-bottom:8px;padding:7px 8px;border-radius:11px;background:#fff;border:1px solid #dce7f2;color:#173a61}
+.pickup-group-bar b{display:block;font-size:12px}.pickup-group-bar small{display:block;margin-top:2px;color:#6d7f93;font-size:10px;line-height:1.35;white-space:normal}
+.pickup-group-drag{display:grid;place-items:center;width:32px;height:32px;border-radius:9px;background:#e9f2fc;color:#54769a;font-size:19px;cursor:grab;user-select:none;touch-action:none}.pickup-group-drag:active{cursor:grabbing}
+.ungroup-button{padding:7px 9px;border-radius:9px;background:#fff4e7;color:#9a5a10;border:1px solid #f0d1aa;font-size:10px;white-space:nowrap}
+.pickup-group-orders{display:grid;gap:8px}.pickup-group-orders .route-block{margin:0}.inside-pickup-group>.bubble{border-color:#d2deeb}.inside-pickup-group .drag{cursor:grab}
+.group-toggle-button{background:#eaf7ef!important;color:#26724c!important;border-color:#c7e5d3!important}.ungrouped-tag{background:#fff1dc!important;color:#9b651c!important}
+.resolved-pickup-block{opacity:.82}.resolved-pickup-block .pickup-group-drag{cursor:default;color:#8a96a4;background:#e5e9ee}.resolved-pickup-block .ungroup-button{opacity:.65}
+
+@media(max-width:760px){
+  .driver-focus-content{display:block;overflow:auto;padding:8px}
+  .driver-focus-map{position:sticky;top:0;height:250px;min-height:250px;max-height:250px;margin-bottom:10px;border-radius:13px;z-index:60}
+  .driver-focus-route{min-height:300px}
+  .pickup-group-bar{grid-template-columns:32px minmax(0,1fr);gap:7px}
+  .pickup-group-bar .ungroup-button{grid-column:1/-1;width:100%}
+}
