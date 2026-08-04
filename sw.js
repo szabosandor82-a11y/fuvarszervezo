@@ -1,12 +1,28 @@
-const C='fuvarszervezo-v40-20260804';
-const A=['./','./index.html','./styles.css?v=40','./app.js?v=40','./planner-v32.js?v=40','./planner-v33.js?v=40','./planner-v34.js?v=40','./planner-v35.js?v=40','./planner-v37.js?v=40','./planner-v40.js?v=40','./ole-msg-reader.js?v=40','./data.js?v=40','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
-self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.addAll(A)).then(()=>self.skipWaiting())));
-self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
-self.addEventListener('fetch',e=>{
-  if(e.request.method!=='GET')return;
-  const u=new URL(e.request.url),local=u.origin===self.location.origin;
-  const appAsset=local&&(u.pathname.endsWith('/')||u.pathname.endsWith('/index.html')||u.pathname.endsWith('/app.js')||u.pathname.endsWith('/planner-v32.js')||u.pathname.endsWith('/planner-v33.js')||u.pathname.endsWith('/planner-v34.js')||u.pathname.endsWith('/planner-v35.js')||u.pathname.endsWith('/planner-v37.js')||u.pathname.endsWith('/planner-v40.js')||u.pathname.endsWith('/ole-msg-reader.js')||u.pathname.endsWith('/data.js')||u.pathname.endsWith('/styles.css')||u.pathname.endsWith('/manifest.webmanifest'));
-  if(appAsset){
-    e.respondWith(fetch(e.request).then(r=>{const copy=r.clone();caches.open(C).then(c=>c.put(e.request,copy));return r}).catch(()=>caches.match(e.request).then(r=>r||caches.match('./index.html'))));
-  }else e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)));
+const CACHE_NAME = 'fuvarszervezo-v41-20260804';
+const APP_ASSETS = [
+  './', './index.html', './styles.css?v=41', './app.js?v=41', './data.js?v=41',
+  './planner-v32.js?v=41', './planner-v33.js?v=41', './planner-v34.js?v=41',
+  './planner-v35.js?v=41', './planner-v37.js?v=41', './planner-v41.js?v=41',
+  './ole-msg-reader.js?v=41', './manifest.webmanifest', './icon-192.png', './icon-512.png'
+];
+self.addEventListener('install', event => event.waitUntil(
+  caches.open(CACHE_NAME).then(cache => cache.addAll(APP_ASSETS)).then(() => self.skipWaiting())
+));
+self.addEventListener('activate', event => event.waitUntil(
+  caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key)))).then(() => self.clients.claim())
+));
+self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  const local = url.origin === self.location.origin;
+  const appAsset = local && (url.pathname.endsWith('/') || /\/(?:index\.html|styles\.css|app\.js|data\.js|planner-v(?:32|33|34|35|37|41)\.js|ole-msg-reader\.js|manifest\.webmanifest|icon-(?:192|512)\.png)$/.test(url.pathname));
+  if (appAsset) {
+    event.respondWith(fetch(event.request).then(response => {
+      const copy = response.clone();
+      caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+      return response;
+    }).catch(() => caches.match(event.request).then(response => response || caches.match('./index.html'))));
+  } else {
+    event.respondWith(caches.match(event.request).then(response => response || fetch(event.request)));
+  }
 });

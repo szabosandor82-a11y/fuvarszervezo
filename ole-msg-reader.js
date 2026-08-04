@@ -1,4 +1,4 @@
-/* Fuvarszervező V40 - local Outlook MSG reader
+/* Fuvarszervező V41 - local Outlook MSG reader
    Standalone browser/Node parser for Microsoft Compound File Binary (.msg).
    No dynamic import and no external MSG service.
 */

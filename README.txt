@@ -1,29 +1,61 @@
-Fuvarszervező V40 – GitHub Pages csomag
+Fuvarszervező V41 – GitHub Pages csomag
 ======================================
 
-Feltöltés:
+Telepítés
+---------
 1. A ZIP teljes tartalmát másold a GitHub Pages tároló gyökérkönyvtárába.
-2. A korábbi fájlokat cseréld le.
-3. Feltöltés után használj Ctrl+F5 frissítést. Telefonon zárd be, majd nyisd meg újra az alkalmazást.
+2. A korábbi fájlokat cseréld le, az index.html közvetlenül a gyökérben legyen.
+3. A feltöltés után várd meg a Pages frissítését, majd használj Ctrl+F5-öt.
+4. Telefonon zárd be teljesen az oldalt, majd nyisd meg újra.
 
-V40 fő újdonságok:
-- Ingyenes, böngészőben futó Outlook-szabálymotor; nincs OpenAI API és nincs feldolgozási díj.
-- Két külön, egyszerre több fájlt fogadó import:
+V41 Outlook-import
+------------------
+- Két külön, több MSG-fájlt fogadó terület van:
   - Dobozos import
   - Martin / Platós import
-- Az MSG levélszövege és az összes csatolt PDF együtt kerül feldolgozásra.
-- Normál SR0 rendelésnél a felrakót a levélből, majd a PDF-ből és a törzsadatból keresi.
-- Ismeretlen beszállító esetén a „Felvétel címe” blokkban lévő céget és felrakóhelyet importáláskor automatikusan felveszi a Beszállítók törzsbe.
-- KRPR szabály: a felrakó mindig a Szigetszentmiklósi Központi Raktár, 2310 Szigetszentmiklós, Kereskedő utca 2.
-- PRPR szabály: a Forrás raktár a felrakó, a Cél raktár a lerakó.
-- Visszáru szabály: a projekt lesz a felrakó, a beszállító/üzlet a lerakó; több eredeti rendelési szám egy közös fuvarbuborékban marad.
-- A rendelésazonosítóból csak a „/” utáni rész kerül be.
-- A PDF vevői/aláírási címe, például a Láva utca 7., nem írja felül a projekt törzsadatban tárolt lerakási címet.
-- Hátralék tételszinten működik: csak az átütemezett tétel kerül az új napra és a Hátralék fülre; a „Megkaptuk” pipa után csak az adott tétel kerül ki onnan.
-- Szerelvénybolt helyes címe: 1182 Budapest, Üllői út 807/B.
-- A térképen továbbra is kizárólag a felrakók jelennek meg.
+- A behúzott rendelések a megfelelő terület alatt, egymás után jelennek meg.
+- A helyi ole-msg-reader.js olvassa az Outlook MSG tárgyát, levélszövegét és mellékleteit.
+- A feldolgozás böngészőben történik, OpenAI API és feldolgozási díj nélkül.
+- A „Jóváhagyott rendelések importálása” alapértelmezetten a következő napra teszi a fuvarokat.
+- A Dobozos rendelések szétoszthatók, a Martin / Platós rendelések fixen Martinhoz kerülnek.
+- Egy korábban importált rendelés újra behúzható; az új Outlook-import frissíti a korábbi Outlook-példányt.
 
-Ellenőrzött minták:
+Mellékletek és több rendelés
+----------------------------
+- Csak a „Szállítói rendelés” fejlécű PDF számít normál elsődleges rendelésnek.
+- A beszállítói rendelés-visszaigazolás nem hoz létre második fuvart.
+- A „Raktárközi” fejlécű KRPR/PRPR bizonylat elsődleges dokumentumként feldolgozható.
+- Ha egy levélben több külön SR0 szállítói rendelés van, mindegyik külön importkártyát és külön rendelést kap.
+- Ugyanannak a rendelésnek a visszaigazolása vagy ismételt melléklete nem duplikálja a fuvart.
+
+Cím- és irányszabályok
+----------------------
+- SR0: a PDF „Projekt név” mezőjének értékét keresi meg a projekttörzsben, és annak címét használja lerakóként.
+- Az SR0 lerakó neve és címe az import-előnézetben utólag szerkeszthető.
+- KRPR: a felrakó mindig a Szigetszentmiklósi Központi Raktár:
+  2310 Szigetszentmiklós, Kereskedő utca 2.
+- KRPR: ha a célraktár/projekt címe nincs a PDF-ben, a program a projekttörzsből tölti ki.
+- PRPR: a forrásraktár a felrakó, a célraktár a lerakó; a címek a törzsadatokból is pótolhatók.
+- Visszáru: a levél szövege alapján a projekt lesz a felrakó, a beszállító/üzlet a lerakó.
+- A Cosmo–Szatmári Késmárk visszáru iránya: Cosmo → Szatmári Késmárk.
+- A PDF vevői vagy aláírási címe, például a Láva utca 7., nem írja felül a projekt lerakási címét.
+- Szerelvénybolt helyes címe: 1182 Budapest, Üllői út 807/B.
+- A térképen kizárólag a felrakók jelennek meg.
+
+Törlés
+------
+- A „Minden import törlése” törli mindkét előnézeti listát.
+- Törli a korábban jóváhagyott Outlook-importokat is, amelyek már nem látszanak az előnézetben, de az autóknál még szerepelnek.
+- A kézzel vagy Excelből felvitt rendelések nem törlődnek.
+- A kapcsolódó Outlook-hátralék és elavult útvonalterv is kitakarításra kerül.
+
+Hátralék
+--------
+- Csak az átütemezett tétel kerül az új napra és a Hátralékok fülre.
+- A „Megkaptuk” jelölés után az adott tétel automatikusan kikerül a Hátralékok közül.
+
+Ellenőrzött minták
+------------------
 - Larex / M76 / 003141
 - Szatmári Késmárk / Kincsem K6 / 004911
 - Gali SwimTex / City Pearl II / 004932
@@ -32,12 +64,8 @@ Ellenőrzött minták:
 - KRPR Központi raktár → Le Jardin / 000745
 - Kekelit visszáru: Cosmo → Szatmári Késmárk / 002226, 001998, 001832
 
-Technikai megjegyzés:
-- Az MSG-olvasó a csomag része, nem töltődik külső CDN-ről. A PDF-olvasó és a térképi/Excel-könyvtárak továbbra is az index.html-ben megadott CDN-ekről töltődnek.
-- A feldolgozás nem küldi el a fájlokat külső AI-szolgáltatásnak; a böngészőben történik.
-- A teljesen szokatlan megfogalmazású leveleknél az import-előnézetben kézi javításra lehet szükség.
-
-V40 javítás:
-- A külső dinamikus MSG-import megszűnt.
-- Az ole-msg-reader.js helyi, csomagolt CFB/Outlook parser olvassa a levél tárgyát, törzsét és mellékleteit.
-- A teljes MSG → PDF → szabálymotor folyamat valódi feltöltött mintákkal tesztelve.
+Technikai megjegyzés
+--------------------
+- Az MSG-olvasó helyi fájl, nem külső CDN-ről töltődik.
+- A PDF-, térkép- és Excel-könyvtárak az index.html-ben megadott CDN-ekről töltődnek, ezért ezekhez internetkapcsolat szükséges.
+- Szokatlan levélformátumnál az import-előnézetben kézi javításra lehet szükség; a program nem talál ki hiányzó címet.
