@@ -1,0 +1,22 @@
+FUvarszervező V38 – teszteredmény
+================================
+
+V38 Outlook-import szabálytesztek: 11/11 sikeres
+Korábbi kompatibilitási tesztek: 39/39 sikeres
+Összes automatikus szabályteszt: 50/50 sikeres
+
+Sikeresen ellenőrzött esetek:
+1. A rendelésazonosítóból csak a / utáni rész marad meg.
+2. Fájlnévből a SERPA rendelésazonosító felismerhető.
+3. Kincsem K6 projekt-hint felismerése fájlnévből.
+4. Szatmári + Késmárk felrakó felismerése.
+5. Fogarasi + Hunyadi információ összekapcsolása.
+6. Larex felrakó felismerése.
+7. PDF tételsorok felismerése, hosszú/szálas anyag jelölése.
+8. M76 projekt címének betöltése a projekttörzsből.
+9. Kincsem K6 projekt címének betöltése a projekttörzsből.
+10. Martin / Platós import fix Martin-besorolása.
+11. Dobozos import kiosztatlan Dobozos kategóriája.
+
+Megjegyzés:
+A .msg feldolgozás böngészőben külső, verziórögzített modul használatával történik. A helyi Node szabályteszt az adatkinyerési és besorolási logikát ellenőrzi; a GitHub Pages oldalon az első Outlook-importhoz internetkapcsolat szükséges.
