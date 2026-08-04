@@ -1,4 +1,4 @@
-/* Fuvarszervező V41
+/* Fuvarszervező V43 – Outlook import modul
    Outlook (.msg) + PDF rendelésimport.
 
    - Két külön tömeges import: Dobozos és Martin / Platós.
@@ -10,7 +10,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '41';
+  const VERSION = '43';
   const PDF_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const LEGAL_WORDS = new Set(['kft', 'zrt', 'bt', 'nyrt', 'trade', 'hungary', 'magyarorszag', 'es', 'the', 'partner']);
   const PROJECT_NOISE = new Set(['budapest', 'garancia', 'terv', 'projekt', 'utem', 'epulet', 'tarsashaz', 'hotel', 'pr']);
@@ -24,7 +24,7 @@
   const htmlEsc = value => typeof esc === 'function'
     ? esc(value ?? '')
     : String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-  const id = () => typeof uid === 'function' ? uid() : `v41-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const id = () => typeof uid === 'function' ? uid() : `v43-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const localISO = date => { const d = new Date(date); const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; };
   const tomorrowISO = () => { const d = new Date(); d.setDate(d.getDate() + 1); return localISO(d); };
   const selectedImportDate = () => ((typeof document !== 'undefined' ? document.getElementById('v38ImportDate')?.value : '') || tomorrowISO());
@@ -530,18 +530,24 @@
   }
 
   function entriesFromPdfDocument({ category, sourceName, subject, body, pdf, attachmentNames = [] }) {
-    return splitPdfDocumentByOrders(pdf).map(part => buildExtractedEntry({
-      category, sourceName, subject, body, pdfName: part.name, pdfText: part.text, pdfLines: part.lines, attachmentNames, forcedRefs: part.forcedRefs || []
+    const allRefs = extractOrderRefs(pdf.text || '', pdf.name || '', subject || '', sourceName || '', body || '');
+    const messageOrderNos = unique(allRefs.map(ref => ref.no));
+    return splitPdfDocumentByOrders(pdf).map(part => ({
+      ...buildExtractedEntry({
+        category, sourceName, subject, body, pdfName: part.name, pdfText: part.text, pdfLines: part.lines, attachmentNames, forcedRefs: part.forcedRefs || []
+      }),
+      messageOrderNos
     }));
   }
 
   function entriesFromMessageBody({ category, sourceName, subject, body, attachmentNames = [] }) {
     const refs = extractOrderRefs(subject, sourceName, body);
+    const messageOrderNos = unique(refs.map(ref => ref.no));
     const returnMode = isReturnText(subject, body);
     if (!returnMode && refs.length > 1) {
-      return refs.map(ref => buildExtractedEntry({ category, sourceName, subject, body, attachmentNames, forcedRefs: [ref] }));
+      return refs.map(ref => ({ ...buildExtractedEntry({ category, sourceName, subject, body, attachmentNames, forcedRefs: [ref] }), messageOrderNos }));
     }
-    return [buildExtractedEntry({ category, sourceName, subject, body, attachmentNames })];
+    return [{ ...buildExtractedEntry({ category, sourceName, subject, body, attachmentNames }), messageOrderNos }];
   }
 
   async function parsePdfFile(file, category) {
@@ -569,7 +575,7 @@
         const parsed = await pdfTextAndLines(content);
         pdfs.push({ name: attachmentName, ...parsed });
       } catch (error) {
-        console.warn('[V41] PDF melléklet hiba', attachmentName, error);
+        console.warn('[V43] PDF melléklet hiba', attachmentName, error);
       }
     }
     if (!pdfs.length) return entriesFromMessageBody({ category, sourceName: file.name, subject, body, attachmentNames: names });
@@ -589,7 +595,9 @@
       item.info.refs.forEach(ref => seenRefs.add(ref.full));
       selected.push(item.pdf);
     }
-    return selected.flatMap(pdf => entriesFromPdfDocument({ category, sourceName: file.name, subject, body, pdf, attachmentNames: names }));
+    const allMessageOrderNos = unique(selected.flatMap(pdf => extractOrderRefs(pdf.text || '', pdf.name || '').map(ref => ref.no)));
+    return selected.flatMap(pdf => entriesFromPdfDocument({ category, sourceName: file.name, subject, body, pdf, attachmentNames: names }))
+      .map(entry => ({ ...entry, messageOrderNos: allMessageOrderNos.length ? allMessageOrderNos : (entry.messageOrderNos || entry.sourceOrderNos || []) }));
   }
 
   async function parseDroppedFile(file, category) {
@@ -611,7 +619,8 @@
       <div class="v38-source"><b>${htmlEsc(entry.sourceName)}</b><span>${htmlEsc(entry.orderType || 'SR0')}${entry.isReturn ? ' · visszáru' : ''}</span>${entry.pdfName && entry.pdfName !== entry.sourceName ? `<span>PDF: ${htmlEsc(entry.pdfName)}</span>` : ''}<span class="v38-status ${entry.warnings.length ? 'warn' : 'ok'}">${htmlEsc(statusText(entry))}</span></div>
       <div class="v38-fields">
         <label>Felvétel dátuma<input data-field="scheduleDate" type="date" value="${htmlEsc(entry.scheduleDate)}"></label>
-        <label>Rendelésszám<input data-field="orderNo" value="${htmlEsc(entry.orderNo)}" placeholder="pl. 004911"></label>
+        ${entry.messageOrderNos?.length > 1 ? `<label class="v43-all-order-nos">Rendelésszámok a levélben<input value="${htmlEsc(entry.messageOrderNos.join(', '))}" readonly></label>` : ''}
+        <label>${entry.messageOrderNos?.length > 1 ? 'Aktuális rendelés száma' : 'Rendelésszám'}<input data-field="orderNo" value="${htmlEsc(entry.orderNo)}" placeholder="pl. 004911"></label>
         <label>Felrakó<input data-field="pickupName" value="${htmlEsc(entry.pickupName)}"></label>
         <label>Felrakó címe<input data-field="pickupAddress" value="${htmlEsc(entry.pickupAddress)}"></label>
         <label>Lerakó / projekt<input data-field="projectName" value="${htmlEsc(entry.projectName)}"></label>
@@ -693,7 +702,7 @@
         success += entries.length;
       } catch (error) {
         failures++;
-        console.error('[V41] Outlook import hiba', file.name, error);
+        console.error('[V43] Outlook import hiba', file.name, error);
         pending.push({
           _id: id(), approved: false, category, sourceName: file.name, subject: '', pdfName: '', attachmentNames: [], scheduleDate: selectedImportDate(), orderNo: '', pickupName: '', pickupAddress: '', projectName: '', dropAddress: '', items: [], warnings: [`Feldolgozási hiba: ${error?.message || error}`], duplicate: false, extractionReason: ''
         });
@@ -771,6 +780,9 @@ ${entry.subject || ''}`) || project;
       items: (entry.items || []).map(item => ({ ...item, _id: item._id || id(), received: false, missingQty: '' })),
       longMaterialReason: isMartin ? ((entry.items || []).find(item => item.longMaterial)?.name || 'Martin / Platós Outlook import') : '',
       markedMartin: isMartin, importVehicleCategory: isMartin ? 'martin' : 'dobozos', importAutoRaw: isMartin ? 'Martin' : 'Dobozos', importVehicleLocked: isMartin,
+      messageOrderNos: entry.messageOrderNos?.length ? entry.messageOrderNos.slice() : sourceNos.slice(),
+      missingSupplierMaster: ((entry.pickupRole || 'supplier') === 'supplier' && !entry.pickupAddress) || (entry.dropRole === 'supplier' && !entry.dropAddress),
+      missingProjectMaster: (entry.pickupRole === 'project' && !entry.pickupAddress) || ((entry.dropRole || 'project') === 'project' && !entry.dropAddress),
       outlookImport: true, outlookSourceFile: entry.sourceName, outlookPdfFile: entry.pdfName || '', outlookImportedAt: new Date().toISOString(), completed: false
     };
   }

@@ -1,0 +1,23 @@
+Fuvarszervező V43 teszteredmény
+==============================
+
+JavaScript szintaktikai ellenőrzés: sikeres
+Automatikus tesztek összesen: 71/71 sikeres
+
+TEST_V33.js: 8/8
+TEST_V34.js: 8/8
+TEST_V35.js: 11/11
+TEST_V37.js: 12/12
+TEST_V41.js (Outlook-import alaptesztek): 12/12
+TEST_V41_CHANGES.js (több SR0, visszaigazolás, újraimport): 8/8
+TEST_V41_MSG.js (valódi MSG-k): 7/7
+TEST_V43.js (szétosztás, lakhely, szerepkörös törzsadat): 5/5
+
+A TEST_V43.js ellenőrizte:
+- névre rögzített Márió/Patrik/Martin fuvar automatikusan nem mozdul;
+- Márió nem kap budai Dobozos címet;
+- Patrik nem kap pesti Dobozos címet;
+- a 4–8–8 címelosztás Martin bevonásával legfeljebb 2 cím különbségre javul;
+- Márió Vác, Martin Felcsút, Patrik a központi raktár felől indul;
+- a Cosmo → Szatmári Késmárk visszáru címellenőrzése helyes;
+- a Szatmári Késmárk, Merkapt Maglódi és Sebők Törökbálint telephely bekerül.

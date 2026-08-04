@@ -133,3 +133,6 @@ button.danger-outline{background:#fff;border:1px solid #d85d63;color:#b92f39}
 button.danger-outline:hover{background:#fff0f1}
 @media(max-width:1180px){.v38-import-grid{grid-template-columns:1fr}.v41-category-preview .v38-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.v41-category-preview .v38-fields{grid-template-columns:1fr}.v41-category-preview-head{align-items:flex-start;flex-direction:column}.v41-category-preview-head span{text-align:left}}
+
+/* V43: több SR0 rendelésszám egy levélben */
+.v43-all-order-nos input[readonly]{background:#eef4fb;border-color:#c7d6e8;color:#17375e;font-weight:700;cursor:default}

@@ -29,7 +29,7 @@ await test('két elsődleges SR0 melléklet két külön importkártyát ad, a v
  class FakeReader{constructor(){}getFileData(){return{subject:'Két rendelés',body:'Mellékletek szerint megrendelem.',attachments:[{fileName:'rend1.pdf',key:1},{fileName:'visszaig.pdf',key:2},{fileName:'rend2.pdf',key:3}]}}getAttachment(a){return{content:Buffer.from(String(a.key))}}}
  global.LocalMsgReader=FakeReader;
  global.V41PdfTextExtractor=async bytes=>{const key=Buffer.from(bytes).toString();const text=key==='1'?'Szállító rendelés\n2026-SR0/000111\nProjekt név: Budapest_Cosmo_Residence\nSzállító: Merkapt Zrt.':key==='2'?'Rendelés visszaigazolás\n2026-SR0/000111': 'Szállító rendelés\n2026-SR0/000112\nProjekt név: Budapest_LeJardin_II_felépítmény\nSzállító: Sebők és Társa Kft';return{text,lines:text.split('\n')}};
- const f={name:'ketto.msg',arrayBuffer:async()=>new ArrayBuffer(1)};const entries=await V.parseDroppedFile(f,'dobozos');eq(entries.map(e=>e.orderNo),['000111','000112']);
+ const f={name:'ketto.msg',arrayBuffer:async()=>new ArrayBuffer(1)};const entries=await V.parseDroppedFile(f,'dobozos');eq(entries.map(e=>e.orderNo),['000111','000112']);eq(entries.map(e=>e.messageOrderNos),[['000111','000112'],['000111','000112']]);
 });
 console.log(`\nV41 módosítási teszt: ${pass}/${pass+fail} sikeres.`);if(fail)process.exit(1);
 })();

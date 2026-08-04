@@ -1,71 +1,91 @@
-Fuvarszervező V41 – GitHub Pages csomag
+Fuvarszervező V43 – GitHub Pages csomag
 ======================================
 
 Telepítés
 ---------
 1. A ZIP teljes tartalmát másold a GitHub Pages tároló gyökérkönyvtárába.
-2. A korábbi fájlokat cseréld le, az index.html közvetlenül a gyökérben legyen.
-3. A feltöltés után várd meg a Pages frissítését, majd használj Ctrl+F5-öt.
+2. A korábbi fájlokat cseréld le; az index.html közvetlenül a gyökérben legyen.
+3. Várd meg a GitHub Pages frissítését, majd használj Ctrl+F5-öt.
 4. Telefonon zárd be teljesen az oldalt, majd nyisd meg újra.
+5. A V43 új gyorsítótár-nevet használ, ezért a korábbi V41 fájlok nem maradnak aktívak.
 
-V41 Outlook-import
-------------------
-- Két külön, több MSG-fájlt fogadó terület van:
-  - Dobozos import
-  - Martin / Platós import
-- A behúzott rendelések a megfelelő terület alatt, egymás után jelennek meg.
-- A helyi ole-msg-reader.js olvassa az Outlook MSG tárgyát, levélszövegét és mellékleteit.
-- A feldolgozás böngészőben történik, OpenAI API és feldolgozási díj nélkül.
-- A „Jóváhagyott rendelések importálása” alapértelmezetten a következő napra teszi a fuvarokat.
-- A Dobozos rendelések szétoszthatók, a Martin / Platós rendelések fixen Martinhoz kerülnek.
-- Egy korábban importált rendelés újra behúzható; az új Outlook-import frissíti a korábbi Outlook-példányt.
+V43 fuvarszétosztás
+-------------------
+- Az Autó mezőben Márió, Patrik vagy Martin névre rögzített fuvar automatikusan nem mozgatható.
+- Ezeket kizárólag a felhasználó helyezheti át kézzel.
+- Az automatikus szétosztás csak a Dobozos és a még be nem sorolt fuvarokat mozgathatja.
+- Márió elsődlegesen a pesti oldalt kapja.
+- Patrik elsődlegesen a budai oldalt kapja.
+- Budai Dobozos fuvar nem kerül Márióhoz, ha Patrik aktív.
+- Pesti Dobozos fuvar nem kerül Patrikhoz, ha Márió aktív.
+- Martin kapja a platós/szálas anyagokat, és alulterheléskor Dobozos felrakóblokkokkal besegít.
+- Az igazságosságot elsősorban az egyedi felrakási címek száma alapján számolja.
+- Ha például Martin 4, a másik két sofőr 8–8 címen áll, mozgatható Dobozos címekből Martin is kap, amíg a különbség jellemzően legfeljebb 1–2 cím.
+- Az optimalizálás továbbra is csak a sorrendet módosítja, sofőrt nem.
 
-Mellékletek és több rendelés
-----------------------------
-- Csak a „Szállítói rendelés” fejlécű PDF számít normál elsődleges rendelésnek.
-- A beszállítói rendelés-visszaigazolás nem hoz létre második fuvart.
-- A „Raktárközi” fejlécű KRPR/PRPR bizonylat elsődleges dokumentumként feldolgozható.
-- Ha egy levélben több külön SR0 szállítói rendelés van, mindegyik külön importkártyát és külön rendelést kap.
-- Ugyanannak a rendelésnek a visszaigazolása vagy ismételt melléklete nem duplikálja a fuvart.
+Indulási irányok
+----------------
+- Márió: Vác felől indul.
+- Martin: Felcsút felől indul.
+- Patrik: a szigetszentmiklósi központi raktárból indul.
+- A kézzel megadott pontos lakhelycím Máriónál és Martinnál elsőbbséget élvez.
 
-Cím- és irányszabályok
-----------------------
-- SR0: a PDF „Projekt név” mezőjének értékét keresi meg a projekttörzsben, és annak címét használja lerakóként.
-- Az SR0 lerakó neve és címe az import-előnézetben utólag szerkeszthető.
-- KRPR: a felrakó mindig a Szigetszentmiklósi Központi Raktár:
-  2310 Szigetszentmiklós, Kereskedő utca 2.
-- KRPR: ha a célraktár/projekt címe nincs a PDF-ben, a program a projekttörzsből tölti ki.
-- PRPR: a forrásraktár a felrakó, a célraktár a lerakó; a címek a törzsadatokból is pótolhatók.
-- Visszáru: a levél szövege alapján a projekt lesz a felrakó, a beszállító/üzlet a lerakó.
-- A Cosmo–Szatmári Késmárk visszáru iránya: Cosmo → Szatmári Késmárk.
-- A PDF vevői vagy aláírási címe, például a Láva utca 7., nem írja felül a projekt lerakási címét.
-- Szerelvénybolt helyes címe: 1182 Budapest, Üllői út 807/B.
-- A térképen kizárólag a felrakók jelennek meg.
+Törzsadat- és címjavítás
+-----------------------
+- A V43 a friss beépített törzsadatokat összevonja a böngészőben már meglévő adatokkal.
+- Kézzel szerkesztett, meglévő címeket nem töröl ki.
+- A címellenőrzés figyelembe veszi a szerepköröket:
+  - normál SR0: beszállító → projekt;
+  - KRPR: központi raktár → projekt/célraktár;
+  - PRPR: forrásraktár → célraktár;
+  - visszáru: projekt → beszállító.
+- Ha egy helyes cím már szerepel a fuvarban, sikertelen névegyezés miatt nem kap téves „hiányzó cím” figyelmeztetést.
+- Beépített külön felrakóhelyek:
+  - Szatmári Késmárk: 1158 Budapest, Késmárk utca 9.
+  - Merkapt Maglódi: 1106 Budapest, Maglódi út 14/B
+  - Sebők Törökbálint: 2045 Törökbálint, Kinizsi utca 28.
+  - Szerelvénybolt: 1182 Budapest, Üllői út 807/B
 
-Törlés
-------
-- A „Minden import törlése” törli mindkét előnézeti listát.
-- Törli a korábban jóváhagyott Outlook-importokat is, amelyek már nem látszanak az előnézetben, de az autóknál még szerepelnek.
-- A kézzel vagy Excelből felvitt rendelések nem törlődnek.
-- A kapcsolódó Outlook-hátralék és elavult útvonalterv is kitakarításra kerül.
+Outlook-import
+--------------
+- Két külön tömeges import: Dobozos és Martin / Platós.
+- A levél tárgya, teljes szövege és a csatolt PDF-ek együtt kerülnek feldolgozásra.
+- Csak a „Szállítói rendelés” vagy raktárközi bizonylat számít elsődleges mellékletnek.
+- A beszállítói visszaigazolás nem hoz létre második fuvart.
+- Több valódi SR0 egy levélben külön rendelésként kerül be.
+- Minden külön importkártyán látszik a levélben szereplő összes SR0 rendelésszám, miközben az aktuális rendelés külön marad.
+- A rendelési azonosítóból csak a / utáni rész kerül be.
+- Korábban importált rendelés újra behúzható; az új változat frissíti a korábbi Outlook-importot.
+- A „Minden import törlése” az előnézetet és a korábban jóváhagyott, rejtett Outlook-importokat is törli.
 
 Hátralék
 --------
 - Csak az átütemezett tétel kerül az új napra és a Hátralékok fülre.
-- A „Megkaptuk” jelölés után az adott tétel automatikusan kikerül a Hátralékok közül.
+- A „Megkaptuk” jelölés után csak az adott tétel kerül ki a Hátralékok közül.
 
-Ellenőrzött minták
-------------------
-- Larex / M76 / 003141
-- Szatmári Késmárk / Kincsem K6 / 004911
-- Gali SwimTex / City Pearl II / 004932
-- Sebők / Le Jardin / 004943
-- Merkapt / Cosmo / 004937
-- KRPR Központi raktár → Le Jardin / 000745
-- Kekelit visszáru: Cosmo → Szatmári Késmárk / 002226, 001998, 001832
+Térkép
+------
+- A térképen csak a felrakók szerepelnek.
+- Normál lerakó nem kerül a térképre vagy a felrakási útvonalvonalba.
+- Teljes autós rakománynál a kötelező lerakás a listában közvetlenül a felrakás után marad.
+
+Tesztelés
+---------
+A csomag JavaScript-fájljai szintaktikailag ellenőrizve lettek.
+Automatikus tesztek: 71/71 sikeres.
+
+A tesztek között szerepel:
+- Márió/Pest és Patrik/Buda területi kiosztás;
+- Martin 4–8–8 terhelési helyzetének kiegyenlítése;
+- névre rögzített fuvarok változatlanul hagyása;
+- Vác/Felcsút/központi indulási pontok;
+- City Pearl, Kincsem K6, Le Jardin, Cosmo, KRPR és Kekelit-visszáru MSG-k;
+- több SR0 és beszállítói visszaigazolás együttes kezelése;
+- KRPR/PRPR és szerepkör-alapú címkitöltés;
+- tételszintű hátralékkezelés.
 
 Technikai megjegyzés
 --------------------
 - Az MSG-olvasó helyi fájl, nem külső CDN-ről töltődik.
-- A PDF-, térkép- és Excel-könyvtárak az index.html-ben megadott CDN-ekről töltődnek, ezért ezekhez internetkapcsolat szükséges.
-- Szokatlan levélformátumnál az import-előnézetben kézi javításra lehet szükség; a program nem talál ki hiányzó címet.
+- A PDF-, térkép- és Excel-könyvtárakhoz internetkapcsolat szükséges.
+- Szokatlan levélformátumnál az import-előnézet továbbra is kézzel szerkeszthető.
