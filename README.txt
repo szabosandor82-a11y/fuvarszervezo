@@ -1,37 +1,38 @@
-Fuvarszervező V38 – GitHub Pages csomag
+Fuvarszervező V39 – GitHub Pages csomag
 ======================================
 
 Feltöltés:
 1. A ZIP teljes tartalmát másold a GitHub Pages tároló gyökérkönyvtárába.
 2. A korábbi fájlokat cseréld le.
-3. Feltöltés után használj Ctrl+F5 frissítést, telefonon zárd be és nyisd meg újra az oldalt.
+3. Feltöltés után használj Ctrl+F5 frissítést. Telefonon zárd be, majd nyisd meg újra az alkalmazást.
 
-V38 fő újdonságok:
-- Új „Outlook import” oldal két külön behúzómezővel:
+V39 fő újdonságok:
+- Ingyenes, böngészőben futó Outlook-szabálymotor; nincs OpenAI API és nincs feldolgozási díj.
+- Két külön, egyszerre több fájlt fogadó import:
   - Dobozos import
   - Martin / Platós import
-- Egy importmezőbe egyszerre több Outlook .msg fájl húzható be.
-- Teszteléshez közvetlen PDF feltöltés is engedélyezett.
-- A program együtt elemzi a levél tárgyát, szövegét és a csatolt PDF-eket.
-- A PDF felső részén lévő SERPA rendelésazonosítóból csak a „/” utáni rész kerül be.
-  Példa: 2025-SR0/003141 → 003141.
-- A felrakót és a projektet a törzsadatokhoz illeszti, a címeket onnan egészíti ki.
-- A projekt címét a Projekt törzsadatból használja; a PDF-en szereplő vevői címet nem tekinti automatikusan lerakónak.
-- Kiegészítő helymegjelöléseket össze tud kapcsolni, például „Fogarasi” + „Hunyadi”.
-- A Dobozos import Autó kategóriája „Dobozos”, és később a Fuvarok szétosztása osztja el.
-- A Martin / Platós import közvetlenül Martinra kerül, és nem osztható át.
-- Import előtt szerkeszthető előnézet, figyelmeztetések és duplikált rendelésszám-ellenőrzés jelenik meg.
-- A tételeket a PDF táblázatából is megpróbálja kinyerni, a hosszú/szálas anyagokat jelöli.
-- Megmaradt a V37 összes nézet-, csoportosítási, útvonal-, hátralék- és térképfunkciója.
+- Az MSG levélszövege és az összes csatolt PDF együtt kerül feldolgozásra.
+- Normál SR0 rendelésnél a felrakót a levélből, majd a PDF-ből és a törzsadatból keresi.
+- Ismeretlen beszállító esetén a „Felvétel címe” blokkban lévő céget és felrakóhelyet importáláskor automatikusan felveszi a Beszállítók törzsbe.
+- KRPR szabály: a felrakó mindig a Szigetszentmiklósi Központi Raktár, 2310 Szigetszentmiklós, Kereskedő utca 2.
+- PRPR szabály: a Forrás raktár a felrakó, a Cél raktár a lerakó.
+- Visszáru szabály: a projekt lesz a felrakó, a beszállító/üzlet a lerakó; több eredeti rendelési szám egy közös fuvarbuborékban marad.
+- A rendelésazonosítóból csak a „/” utáni rész kerül be.
+- A PDF vevői/aláírási címe, például a Láva utca 7., nem írja felül a projekt törzsadatban tárolt lerakási címet.
+- Hátralék tételszinten működik: csak az átütemezett tétel kerül az új napra és a Hátralék fülre; a „Megkaptuk” pipa után csak az adott tétel kerül ki onnan.
+- Szerelvénybolt helyes címe: 1182 Budapest, Üllői út 807/B.
+- A térképen továbbra is kizárólag a felrakók jelennek meg.
 
-Minták alapján ellenőrizve:
-- Larex / Budapest_M76 / 003141
-- Szatmári Késmárk / Budapest_Kincsem_K6 / 004911
+Ellenőrzött minták:
+- Larex / M76 / 003141
+- Szatmári Késmárk / Kincsem K6 / 004911
+- Gali SwimTex / City Pearl II / 004932
+- Sebők / Le Jardin / 004943
+- Merkapt / Cosmo / 004937
+- KRPR Központi raktár → Le Jardin / 000745
+- Kekelit visszáru: Cosmo → Szatmári Késmárk / 002226, 001998, 001832
 
 Technikai megjegyzés:
-- Az Outlook .msg feldolgozó és a PDF-olvasó külső böngészős modulból töltődik be, ezért az első használatkor internetkapcsolat szükséges.
-
-Teszt:
-- TEST_V38.js: 11/11 sikeres.
-- V33, V34, V35 és V37 kompatibilitási tesztek: 39/39 sikeres.
-- Összes automatikus szabályteszt: 50/50 sikeres.
+- Az MSG- és PDF-olvasó böngészős könyvtárak első betöltéséhez internetkapcsolat szükséges.
+- A feldolgozás nem küldi el a fájlokat külső AI-szolgáltatásnak; a böngészőben történik.
+- A teljesen szokatlan megfogalmazású leveleknél az import-előnézetben kézi javításra lehet szükség.

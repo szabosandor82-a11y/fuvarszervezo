@@ -1,0 +1,34 @@
+Fuvarszervező V39 – automatikus teszteredmény
+==============================================
+
+Futtatva: 2026-08-04
+
+Regressziós tesztek:
+- TEST_V33.js: 8/8 sikeres
+- TEST_V34.js: 8/8 sikeres
+- TEST_V35.js: 11/11 sikeres
+- TEST_V37.js: 12/12 sikeres
+
+V39 új szabálytesztek:
+- TEST_V39.js: 11/11 sikeres
+  - SR0/KRPR/PRPR rendeléstípusok
+  - perjel utáni rendelésazonosító
+  - több rendelési szám visszárunál
+  - ismeretlen beszállító automatikus törzsadat-felvétele
+  - visszáru irányának megfordítása
+  - Szerelvénybolt címjavítása
+  - tételszintű hátralék-kivezetés
+  - Martin / Platós fix hozzárendelés
+
+Valós PDF-minták:
+- TEST_V39_FILES.js: 5/5 sikeres
+  - Larex / M76 / 003141
+  - Gali SwimTex / City Pearl II / 004932
+  - Sebők / Le Jardin / 004943
+  - Merkapt / Cosmo / 004937
+  - KRPR Központi raktár → Le Jardin / 000745
+
+Összes automatikus teszt: 55/55 sikeres.
+
+Megjegyzés:
+A szabálymotor és a PDF-ből kinyert szöveg automatikusan tesztelt. A böngészőbe húzott teljes MSG-folyamatot a GitHub Pages-re feltöltött alkalmazásban szükséges kipróbálni, mert az MSG-olvasó böngészős modulja külső CDN-ről töltődik be.
