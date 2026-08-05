@@ -18,7 +18,7 @@
     'schmidt.martin@stand98.hu': { role: 'driver', driverKey: 'martin', displayName: 'Schmidt Martin' },
     'polgar.patrik@stand98.hu': { role: 'driver', driverKey: 'patrik', displayName: 'Polgár Patrik' },
     'berki.mario@stand98.hu': { role: 'driver', driverKey: 'mario', displayName: 'Berki Márió' },
-    'szabo.sandor82@gmail.hu': { role: 'admin', displayName: 'Szabó Sándor', fixedHash: FIXED_HASHES.admin },
+    'szabo.sandor82@gmail.com': { role: 'admin', displayName: 'Szabó Sándor', fixedHash: FIXED_HASHES.admin },
     'szabo.sandor@stand98.hu': { role: 'test', displayName: 'Teszt felhasználó', fixedHash: FIXED_HASHES.test }
   };
 

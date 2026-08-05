@@ -9,7 +9,7 @@ Engedélyezett fiókok:
 - schmidt.martin@stand98.hu – Martin, első belépéskor saját jelszót állít be
 - polgar.patrik@stand98.hu – Patrik, első belépéskor saját jelszót állít be
 - berki.mario@stand98.hu – Márió, első belépéskor saját jelszót állít be
-- szabo.sandor82@gmail.hu – admin, kezdeti jelszó: 666
+- szabo.sandor82@gmail.com – admin, kezdeti jelszó: 666
 - szabo.sandor@stand98.hu – teszt felhasználó, jelszó: 98
 
 Jogosultságok:
@@ -32,3 +32,6 @@ fuvaradatok és fotók az adott böngésző/eszköz helyi tárhelyén vannak. Em
 
 Valódi többfelhasználós, közös online működéshez szerveroldali hitelesítés és
 közös adatbázis szükséges (például Supabase/Firebase saját projekttel).
+
+Admin e-mail javítás (V44.2 frissítés):
+- szabo.sandor82@gmail.com – admin, jelszó: 666

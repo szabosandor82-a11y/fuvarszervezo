@@ -10,7 +10,7 @@ let passed=0;
 function ok(value,name){if(!value)throw new Error('HIBA: '+name);console.log('OK '+name);passed++;}
 [
  'schmidt.martin@stand98.hu','polgar.patrik@stand98.hu','berki.mario@stand98.hu',
- 'szabo.sandor82@gmail.hu','szabo.sandor@stand98.hu'
+ 'szabo.sandor82@gmail.com','szabo.sandor@stand98.hu'
 ].forEach(email=>ok(auth.includes(email),`engedélyezett fiók: ${email}`));
 ok(auth.includes("role: 'admin'"),'admin szerepkör');
 ok(auth.includes("role: 'driver'"),'sofőr szerepkör');
@@ -25,5 +25,5 @@ ok(html.includes('id="authScreen"')&&html.includes('id="driverPortal"'),'belép�
 ok(!/mobile-user-actions[\s\S]{0,500}Szerkesztés/.test(auth),'mobil buborékon nincs szerkesztés');
 ok(css.includes('.driver-portal')&&css.includes('env(safe-area-inset-bottom)'),'iOS/Android safe-area mobil CSS');
 ok(manifest.display==='standalone'&&manifest.orientation==='portrait-primary','telepíthető mobil PWA manifest');
-ok(sw.includes('fuvarszervezo-v44-2-20260805')&&sw.includes('auth-v44-2.js?v=44.2'),'V44.2 service worker gyorsítótár');
+ok(sw.includes('fuvarszervezo-v44-2-20260805-admin-email-fix')&&sw.includes('auth-v44-2.js?v=44.2.1'),'V44.2 service worker gyorsítótár');
 console.log(`Sikeres V44.2 tesztek: ${passed}/${passed}`);
