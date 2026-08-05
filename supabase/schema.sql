@@ -1,4 +1,4 @@
--- Fuvarszervező V44.2 Online – Supabase adatbázis
+-- Fuvarszervező V45 – Supabase adatbázis
 -- Futtasd le a Supabase SQL Editorban egyben.
 
 create extension if not exists pgcrypto;
@@ -448,3 +448,4 @@ begin
   return v_count;
 end $$;
 grant execute on function public.sync_own_backlog(jsonb) to authenticated;
+

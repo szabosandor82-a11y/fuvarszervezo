@@ -1,4 +1,4 @@
-/* Fuvarszervező V44.2 – Supabase REST alapú online szinkron.
+/* Fuvarszervező V45 – Supabase REST alapú online szinkron.
    Külső klienskönyvtár nélkül működik, a böngésző beépített fetch API-jával. */
 (function (global) {
   'use strict';
@@ -110,21 +110,6 @@
     profile = await fetchProfile();
     emit('online', 'Online kapcsolat létrejött.');
     return { session, profile };
-  }
-
-  async function signUp(email, password) {
-    emit('loading', 'Fiók létrehozása…');
-    const redirectTo = `${location.origin}${location.pathname}`;
-    const data = await authRequest(`signup?redirect_to=${encodeURIComponent(redirectTo)}`, {
-      method: 'POST',
-      body: { email: normalize(email), password }
-    });
-    if (data?.access_token) {
-      saveSession({ ...data, expires_at: nowSeconds() + (+data.expires_in || 3600) });
-      profile = await fetchProfile();
-    }
-    emit('online', data?.access_token ? 'Fiók létrehozva.' : 'Megerősítő e-mail elküldve.');
-    return data;
   }
 
   async function signOut() {
@@ -335,7 +320,7 @@
     getSession: () => session,
     getProfile: () => profile,
     setStatusListener: listener => { statusListener = listener; },
-    signIn, signUp, signOut, updatePassword, refreshSession, ensureSession, fetchProfile, listUsers,
+    signIn, signOut, updatePassword, refreshSession, ensureSession, fetchProfile, listUsers,
     fetchOrders, fetchBacklog, syncOrders, syncBacklog, loadOrdersIntoState, requestTransfer, acceptTransfer, rejectTransfer, cancelTransfer, listTransfers,
     createDeliveryReport, listDeliveryFiles,
     startPolling, stopPolling, driverKeyFromOrder, DRIVER_VEHICLES

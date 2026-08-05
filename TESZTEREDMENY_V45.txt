@@ -1,0 +1,32 @@
+Fuvarszervező V45 – ellenőrzési eredmény
+=======================================
+
+JavaScript szintaktikai ellenőrzés: SIKERES
+
+Önálló regressziós tesztek:
+- V33: 8/8
+- V34: 8/8
+- V35: 11/11
+- V37: 12/12
+- V41: 12/12
+- V41 változások: 8/8
+- V43: 5/5
+- V44: 7/7
+- V44 Outlook: 2/2
+- V45 online/Supabase: 32/32
+
+V45 külön ellenőrizve:
+- helyes Supabase Project URL és publishable key;
+- helyes admin e-mail: szabo.sandor82@gmail.com;
+- nincs kliensoldali adminjelszó a JavaScriptben;
+- nincs alkalmazáson belüli regisztrációs/e-mail-küldő út;
+- nincs szállítólevél e-mail-küldő végpont;
+- delivery-docs privát Storage feltöltés és aláírt visszaolvasás;
+- delivery_reports / delivery_report_files rendeléskapcsolat;
+- 7 szükséges szerveroldali RPC bekötve;
+- V45 PWA manifest és új service-worker cache.
+
+Megjegyzés:
+A régi TEST_V41_MSG.js 7 külső .msg mintafájlt vár /mnt/data alatt. Ezek nincsenek
+a csomaghoz mellékelve, ezért az a fixture-függő teszt ebben a környezetben nem futtatható.
+Ez nem V45 alkalmazáshiba; a többi önálló Outlook regressziós teszt sikeres.

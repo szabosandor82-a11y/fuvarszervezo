@@ -1,10 +1,11 @@
-const CACHE_NAME = 'fuvarszervezo-v44-2-20260805';
+const CACHE_NAME = 'fuvarszervezo-v45-online-20260805-1';
 const APP_ASSETS = [
-  './', './index.html', './styles.css?v=44.2', './app.js?v=44.2', './data.js?v=44.2',
-  './planner-v32.js?v=44.2', './planner-v33.js?v=44.2', './planner-v34.js?v=44.2',
-  './planner-v35.js?v=44.2', './planner-v37.js?v=44.2', './planner-v41.js?v=44.2',
-  './planner-v43.js?v=44.2', './planner-v44.js?v=44.2', './auth-v44-2.js?v=44.2',
-  './ole-msg-reader.js?v=44.2', './manifest.webmanifest', './icon-192.png', './icon-512.png'
+  './', './index.html', './styles.css?v=45', './app.js?v=45', './data.js?v=45',
+  './planner-v32.js?v=45', './planner-v33.js?v=45', './planner-v34.js?v=45',
+  './planner-v35.js?v=45', './planner-v37.js?v=45', './planner-v41.js?v=45',
+  './planner-v43.js?v=45', './planner-v44.js?v=45', './auth-v44-2.js?v=45',
+  './online-config.js?v=45', './online-v44-2.js?v=45',
+  './ole-msg-reader.js?v=45', './manifest.webmanifest', './icon-192.png', './icon-512.png'
 ];
 self.addEventListener('install', event => event.waitUntil(
   caches.open(CACHE_NAME).then(cache => cache.addAll(APP_ASSETS)).then(() => self.skipWaiting())
@@ -16,10 +17,11 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   const local = url.origin === self.location.origin;
-  const appAsset = local && (url.pathname.endsWith('/') || /\/(?:index\.html|styles\.css|app\.js|data\.js|auth-v44-2\.js|planner-v(?:32|33|34|35|37|41|43|44)\.js|ole-msg-reader\.js|manifest\.webmanifest|icon-(?:192|512)\.png)$/.test(url.pathname));
+  const appAsset = local && (url.pathname.endsWith('/') || /\/(?:index\.html|styles\.css|app\.js|data\.js|auth-v44-2\.js|online-config\.js|online-v44-2\.js|planner-v(?:32|33|34|35|37|41|43|44)\.js|ole-msg-reader\.js|manifest\.webmanifest|icon-(?:192|512)\.png)$/.test(url.pathname));
   if (appAsset) {
     event.respondWith(fetch(event.request).then(response => {
       const copy = response.clone(); caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)); return response;
     }).catch(() => caches.match(event.request).then(response => response || caches.match('./index.html'))));
   } else event.respondWith(caches.match(event.request).then(response => response || fetch(event.request)));
 });
+
