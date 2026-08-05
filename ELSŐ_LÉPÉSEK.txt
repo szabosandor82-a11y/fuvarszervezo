@@ -1,0 +1,14 @@
+FUVAR­SZERVEZŐ V44.2 ONLINE – ELSŐ LÉPÉSEK
+
+A közös telefonos fuvarokhoz a ZIP GitHubra feltöltése önmagában nem elég.
+
+1. Hozz létre egy Supabase projektet.
+2. Futtasd le a supabase/schema.sql fájlt a Supabase SQL Editorban.
+3. Az online-config.js ebben a csomagban már ki van töltve a megadott Supabase Project URL-lel és Publishable key-jel; ezt nem kell kézzel szerkesztened.
+4. Töltsd fel a csomag teljes webes tartalmát a GitHub Pages repository gyökerébe.
+5. Lépj be adminnal. Ha az online adatbázis üres, fogadd el a meglévő V44 fuvarok feltöltését.
+
+Részletes leírás: ONLINE_BEALLITAS.md
+
+A szállítólevél-fotók közvetlenül a rendeléshez kerülnek. E-mail-küldő funkció és Resend-beállítás nincs.
+Ha az előző V44.2 Online schema.sql fájlt már sikeresen lefuttattad a Supabase-ben, nem kell újra futtatnod: a mostani program nem hív e-mail-küldő funkciót, a korábban létrejött e-mail mezőket pedig egyszerűen nem használja.

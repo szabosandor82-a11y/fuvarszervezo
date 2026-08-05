@@ -1,0 +1,26 @@
+FUVAR­SZERVEZŐ V44.2 ONLINE – ELLENŐRZÉS
+Dátum: 2026-08-05
+
+JavaScript szintaktikai ellenőrzés:
+- app.js: sikeres
+- online-v44-2.js: sikeres
+- auth-v44-2.js: sikeres
+- sw.js: sikeres
+- planner-v44.js: sikeres
+
+V44.2 online statikus/integrációs ellenőrzések: 24/24 sikeres
+Ellenőrzött területek:
+- Supabase online fuvar- és hátralékszinkron
+- admin/sofőr/teszt bejelentkezési szabályok
+- mai és holnapi sofőrnézet
+- kétlépcsős fuvarátadás és admin előzmény
+- privát, rendeléshez kötött szállítólevél-tárhely és buborék-galéria
+- e-mail-küldési hívások, beállítások és Edge Function hiánya
+- szerveroldali jogosultságkorlátozás
+- hátralékos célfuvar biztonságos létrehozása
+- cache-verzió frissítése
+
+V44 fuvarszétosztási regressziós tesztek: 7/7 sikeres
+
+Fontos:
+Valódi Supabase projekthez kapcsolt végponttól végpontig tesztet nem lehetett lefuttatni, mert a csomag nem tartalmazhatja a felhasználó saját projektkulcsait. A tényleges online próba a beállítás után szükséges.
