@@ -1,5 +1,10 @@
-Fuvarszervező V44 / V44.2 – GitHub Pages és mobil PWA csomag
-================================================================
+Fuvarszervező V44 / V44.2 Online – GitHub Pages és mobil PWA
+=======================================================================
+
+ONLINE BEÁLLÍTÁS
+----------------
+Ez a verzió már közös online adatbázist, fuvarátadást és online szállítólevél-fotókat használ.
+A GitHub feltöltés előtt végezd el az ONLINE_BEALLITAS.md lépéseit.
 
 Felületjelölés
 --------------

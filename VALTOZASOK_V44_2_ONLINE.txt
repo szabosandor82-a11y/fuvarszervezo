@@ -1,0 +1,12 @@
+FUVAR-SZERVEZŐ V44.2 ONLINE
+
+- Közös online fuvaradatbázis: az admin gépén felvitt fuvarok megjelennek a telefonokon.
+- 15 másodperces automatikus frissítés és kézi Frissítés gomb.
+- Fuvar átadása: kérés, célsofőr elfogadása/elutasítása, automatikus áthelyezés.
+- Admin fuvarátadási előzmény és állapotlista.
+- Szállítólevél-fotók privát online tárolása és későbbi megnyitása a buborékból.
+- Automatikus e-mail a projekt nevével és rendelésszámmal a tárgyban.
+- Admin Beállítások menü az e-mail címzett módosításához.
+- A korábbi helyi, eszközönként külön tárolás helyett Supabase háttér használata.
+
+FONTOS: az online funkciókhoz az ONLINE_BEALLITAS.md szerinti egyszeri Supabase/Resend beállítás szükséges.

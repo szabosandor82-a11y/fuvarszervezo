@@ -1,15 +1,25 @@
 {
-  "name": "Fuvarszervező V44 / V44.2",
+  "name": "Fuvarszervező V44 / V44.2 Online",
   "short_name": "Fuvar V44.2",
-  "description": "Stand 98 fuvarszervező admin- és mobil sofőralkalmazás",
-  "start_url": "./index.html",
+  "description": "Stand 98 online fuvarszervező admin- és mobil sofőralkalmazás közös szinkronnal",
+  "start_url": "./index.html?v=44.2.3",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#f1f5f7",
   "theme_color": "#103a56",
   "icons": [
-    {"src":"icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
-    {"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }
