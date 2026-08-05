@@ -1,5 +1,11 @@
-Fuvarszervező V44 – GitHub Pages csomag
-======================================
+Fuvarszervező V44 / V44.2 – GitHub Pages és mobil PWA csomag
+================================================================
+
+Felületjelölés
+--------------
+- Admin belépés után: Fuvarszervező V44, teljes hozzáféréssel.
+- Sofőr vagy teszt belépés után: Fuvarszervező V44.2, telefonra optimalizált buboréknézettel.
+- A részletes mobil jogosultságok és fiókok a README_V44_2.txt fájlban vannak.
 
 Telepítés
 ---------
