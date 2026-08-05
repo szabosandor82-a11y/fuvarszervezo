@@ -1,4 +1,4 @@
-# Fuvarszervező V45 – Supabase ellenőrzőlista
+# Fuvarszervező V46 – Supabase ellenőrzőlista
 
 ## Ami már be van állítva
 
@@ -14,13 +14,13 @@
 
 ## Még 1: admin jelszó
 
-A V45 nem tárol jelszót a forráskódban. A belépés közvetlenül a Supabase Authtal történik.
+A V46 nem tárol jelszót a forráskódban. A belépés közvetlenül a Supabase Authtal történik.
 
 Az admin fiók: `szabo.sandor82@gmail.com`
 
 A Supabase Authentication → Users alatt ennek a fióknak a tényleges jelszavát állítsd arra,
 amit használni szeretnél. Ha `66666666` legyen az adminjelszó, akkor a Supabase-ben is pontosan
-`66666666` kell legyen. A V45 ezt változtatás nélkül küldi a Supabase felé.
+`66666666` kell legyen. A V46 ezt változtatás nélkül küldi a Supabase felé.
 
 ## Még 2: a szükséges Data API függvények engedélyezése
 
@@ -41,7 +41,7 @@ biztonságosan a szerveroldali RPC függvényeken keresztül menjen.
 
 ## Gyors ellenőrzés
 
-1. GitHub Pages frissítés után nyisd meg a V45-öt.
+1. GitHub Pages frissítés után nyisd meg a V46-öt.
 2. Lépj be adminnal.
 3. Hozz létre vagy nyiss meg egy mai/holnapi rendelést.
 4. Sofőrrel lépj be egy másik eszközön.

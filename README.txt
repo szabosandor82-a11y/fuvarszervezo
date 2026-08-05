@@ -1,10 +1,10 @@
-FUVAR­SZERVEZŐ V45 – ONLINE SUPABASE / GITHUB PAGES
+FUVAR­SZERVEZŐ V46 – ONLINE SUPABASE / GITHUB PAGES
 =================================================
 
-A V45 a korábbi stabil fuvarszervezőre épül, de a belépés és a közös adatok
+A V46 a korábbi stabil fuvarszervezőre épül, de a belépés és a közös adatok
 Supabase-en keresztül működnek.
 
-V45 fő változások
+V46 fő változások
 -----------------
 - Supabase e-mail + jelszó hitelesítés.
 - Admin e-mail: szabo.sandor82@gmail.com.
@@ -13,8 +13,10 @@ V45 fő változások
 - A fuvarok, hátralékok és fuvarátadások közös online adatbázisból működnek.
 - A szállítólevél-fotók a rendeléshez kapcsolódnak és a Supabase Storage-ba kerülnek.
 - A rendeléshez mentett fotók a „Mentett fotók” gombbal visszanézhetők.
+- A „Mentett fotók” gomb a csoportosított Fuvarok-buborékokon és a Rendelések listában is elérhető.
+- Több rendelést tartalmazó buboréknál a galéria a csoport összes rendelésének fotóit megmutatja.
 - Nincs szállítólevél e-mail-küldő funkció.
-- Új PWA gyorsítótárnév: fuvarszervezo-v45-online-20260805-1.
+- Új PWA gyorsítótárnév: fuvarszervezo-v46-online-20260805-1.
 
 Telepítés GitHub Pages-re
 ------------------------
@@ -27,7 +29,7 @@ Telepítés GitHub Pages-re
 Belépés
 -------
 - A belépőképernyő a Supabase Authentication → Users alatt létrehozott fiókokat használja.
-- A V45 nem hoz létre új fiókot és nem küld regisztrációs e-mailt.
+- A V46 nem hoz létre új fiókot és nem küld regisztrációs e-mailt.
 - Az admin belépéshez a Supabase-ben a szabo.sandor82@gmail.com fiók jelszavának
   meg kell egyeznie azzal a jelszóval, amit a belépőképernyőn megadsz.
 
@@ -35,7 +37,7 @@ Fotók
 -----
 - A kamera/fájlválasztóval mentett szállítólevél a delivery-docs bucketbe kerül.
 - A delivery_reports és delivery_report_files táblák őrzik a rendeléshez való kapcsolatot.
-- A Storage bucket privát; a V45 rövid ideig érvényes aláírt URL-lel jeleníti meg a fotókat.
+- A Storage bucket privát; a V46 rövid ideig érvényes aláírt URL-lel jeleníti meg a fotókat.
 
 Biztonság
 ---------

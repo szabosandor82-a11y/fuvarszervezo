@@ -1,9 +1,9 @@
-/* Fuvarszervező V45 – online többfelhasználós mobil felület.
+/* Fuvarszervező V46 – online többfelhasználós mobil felület.
    A hitelesítés, a fuvarok, átadások és szállítólevél-fotók Supabase-ben tárolódnak. */
 (function (global) {
   'use strict';
 
-  const VERSION = '45-online';
+  const VERSION = '46-online';
   const USERS = {
     'schmidt.martin@stand98.hu': { role: 'driver', driverKey: 'martin', displayName: 'Schmidt Martin' },
     'polgar.patrik@stand98.hu': { role: 'driver', driverKey: 'patrik', displayName: 'Polgár Patrik' },
@@ -108,7 +108,7 @@
     document.querySelector('nav')?.classList.remove('auth-app-hidden');
     byId('accountBar')?.classList.remove('hidden');
     if (byId('accountIdentity')) byId('accountIdentity').textContent = `${currentProfile?.display_name || currentSession?.user?.email} · ADMIN`;
-    setAppTitle('Fuvarszervező V45');
+    setAppTitle('Fuvarszervező V46');
     if (typeof render === 'function') render();
     await renderAdminOnlinePage();
   }
@@ -121,7 +121,7 @@
     document.querySelector('main')?.classList.add('auth-app-hidden');
     document.querySelector('nav')?.classList.add('auth-app-hidden');
     byId('driverPortal')?.classList.remove('hidden');
-    setAppTitle('Fuvarszervező V45');
+    setAppTitle('Fuvarszervező V46');
     selectedDriverDate = allowedDates().includes(selectedDriverDate) ? selectedDriverDate : allowedDates()[0];
     await renderDriverPortal();
   }
@@ -174,7 +174,7 @@
 
   async function refreshTransfers() {
     try { transferCache = await global.V44Online.listTransfers(); }
-    catch (error) { console.warn('[V45] Átadások betöltési hibája', error); transferCache = []; }
+    catch (error) { console.warn('[V46] Átadások betöltési hibája', error); transferCache = []; }
     return transferCache;
   }
 
@@ -314,16 +314,23 @@
   }
   global.respondTransfer = respondTransfer;
 
-  async function openMediaGallery(orderId) {
-    if (!canAccessOrder(orderId)) return alert('Ehhez a fuvarhoz nincs jogosultságod.');
-    const order = (state.orders || []).find(item => String(item.id) === String(orderId));
+  async function openMediaGallery(orderIds) {
+    const ids = String(orderIds || '').split(',').map(id => id.trim()).filter(Boolean);
+    if (!ids.length || ids.some(id => !canAccessOrder(id))) return alert('Ehhez a fuvarhoz nincs jogosultságod.');
+    const orders = ids.map(id => (state.orders || []).find(item => String(item.id) === id)).filter(Boolean);
+    const orderNos = [...new Set(orders.map(order => order.orderNo).filter(Boolean))];
     const host = byId('mediaGalleryBody');
-    if (byId('mediaGalleryTitle')) byId('mediaGalleryTitle').textContent = `${order?.orderNo || ''} · mentett szállítólevelek`;
+    if (byId('mediaGalleryTitle')) byId('mediaGalleryTitle').textContent = `${orderNos.join(', ') || 'Fuvar'} · mentett fotók`;
     if (host) host.innerHTML = '<div class="mobile-empty">Fotók betöltése…</div>';
     byId('mediaGalleryDialog')?.showModal();
     try {
-      const files = await global.V44Online.listDeliveryFiles(orderId);
-      if (host) host.innerHTML = files.length ? files.map(file => file.mime_type?.startsWith('audio/') ? `<article><audio controls src="${safe(file.url)}"></audio><small>${safe(file.file_name || 'Hangjegyzet')}</small></article>` : `<article><a href="${safe(file.url)}" target="_blank" rel="noopener"><img src="${safe(file.url)}" alt="Szállítólevél"></a><small>${safe(file.file_name || 'Fotó')}</small></article>`).join('') : '<div class="mobile-empty">Ehhez a fuvarhoz még nincs elmentett szállítólevél.</div>';
+      const groups = await Promise.all(ids.map(async id => {
+        const order = (state.orders || []).find(item => String(item.id) === id);
+        const files = await global.V44Online.listDeliveryFiles(id);
+        return (files || []).map(file => ({ ...file, orderNo: order?.orderNo || '' }));
+      }));
+      const files = groups.flat();
+      if (host) host.innerHTML = files.length ? files.map(file => file.mime_type?.startsWith('audio/') ? `<article><audio controls src="${safe(file.url)}"></audio><small>${safe(file.orderNo)} · ${safe(file.file_name || 'Hangjegyzet')}</small></article>` : `<article><a href="${safe(file.url)}" target="_blank" rel="noopener"><img src="${safe(file.url)}" alt="Szállítólevél"></a><small>${safe(file.orderNo)} · ${safe(file.file_name || 'Fotó')}</small></article>`).join('') : '<div class="mobile-empty">Ehhez a fuvarhoz még nincs elmentett fotó.</div>';
     } catch (error) { if (host) host.innerHTML = `<div class="mobile-empty">Betöltési hiba: ${safe(error.message)}</div>`; }
   }
   global.openMediaGallery = openMediaGallery;
@@ -339,7 +346,7 @@
         const orders = state.orders || [];
         await global.V44Online.syncOrders(orders, currentProfile);
       } catch (error) {
-        console.error('[V45] Online mentési hiba', error);
+        console.error('[V46] Online mentési hiba', error);
         setSyncStatus({ state: 'error', message: `Mentési hiba: ${error.message}` });
       }
     }, 900);
@@ -469,7 +476,7 @@
       await applySession();
       startPolling();
     } catch (error) {
-      console.warn('[V45] Munkamenet visszaállítási hiba', error);
+      console.warn('[V46] Munkamenet visszaállítási hiba', error);
       await global.V44Online.signOut().catch(() => {});
       showLogin('A munkamenet lejárt. Jelentkezz be újra.');
     }

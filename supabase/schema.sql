@@ -1,4 +1,4 @@
--- Fuvarszervező V45 – Supabase adatbázis
+-- Fuvarszervező V46 – Supabase adatbázis
 -- Futtasd le a Supabase SQL Editorban egyben.
 
 create extension if not exists pgcrypto;

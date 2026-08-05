@@ -352,7 +352,7 @@
         <div class="bubble-main-line"><b>Lerakó:</b><span>${escHtml(group.projectName)}${group.dropAddress ? ` · ${escHtml(group.dropAddress)}` : ''}</span></div>
         <div class="bubble-main-line order-number-line"><b>Rendelésszám:</b><span>${escHtml(orderNos.join(', ') || 'Nincs megadva')}</span></div>
         <div class="tags"><span class="tag">${group.orders.length} rendelés</span><span class="tag">${itemCount} tétel</span>${longReasons.map(reason => `<span class="tag long">${escHtml(reason)}</span>`).join('')}${pinned ? '<span class="tag pin-tag">Rögzítve</span>' : ''}${fullLoad ? '<span class="tag full-load-tag">Teljes autó</span>' : ''}${resolved ? '<span class="tag resolved-tag">✓ Elintézve</span>' : ''}${options.ungrouped && (options.samePickupCount || 0) > 1 ? '<span class="tag ungrouped-tag">Külön mozgatható</span>' : ''}</div>
-        <div class="bubble-actions"><button onclick="editOrder('${escHtml(first.id)}')">Szerkesztés</button><button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button><button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button></div>
+        <div class="bubble-actions"><button onclick="editOrder('${escHtml(first.id)}')">Szerkesztés</button><button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button><button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button><button class="secondary" onclick="openMediaGallery('${escHtml(ids)}')">📎 Mentett fotók</button></div>
         <button class="complete-button ${complete ? 'done' : ''}" onclick="v37ToggleGroupComplete('${escHtml(ids)}')">${complete ? '✓' : '○'}</button>
         <button class="trash" onclick="v33DeleteGroup('${escHtml(ids)}')">🗑</button>
       </article>
