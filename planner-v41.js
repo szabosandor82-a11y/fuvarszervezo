@@ -1,4 +1,4 @@
-/* Fuvarszervező V43 – Outlook import modul
+/* Fuvarszervező V44 – Outlook import modul
    Outlook (.msg) + PDF rendelésimport.
 
    - Két külön tömeges import: Dobozos és Martin / Platós.
@@ -10,7 +10,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '43';
+  const VERSION = '44';
   const PDF_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const LEGAL_WORDS = new Set(['kft', 'zrt', 'bt', 'nyrt', 'trade', 'hungary', 'magyarorszag', 'es', 'the', 'partner']);
   const PROJECT_NOISE = new Set(['budapest', 'garancia', 'terv', 'projekt', 'utem', 'epulet', 'tarsashaz', 'hotel', 'pr']);
@@ -227,6 +227,37 @@
     if (!candidates.length || candidates[0].score < 10) return null;
     const winner = candidates[0].supplier;
     return { id: winner.id || '', name: winner.name || '', address: winner.address || '', pickupNote: winner.pickupNote || winner.note || '', phone: winner.phone || '', email: winner.email || '', reason: `törzsadat-egyezés (${candidates[0].score})`, autoMaster: false };
+  }
+
+
+  function supplierFromPdfHeader(pdfText = '', pdfLines = []) {
+    const lines = (pdfLines?.length ? pdfLines : linesOf(pdfText)).slice(0, 55);
+    const headerText = lines.join('\n');
+    const sourceNorm = nrm(headerText);
+    if (!sourceNorm) return null;
+    const suppliers = typeof state !== 'undefined' ? state.suppliers || [] : [];
+    const candidates = suppliers.map(supplier => {
+      let score = supplierScore(supplier, sourceNorm);
+      const nameNorm = nrm(supplier.name || '');
+      if (nameNorm && sourceNorm.includes(nameNorm)) score += 120;
+      const tokens = significantTokens(supplier.name);
+      if (tokens.length && tokens.every(token => sourceNorm.includes(token))) score += 55;
+      if (/niczuk/.test(nameNorm) && /niczuk/.test(sourceNorm)) score += 180;
+      if (/stand\s*98/.test(nameNorm)) score -= 500;
+      return { supplier, score };
+    }).sort((a, b) => b.score - a.score || Number(Boolean(b.supplier.address)) - Number(Boolean(a.supplier.address)));
+    if (!candidates.length || candidates[0].score < 25) return null;
+    const winner = candidates[0].supplier;
+    return {
+      id: winner.id || '',
+      name: winner.name || '',
+      address: winner.address || '',
+      pickupNote: winner.pickupNote || winner.note || '',
+      phone: winner.phone || '',
+      email: winner.email || '',
+      reason: `Szállítói rendelés PDF Szállító mező / fejléc (${candidates[0].score})`,
+      autoMaster: false
+    };
   }
 
   function projectScore(project, sourceNorm, hintNorm) {
@@ -499,7 +530,7 @@
       drop = supplier;
       pickupRole = 'project'; dropRole = 'supplier';
     } else {
-      supplier = bestSupplier(combined);
+      supplier = supplierFromPdfHeader(pdfText, pdfLines) || bestSupplier(combined);
       project = projectFromPdfMaster(pdfText || combined, pdfLines, hint, 'SR0') || bestProject(combined, hint);
       project = projectMasterByIdentity(project);
       pickup = supplier;
@@ -612,6 +643,57 @@
     return `${entry.warnings.length} ellenőrzendő`;
   }
 
+
+  function uniqueSupplierNames() {
+    return [...new Set((typeof state !== 'undefined' ? state.suppliers || [] : []).map(item => String(item.name || '').trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'hu'));
+  }
+
+  function supplierNameSelect(entry) {
+    const names = uniqueSupplierNames();
+    if (entry.pickupName && !names.some(name => nrm(name) === nrm(entry.pickupName))) names.unshift(entry.pickupName);
+    const options = ['<option value="">Válassz beszállítót…</option>']
+      .concat(names.map(name => `<option value="${htmlEsc(name)}" ${nrm(name) === nrm(entry.pickupName) ? 'selected' : ''}>${htmlEsc(name)}</option>`));
+    return `<select data-field="pickupName" data-kind="supplier-name">${options.join('')}</select>`;
+  }
+
+  function supplierAddressSelect(entry) {
+    const locations = (typeof state !== 'undefined' ? state.suppliers || [] : [])
+      .filter(item => nrm(item.name) === nrm(entry.pickupName))
+      .sort((a, b) => Number(Boolean(b.isCentral)) - Number(Boolean(a.isCentral)) || String(a.address || '').localeCompare(String(b.address || ''), 'hu'));
+    if (entry.pickupAddress && !locations.some(item => nrm(item.address) === nrm(entry.pickupAddress))) {
+      locations.unshift({ id: entry.supplierId || '', address: entry.pickupAddress, pickupNote: 'felismert / egyedi cím', isCentral: false });
+    }
+    const options = ['<option value="">Válassz felrakóhelyet…</option>'].concat(locations.map(item => {
+      const label = `${item.isCentral ? '★ Központ · ' : ''}${item.address || 'Cím nélkül'}${item.site ? ` · ${item.site}` : ''}${item.pickupNote ? ` · ${item.pickupNote}` : ''}`;
+      return `<option value="${htmlEsc(item.address || '')}" data-supplier-id="${htmlEsc(item.id || '')}" ${nrm(item.address) === nrm(entry.pickupAddress) ? 'selected' : ''}>${htmlEsc(label)}</option>`;
+    }));
+    return `<select data-field="pickupAddress" data-kind="supplier-address">${options.join('')}</select>`;
+  }
+
+  function projectNameSelect(entry) {
+    const projects = (typeof state !== 'undefined' ? state.projects || [] : []).slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'hu'));
+    if (entry.projectName && !projects.some(item => nrm(item.name) === nrm(entry.projectName))) {
+      projects.unshift({ id: entry.projectId || '', name: entry.projectName, address: entry.dropAddress || '' });
+    }
+    const options = ['<option value="">Válassz projektet / lerakót…</option>'].concat(projects.map(item => {
+      const label = `${item.name || 'Névtelen projekt'}${item.address ? ` · ${item.address}` : ' · cím nélkül'}`;
+      return `<option value="${htmlEsc(item.name || '')}" data-project-id="${htmlEsc(item.id || '')}" ${nrm(item.name) === nrm(entry.projectName) ? 'selected' : ''}>${htmlEsc(label)}</option>`;
+    }));
+    return `<select data-field="projectName" data-kind="project-name">${options.join('')}</select>`;
+  }
+
+  function refreshEntryWarnings(entry) {
+    entry.warnings = (entry.warnings || []).filter(warning => !/Rendelésszám|Felrakó|Projekt címe|Lerakó\/projekt|Lerakó címe|már szerepel|duplik/i.test(warning));
+    if (!entry.orderNo) entry.warnings.push('Rendelésszám nem található');
+    if (!entry.pickupName) entry.warnings.push('Felrakó nem azonosítható');
+    if (!entry.pickupAddress) entry.warnings.push('Felrakó címe hiányzik');
+    if (!entry.projectName) entry.warnings.push('Lerakó/projekt nem azonosítható');
+    if (!entry.dropAddress) entry.warnings.push('Projekt címe hiányzik a törzsadatból');
+    entry.warnings = unique(entry.warnings);
+  }
+
   function entryCard(entry, index) {
     const categoryLabel = entry.category === 'martin' ? 'Martin / Platós' : 'Dobozos';
     return `<article class="v38-preview-card ${entry.approved ? '' : 'disabled'}" data-entry-id="${htmlEsc(entry._id)}">
@@ -621,10 +703,10 @@
         <label>Felvétel dátuma<input data-field="scheduleDate" type="date" value="${htmlEsc(entry.scheduleDate)}"></label>
         ${entry.messageOrderNos?.length > 1 ? `<label class="v43-all-order-nos">Rendelésszámok a levélben<input value="${htmlEsc(entry.messageOrderNos.join(', '))}" readonly></label>` : ''}
         <label>${entry.messageOrderNos?.length > 1 ? 'Aktuális rendelés száma' : 'Rendelésszám'}<input data-field="orderNo" value="${htmlEsc(entry.orderNo)}" placeholder="pl. 004911"></label>
-        <label>Felrakó<input data-field="pickupName" value="${htmlEsc(entry.pickupName)}"></label>
-        <label>Felrakó címe<input data-field="pickupAddress" value="${htmlEsc(entry.pickupAddress)}"></label>
-        <label>Lerakó / projekt<input data-field="projectName" value="${htmlEsc(entry.projectName)}"></label>
-        <label>Lerakó címe<input data-field="dropAddress" value="${htmlEsc(entry.dropAddress)}"></label>
+        <label>Felrakó neve${supplierNameSelect(entry)}</label>
+        <label>Felrakó címe${supplierAddressSelect(entry)}</label>
+        <label>Lerakó / projekt${projectNameSelect(entry)}</label>
+        <label>Lerakó címe<input data-field="dropAddress" value="${htmlEsc(entry.dropAddress)}" placeholder="A projekt kiválasztásakor automatikusan betöltődik"></label>
       </div>
       <details><summary>Tételek (${entry.items.length}) és felismerési adatok</summary>
         ${entry.items.length ? `<div class="v38-items">${entry.items.map(item => `<div><b>${htmlEsc(item.code)}</b><span>${htmlEsc(item.name)}</span><span>${htmlEsc(item.qty)} ${htmlEsc(item.unit)}</span></div>`).join('')}</div>` : '<p>Nincs automatikusan felismert tétel.</p>'}
@@ -663,17 +745,41 @@
       card.querySelector('.v38-approved')?.addEventListener('change', event => { entry.approved = event.target.checked; renderPending(); });
       card.querySelector('.v38-remove')?.addEventListener('click', () => { pending = pending.filter(item => item !== entry); renderPending(); });
       card.querySelectorAll('[data-field]').forEach(input => input.addEventListener('change', () => {
-        entry[input.dataset.field] = input.value.trim();
-        if (input.dataset.field === 'scheduleDate') entry.scheduleDateManual = true;
+        const field = input.dataset.field;
+        entry[field] = input.value.trim();
+        if (field === 'scheduleDate') entry.scheduleDateManual = true;
+
+        if (input.dataset.kind === 'supplier-name') {
+          const locations = (state.suppliers || []).filter(item => nrm(item.name) === nrm(entry.pickupName));
+          const preferred = locations.find(item => item.isCentral) || locations.find(item => nrm(item.pickupNote || item.note).includes('kozpont')) || locations[0] || null;
+          entry.supplierId = preferred?.id || '';
+          entry.pickupAddress = preferred?.address || '';
+          entry.pickupNote = preferred?.pickupNote || preferred?.note || '';
+        } else if (input.dataset.kind === 'supplier-address') {
+          const selected = [...input.options].find(option => option.selected);
+          const supplier = (state.suppliers || []).find(item => item.id === selected?.dataset.supplierId)
+            || (state.suppliers || []).find(item => nrm(item.name) === nrm(entry.pickupName) && nrm(item.address) === nrm(entry.pickupAddress));
+          if (supplier) {
+            entry.supplierId = supplier.id || '';
+            entry.pickupName = supplier.name || entry.pickupName;
+            entry.pickupNote = supplier.pickupNote || supplier.note || '';
+          }
+        } else if (input.dataset.kind === 'project-name') {
+          const selected = [...input.options].find(option => option.selected);
+          const project = (state.projects || []).find(item => item.id === selected?.dataset.projectId)
+            || (state.projects || []).find(item => nrm(item.name) === nrm(entry.projectName));
+          if (project) {
+            entry.projectId = project.id || '';
+            entry.projectName = project.name || entry.projectName;
+            entry.dropAddress = project.address || '';
+            Object.assign(entry, recipientFromProject(project));
+          }
+        }
+
         entry.sourceOrderNos = orderNumbersOf(entry.orderNo);
         entry.existingOrderNos = duplicateOrderNumbers(entry.sourceOrderNos);
         entry.duplicate = false;
-        entry.warnings = entry.warnings.filter(warning => !/Rendelésszám|Felrakó|Projekt címe|Lerakó\/projekt|már szerepel|duplik/i.test(warning));
-        if (!entry.orderNo) entry.warnings.push('Rendelésszám nem található');
-        if (!entry.pickupName) entry.warnings.push('Felrakó nem azonosítható');
-        if (!entry.pickupAddress) entry.warnings.push('Felrakó címe hiányzik');
-        if (!entry.projectName) entry.warnings.push('Lerakó/projekt nem azonosítható');
-        if (!entry.dropAddress) entry.warnings.push('Projekt címe hiányzik a törzsadatból');
+        refreshEntryWarnings(entry);
         renderPending();
       }));
     });
@@ -978,6 +1084,7 @@ ${entry.subject || ''}`) || project;
     supplierSpecial,
     parsePdfItemsFromLines,
     bestSupplier,
+    supplierFromPdfHeader,
     bestProject,
     projectWithAddressFromMaster,
     buildExtractedEntry,
