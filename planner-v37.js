@@ -493,12 +493,15 @@
     if (!dragActive) { dragScrollFrame = 0; return; }
     const y = dragPointerY;
     if (Number.isFinite(y)) {
-      const threshold = Math.min(190, window.innerHeight * 0.24);
+      const localScroll = dragScrollContainer && dragScrollContainer !== document.scrollingElement && dragScrollContainer !== document.documentElement;
+      const bounds = localScroll ? dragScrollContainer.getBoundingClientRect() : { top: 0, bottom: window.innerHeight, height: window.innerHeight };
+      const height = Math.max(1, bounds.height || (bounds.bottom - bounds.top));
+      const threshold = Math.min(95, height * 0.18);
       let amount = 0;
-      if (y < threshold) amount = -Math.ceil(((threshold - y) / threshold) * 28);
-      else if (y > window.innerHeight - threshold) amount = Math.ceil(((y - (window.innerHeight - threshold)) / threshold) * 28);
+      if (y < bounds.top + threshold) amount = -Math.ceil(((bounds.top + threshold - y) / threshold) * 7);
+      else if (y > bounds.bottom - threshold) amount = Math.ceil(((y - (bounds.bottom - threshold)) / threshold) * 7);
       if (amount) {
-        if (dragScrollContainer && dragScrollContainer !== document.scrollingElement && dragScrollContainer !== document.documentElement) dragScrollContainer.scrollTop += amount;
+        if (localScroll) dragScrollContainer.scrollTop += amount;
         else window.scrollBy(0, amount);
       }
     }
@@ -535,17 +538,17 @@
         ? '.pickup-move-block:not(.resolved-pickup-block), .route-block:not(.inside-pickup-group):not(.resolved-backlog-block)'
         : '.route-block:not(.resolved-backlog-block)',
       filter: '.resolved-backlog-block, .resolved-pickup-block',
-      scroll: true,
-      bubbleScroll: true,
-      forceAutoScrollFallback: true,
-      scrollSensitivity: 170,
-      scrollSpeed: 24,
+      scroll: false,
       fallbackOnBody: true,
       delayOnTouchOnly: true,
       delay: 100,
       touchStartThreshold: 4,
-      onStart: event => startDragScroll(event.originalEvent || event, focus ? document.querySelector('#v37DriverViewDialog .driver-focus-content') : document.scrollingElement),
-      onMove: event => { trackPointer(event.originalEvent || event); return !event.related?.classList?.contains('resolved-backlog-block') && !event.related?.classList?.contains('resolved-pickup-block'); },
+      onStart: event => startDragScroll(event.originalEvent || event, focus ? document.querySelector('#v37DriverViewDialog .driver-focus-content') : element),
+      onMove: event => {
+        trackPointer(event.originalEvent || event);
+        if (!focus && event.to?.classList?.contains('route-list')) dragScrollContainer = event.to;
+        return !event.related?.classList?.contains('resolved-backlog-block') && !event.related?.classList?.contains('resolved-pickup-block');
+      },
       onEnd: event => {
         stopDragScroll();
         if (focus) updateSequencesFromContainer(element, vehicleId);

@@ -1,4 +1,4 @@
-/* Fuvarszervező V46 – Supabase REST alapú online szinkron.
+/* Fuvarszervező V47 – Supabase REST alapú online szinkron.
    Külső klienskönyvtár nélkül működik, a böngésző beépített fetch API-jával. */
 (function (global) {
   'use strict';
@@ -134,6 +134,52 @@
 
   async function listUsers() {
     return dbRequest(`allowed_users?${qs({ select: 'email,role,driver_key,vehicle_id,display_name,active', active: 'eq.true', order: 'display_name.asc' })}`);
+  }
+
+  function masterSnapshot(source = global.state || {}) {
+    return {
+      projects: source.projects || [],
+      suppliers: source.suppliers || [],
+      recipients: source.recipients || [],
+      vehicles: source.vehicles || [],
+      settings: source.settings || {},
+      aliases: source.aliases || { projects: {}, suppliers: {} },
+      masterDataVersion: source.masterDataVersion || '',
+      savedAt: new Date().toISOString()
+    };
+  }
+
+  async function fetchMasterData() {
+    if (!profile) profile = await fetchProfile();
+    if (profile?.role !== 'admin') return null;
+    const rows = await dbRequest(`master_data?${qs({ select: 'payload,updated_at,updated_by', id: 'eq.current', limit: '1' })}`);
+    return rows?.[0] ? { ...(rows[0].payload || {}), onlineUpdatedAt: rows[0].updated_at, onlineUpdatedBy: rows[0].updated_by } : null;
+  }
+
+  async function syncMasterData(source = global.state, currentProfile = profile) {
+    if (!currentProfile) currentProfile = await fetchProfile();
+    if (currentProfile?.role !== 'admin') return null;
+    const payload = masterSnapshot(source);
+    await dbRequest('master_data?on_conflict=id', {
+      method: 'POST',
+      body: [{ id: 'current', payload, updated_at: new Date().toISOString() }],
+      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }
+    });
+    return payload;
+  }
+
+  async function loadMasterIntoState({ preserveLocalIfRemoteEmpty = true } = {}) {
+    const remote = await fetchMasterData();
+    if (!global.state) throw new Error('Az alkalmazás állapota még nem érhető el.');
+    if (!remote) {
+      if (preserveLocalIfRemoteEmpty && profile?.role === 'admin') await syncMasterData(global.state, profile);
+      return null;
+    }
+    ['projects', 'suppliers', 'recipients', 'vehicles'].forEach(key => { if (Array.isArray(remote[key])) global.state[key] = remote[key]; });
+    if (remote.settings && typeof remote.settings === 'object') global.state.settings = remote.settings;
+    if (remote.aliases && typeof remote.aliases === 'object') global.state.aliases = remote.aliases;
+    if (remote.masterDataVersion) global.state.masterDataVersion = remote.masterDataVersion;
+    return remote;
   }
 
   function orderToRow(order) {
@@ -321,7 +367,7 @@
     getProfile: () => profile,
     setStatusListener: listener => { statusListener = listener; },
     signIn, signOut, updatePassword, refreshSession, ensureSession, fetchProfile, listUsers,
-    fetchOrders, fetchBacklog, syncOrders, syncBacklog, loadOrdersIntoState, requestTransfer, acceptTransfer, rejectTransfer, cancelTransfer, listTransfers,
+    fetchOrders, fetchBacklog, syncOrders, syncBacklog, loadOrdersIntoState, fetchMasterData, syncMasterData, loadMasterIntoState, masterSnapshot, requestTransfer, acceptTransfer, rejectTransfer, cancelTransfer, listTransfers,
     createDeliveryReport, listDeliveryFiles,
     startPolling, stopPolling, driverKeyFromOrder, DRIVER_VEHICLES
   };

@@ -197,6 +197,10 @@
     else if (dropRole === 'warehouse') dropMaster = findWarehouseMaster({ id: order.projectId || order.supplierId, name: order.projectName, address: order.dropAddress });
     else dropMaster = findProjectMaster({ id: order.projectId, name: order.projectName || order.topicName, address: order.dropAddress });
 
+    const masterApplies = master => !master?.effectiveFrom || !order.scheduleDate || order.scheduleDate >= master.effectiveFrom;
+    if (pickupMaster && !masterApplies(pickupMaster)) pickupMaster = null;
+    if (dropMaster && !masterApplies(dropMaster)) dropMaster = null;
+
     if (pickupMaster) {
       if (pickupRole === 'supplier') order.supplierId = pickupMaster.id || order.supplierId || '';
       if (pickupRole === 'project') order.returnSourceProjectId = pickupMaster.id || order.returnSourceProjectId || '';
@@ -223,7 +227,6 @@
   }
 
   async function resyncAllMasterDataV43(showMessage = true) {
-    mergeSeedMasterData();
     let pickupMissing = 0, dropMissing = 0, changed = 0;
     for (const order of state.orders || []) {
       const before = [order.supplierId, order.pickupAddress, order.projectId, order.dropAddress].join('|');
@@ -380,7 +383,6 @@
   }
 
   async function distributeOrderSetV43(orders, options = {}) {
-    mergeSeedMasterData();
     const drivers = (options.drivers || (typeof activeVehicles === 'function' ? activeVehicles() : [])).slice();
     if (!drivers.length) throw new Error('Nincs aktív jármű.');
     const mario = findDriver('mario', drivers), patrik = findDriver('patrik', drivers), martin = findDriver('martin', drivers);
@@ -499,7 +501,6 @@
   }
 
   function bindV43() {
-    mergeSeedMasterData();
     for (const order of state.orders || []) syncOrderFromMastersV43(order);
     if (typeof save === 'function') save(false);
     const balanceButton = document.getElementById('balanceBtn');

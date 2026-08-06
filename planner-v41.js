@@ -664,11 +664,9 @@
     if (entry.pickupAddress && !locations.some(item => nrm(item.address) === nrm(entry.pickupAddress))) {
       locations.unshift({ id: entry.supplierId || '', address: entry.pickupAddress, pickupNote: 'felismert / egyedi cím', isCentral: false });
     }
-    const options = ['<option value="">Válassz felrakóhelyet…</option>'].concat(locations.map(item => {
-      const label = `${item.isCentral ? '★ Központ · ' : ''}${item.address || 'Cím nélkül'}${item.site ? ` · ${item.site}` : ''}${item.pickupNote ? ` · ${item.pickupNote}` : ''}`;
-      return `<option value="${htmlEsc(item.address || '')}" data-supplier-id="${htmlEsc(item.id || '')}" ${nrm(item.address) === nrm(entry.pickupAddress) ? 'selected' : ''}>${htmlEsc(label)}</option>`;
-    }));
-    return `<select data-field="pickupAddress" data-kind="supplier-address">${options.join('')}</select>`;
+    const listId = `supplier-addresses-${String(entry._id || 'entry').replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    const options = locations.map(item => `<option value="${htmlEsc(item.address || '')}">${htmlEsc(`${item.isCentral ? 'Központ · ' : ''}${item.site || ''}${item.pickupNote ? `${item.site ? ' · ' : ''}${item.pickupNote}` : ''}`)}</option>`);
+    return `<input data-field="pickupAddress" data-kind="supplier-address" list="${htmlEsc(listId)}" value="${htmlEsc(entry.pickupAddress || '')}" placeholder="Válassz vagy írj be új felrakó címet…"><datalist id="${htmlEsc(listId)}">${options.join('')}</datalist>`;
   }
 
   function projectNameSelect(entry) {
@@ -756,13 +754,16 @@
           entry.pickupAddress = preferred?.address || '';
           entry.pickupNote = preferred?.pickupNote || preferred?.note || '';
         } else if (input.dataset.kind === 'supplier-address') {
-          const selected = [...input.options].find(option => option.selected);
-          const supplier = (state.suppliers || []).find(item => item.id === selected?.dataset.supplierId)
-            || (state.suppliers || []).find(item => nrm(item.name) === nrm(entry.pickupName) && nrm(item.address) === nrm(entry.pickupAddress));
+          const supplier = (state.suppliers || []).find(item => nrm(item.name) === nrm(entry.pickupName) && nrm(item.address) === nrm(entry.pickupAddress));
           if (supplier) {
             entry.supplierId = supplier.id || '';
             entry.pickupName = supplier.name || entry.pickupName;
             entry.pickupNote = supplier.pickupNote || supplier.note || '';
+            entry.newSupplierData = null;
+          } else if (entry.pickupName && entry.pickupAddress) {
+            entry.supplierId = '';
+            entry.pickupNote = '';
+            entry.newSupplierData = { name: entry.pickupName, address: entry.pickupAddress, pickupNote: '' };
           }
         } else if (input.dataset.kind === 'project-name') {
           const selected = [...input.options].find(option => option.selected);
@@ -850,8 +851,7 @@ ${entry.subject || ''}`) || project;
   function ensureSupplierMaster(entry) {
     const data = entry.newSupplierData;
     if (!data?.name || !data?.address) return null;
-    let supplier = (state.suppliers || []).find(item => nrm(item.name) === nrm(data.name) && nrm(item.address) === nrm(data.address))
-      || (state.suppliers || []).find(item => nrm(item.address) === nrm(data.address));
+    let supplier = (state.suppliers || []).find(item => nrm(item.name) === nrm(data.name) && nrm(item.address) === nrm(data.address));
     if (supplier) return supplier;
     supplier = { id: id(), name: data.name, site: '', address: data.address, phone: data.phone || '', email: data.email || '', pickupNote: data.pickupNote || '', note: data.pickupNote || '', active: true, manualOverride: true, autoCreatedFromOutlook: true, createdAt: new Date().toISOString() };
     state.suppliers = state.suppliers || [];
@@ -932,6 +932,7 @@ ${entry.subject || ''}`) || project;
     const accepted = acceptedEntries.map(entryToOrder);
     state.orders = state.orders || [];
     state.orders.push(...accepted);
+    if (global.V47MasterLearning?.learnFromOrder) accepted.forEach(order => global.V47MasterLearning.learnFromOrder(order, null, {}));
     state.routePlans = state.routePlans || {};
     for (const order of accepted) state.routePlans[order.scheduleDate] = {};
     if (typeof save === 'function') save(false);
@@ -966,26 +967,12 @@ ${entry.subject || ''}`) || project;
   }
 
   function clearAllImports() {
-    const imported = (state.orders || []).filter(order => order.outlookImport);
-    const message = `Törlöd az összes Outlook-importot?\n\nElőnézet: ${pending.length} rendelés\nKorábban jóváhagyott, autóknál látható import: ${imported.length} fuvar\n\nA kézzel rögzített és Excelből importált fuvarok megmaradnak.`;
-    if (!confirm(message)) return;
-    const ids = new Set(imported.map(order => order.id));
+    if (pending.length && !confirm('Törlöd az Outlook-import jelenlegi előnézetét? A már jóváhagyott fuvarok megmaradnak.')) return;
     pending = [];
-    state.orders = (state.orders || []).filter(order => !ids.has(order.id));
-    state.backlog = (state.backlog || []).filter(record => !ids.has(record.sourceOrderId) && !ids.has(record.targetOrderId));
-    state.resolvedBacklog = (state.resolvedBacklog || []).filter(record => !ids.has(record.sourceOrderId) && !ids.has(record.targetOrderId));
-    state.failedTrips = (state.failedTrips || []).filter(record => !ids.has(record.orderId));
-    state.routePlans = {};
-    state.routeStats = {};
-    delete state.outlookImportHistory;
-    delete state.outlookImportCache;
-    delete state.outlookRecognizedOrders;
-    if (typeof save === 'function') save(false);
     renderPending();
     setDropStatus('dobozos', 'Még nincs fájl.');
     setDropStatus('martin', 'Még nincs fájl.');
-    if (typeof render === 'function') render();
-    alert(`${imported.length} korábbi Outlook-import és a teljes előnézet törölve.`);
+    updateSummary();
   }
 
   function bindDropZone(zoneId, inputId, category) {

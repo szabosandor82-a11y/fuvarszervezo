@@ -1,4 +1,4 @@
-/* Fuvarszervező V44
+/* Fuvarszervező V47
    Determinisztikus felrakóhely-blokkos szétosztás.
 
    Kemény szabályok:
@@ -12,7 +12,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '44';
+  const VERSION = '47';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   const HOMES = {
     mario: { address: 'Vác, Magyarország', point: [47.7759, 19.1360] },
@@ -90,7 +90,7 @@
     }
     const category = String(categoryForOrder(order) || '');
     if (category.startsWith('fixed:')) return drivers.find(vehicle => vehicle.id === category.slice(6)) || null;
-    if (['mario', 'patrik', 'martin'].includes(category)) return findDriver(category, drivers);
+    if (order.importVehicleLocked && ['mario', 'patrik', 'martin'].includes(category)) return findDriver(category, drivers);
     return null;
   }
 
@@ -364,7 +364,6 @@
   }
 
   async function distributeOrderSetV44(orders, options = {}) {
-    if (global.V43Planner?.mergeSeedMasterData) global.V43Planner.mergeSeedMasterData();
     const drivers = (options.drivers || (typeof activeVehicles === 'function' ? activeVehicles() : [])).slice();
     if (!drivers.length) throw new Error('Nincs aktív jármű.');
     const mario = findDriver('mario', drivers), patrik = findDriver('patrik', drivers), martin = findDriver('martin', drivers);
@@ -491,10 +490,10 @@
       await buildRoutePlansV44(result.profiles);
       if (typeof save === 'function') save();
       const conflictText = result.conflicts.length ? `\nFigyelem: ${result.conflicts.length} felrakóhelyen egymással ütköző fix sofőrjelölés maradt.` : '';
-      alert(`Fuvarok V44 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nMárió=Pest, Patrik=Buda, Martin=platós/nyugati folyosó. Martin pesti címet csak kézi vagy névre rögzített rendelésként kap.`);
+      alert(`Fuvarok V47 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nMárió=Pest, Patrik=Buda, Martin=platós/nyugati folyosó. Martin pesti címet csak kézi vagy névre rögzített rendelésként kap.`);
       return result;
     } catch (error) {
-      console.error('[V44] Szétosztási hiba', error);
+      console.error('[V47] Szétosztási hiba', error);
       alert(`A fuvarok szétosztása közben hiba történt: ${error?.message || error}`);
       return null;
     }
@@ -509,10 +508,10 @@
       const changed = orders.filter(order => before.get(order.id) !== order.vehicleId);
       if (changed.length) throw new Error('Az optimalizálás sofőrt változtatott.');
       if (typeof save === 'function') save();
-      alert('V44 felrakási sorrend elkészült a sofőrök valódi indulási pontjából. Azonos felrakók együtt maradtak; sofőr nem változott.');
+      alert('V47 felrakási sorrend elkészült a sofőrök valódi indulási pontjából. Azonos felrakók együtt maradtak; sofőr nem változott.');
       return true;
     } catch (error) {
-      console.error('[V44] Optimalizálási hiba', error);
+      console.error('[V47] Optimalizálási hiba', error);
       alert(`Az optimalizálás közben hiba történt: ${error?.message || error}`);
       return false;
     }
@@ -565,12 +564,12 @@
     if (balanceButton) {
       balanceButton.onclick = event => { event.preventDefault(); return balanceActionV44(); };
       balanceButton.dataset.algorithmVersion = VERSION;
-      balanceButton.title = 'V44: felrakóhely-blokkok; Márió=Pest, Patrik=Buda, Martin=platós/nyugati folyosó';
+      balanceButton.title = 'V47: felrakóhely-blokkok; Márió=Pest, Patrik=Buda, Martin=platós/nyugati folyosó';
     }
     if (optimizeButton) {
       optimizeButton.onclick = event => { event.preventDefault(); return optimizeActionV44(); };
       optimizeButton.dataset.algorithmVersion = VERSION;
-      optimizeButton.title = 'V44: felrakási sorrend a sofőr indulási pontjából, sofőrváltás nélkül';
+      optimizeButton.title = 'V47: felrakási sorrend a sofőr indulási pontjából, sofőrváltás nélkül';
     }
     document.getElementById('clearAllMastersBtn')?.addEventListener('click', clearAllMasterDataV44);
     document.getElementById('loadBuiltInMastersBtn')?.addEventListener('click', loadBuiltInMasterDataV44);

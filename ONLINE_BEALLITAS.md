@@ -1,4 +1,4 @@
-# Fuvarszervező V46 – Supabase ellenőrzőlista
+# Fuvarszervező V47 – Supabase ellenőrzőlista
 
 ## Ami már be van állítva
 
@@ -12,17 +12,24 @@
 - Storage bucket: `delivery-docs`.
 - Storage INSERT és SELECT policy: authenticated.
 
-## Még 1: admin jelszó
+## Még 1: belépési jelszavak
 
-A V46 nem tárol jelszót a forráskódban. A belépés közvetlenül a Supabase Authtal történik.
+A V47 nem tárol jelszót a nyilvános forráskódban. A belépés közvetlenül a Supabase Authtal történik.
 
 Az admin fiók: `szabo.sandor82@gmail.com`
+Teszt/mobil fiók: `szabo.sandor@stand98.hu`
 
-A Supabase Authentication → Users alatt ennek a fióknak a tényleges jelszavát állítsd arra,
-amit használni szeretnél. Ha `66666666` legyen az adminjelszó, akkor a Supabase-ben is pontosan
-`66666666` kell legyen. A V46 ezt változtatás nélkül küldi a Supabase felé.
+A két tényleges jelszót a Supabase Authentication → Users alatt kell beállítani. A V47 a beírt
+e-mailt és jelszót változtatás nélkül a Supabase Auth felé küldi; jelszó nincs a GitHub-fájlokban.
 
-## Még 2: a szükséges Data API függvények engedélyezése
+## Még 2: V47 adatbázis-frissítés
+
+A V47 az online törzsadat-szinkronhoz egy új `master_data` táblát használ. A Supabase SQL Editorban
+futtasd le egyszer a ZIP-ben található frissített `supabase/schema.sql` fájlt. A script idempotens,
+ezért a már meglévő táblákat és fuvaradatokat nem törli. Ezután az admin törzsmódosításai a
+Supabase-be is mentődnek, így a következő verzió már ebből a friss törzsből tud továbbindulni.
+
+## Még 3: a szükséges Data API függvények engedélyezése
 
 A Data API → Settings → **Exposed functions** résznél jelöld be ezt a 7 függvényt, majd Save:
 
@@ -41,7 +48,7 @@ biztonságosan a szerveroldali RPC függvényeken keresztül menjen.
 
 ## Gyors ellenőrzés
 
-1. GitHub Pages frissítés után nyisd meg a V46-öt.
+1. GitHub Pages frissítés után nyisd meg a V47-et.
 2. Lépj be adminnal.
 3. Hozz létre vagy nyiss meg egy mai/holnapi rendelést.
 4. Sofőrrel lépj be egy másik eszközön.

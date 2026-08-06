@@ -1,4 +1,4 @@
--- Fuvarszervező V46 – Supabase adatbázis
+-- Fuvarszervező V47 – Supabase adatbázis
 -- Futtasd le a Supabase SQL Editorban egyben.
 
 create extension if not exists pgcrypto;
@@ -449,3 +449,18 @@ begin
 end $$;
 grant execute on function public.sync_own_backlog(jsonb) to authenticated;
 
+-- Aktuális törzsadat-pillanatkép. Ezt kizárólag az admin olvashatja és írhatja.
+-- Így a teszt során tanult címek/átvevők a következő kiadás előtt visszatölthetők.
+create table if not exists public.master_data (
+  id text primary key check (id='current'),
+  payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
+  updated_by text not null default public.current_email()
+);
+alter table public.master_data enable row level security;
+drop policy if exists master_data_admin_read on public.master_data;
+drop policy if exists master_data_admin_insert on public.master_data;
+drop policy if exists master_data_admin_update on public.master_data;
+create policy master_data_admin_read on public.master_data for select to authenticated using (public.current_role()='admin');
+create policy master_data_admin_insert on public.master_data for insert to authenticated with check (public.current_role()='admin');
+create policy master_data_admin_update on public.master_data for update to authenticated using (public.current_role()='admin') with check (public.current_role()='admin');

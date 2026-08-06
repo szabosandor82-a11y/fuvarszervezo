@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION='V46';const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION='V47';const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -14,7 +14,7 @@ function setScheduleParts(value=''){setDateParts('schedule',value)}
 function syncScheduleDate(){return syncDateParts('schedule',true)}
 function bindDateParts(prefix){const y=$('#'+prefix+'Year'),m=$('#'+prefix+'Month'),d=$('#'+prefix+'Day');[[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next])=>{if(!el)return;el.addEventListener('input',()=>{el.value=el.value.replace(/\D/g,'').slice(0,max);if(el.value.length===max&&next){next.focus();next.select()}});el.addEventListener('keydown',e=>{if(e.key==='Backspace'&&!el.value){const prev=el===d?m:el===m?y:null;if(prev){e.preventDefault();prev.focus();prev.setSelectionRange(prev.value.length,prev.value.length)}}})})}
 function defaultVehicles(){return[{id:'v-mario',driverName:'Márió',name:'Dobozos 1',type:'3.5 T dobozos autó',homeCity:'Vác',active:true},{id:'v-patrik',driverName:'Patrik',name:'Dobozos 2',type:'3.5 T dobozos autó',homeCity:'Kispest',active:true},{id:'v-martin',driverName:'Martin',name:'Ponyvás',type:'3.5 T plató autó',homeCity:'Felcsút',active:true}]}
-function refreshMasterData(){if(state.masterDataVersion==='v14-20260717'||state.masterDataVersion==='v22-excel')return;state.recipients=(state.recipients?.length?state.recipients:(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i})));state.projects=(SEED_DATA.projects||[]).map((x,i)=>({...x,id:'p'+i,defaultRecipientId:''}));state.suppliers=(SEED_DATA.suppliers||[]).map((x,i)=>({...x,id:'s'+i,isCentral:!!x.site&&norm(x.site)==='kozpont',pickupNote:x.note||''}));state.projects.forEach(p=>{const r=state.recipients.find(x=>norm(x.project)===norm(p.name))||state.recipients.find(x=>norm(x.name)===norm(p.receiver));p.defaultRecipientId=r?.id||''});(state.orders||[]).forEach(o=>{const p=state.projects.find(x=>norm(x.name)===norm(o.projectName));if(p)o.projectId=p.id;const matches=state.suppliers.filter(x=>norm(x.name)===norm(o.pickupName));if(matches.length===1)o.supplierId=matches[0].id});state.aliases={projects:{},suppliers:{}};state.masterDataVersion='v14-20260717'}function load(){const raw=localStorage.getItem(KEY);if(raw){state=JSON.parse(raw);state.aliases=state.aliases||{projects:{},suppliers:{}};state.vehicles=state.vehicles||defaultVehicles();state.orders=state.orders||[];state.backlog=state.backlog||[];refreshMasterData();save(false);return}state.recipients=(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i}));state.vehicles=defaultVehicles();state.orders=[];refreshMasterData();save(false)}
+function refreshMasterData(){if(state.masterDataVersion)return;state.recipients=(state.recipients?.length?state.recipients:(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i})));state.projects=(SEED_DATA.projects||[]).map((x,i)=>({...x,id:'p'+i,defaultRecipientId:''}));state.suppliers=(SEED_DATA.suppliers||[]).map((x,i)=>({...x,id:'s'+i,isCentral:!!x.site&&norm(x.site)==='kozpont',pickupNote:x.note||''}));state.projects.forEach(p=>{const r=state.recipients.find(x=>norm(x.project)===norm(p.name))||state.recipients.find(x=>norm(x.name)===norm(p.receiver));p.defaultRecipientId=r?.id||''});(state.orders||[]).forEach(o=>{const p=state.projects.find(x=>norm(x.name)===norm(o.projectName));if(p)o.projectId=p.id;const matches=state.suppliers.filter(x=>norm(x.name)===norm(o.pickupName));if(matches.length===1)o.supplierId=matches[0].id});state.aliases={projects:{},suppliers:{}};state.masterDataVersion='v14-20260717'}function load(){const raw=localStorage.getItem(KEY);if(raw){state=JSON.parse(raw);state.aliases=state.aliases||{projects:{},suppliers:{}};state.vehicles=state.vehicles||defaultVehicles();state.orders=state.orders||[];state.backlog=state.backlog||[];refreshMasterData();save(false);return}state.recipients=(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i}));state.vehicles=defaultVehicles();state.orders=[];refreshMasterData();save(false)}
 function save(renderNow=true){localStorage.setItem(KEY,JSON.stringify(state));if(renderNow)render()}
 function activeVehicles(){return state.vehicles.filter(v=>v.active)}
 function marioVehicle(){return activeVehicles().find(v=>norm(v.driverName).includes('mario'))||state.vehicles.find(v=>norm(v.driverName).includes('mario'))||null}
@@ -234,6 +234,112 @@ function renderReports(){
   };
   $('#brandHome').onclick=resetToStartPage;
   $('#reportMonth').onchange=renderReports;$('#refreshReportBtn').onclick=renderReports;
+})();
+
+/* Következő verzió – a buborékból tanult törzsadat csak a módosítás napjától előre él. */
+(function installForwardMasterLearning(){
+  const stamp=()=>new Date().toISOString();
+  const sameProject=(a,b)=>{
+    if(a?.projectId&&b?.projectId)return a.projectId===b.projectId;
+    if(a?.projectName&&b?.projectName)return norm(a.projectName)===norm(b.projectName);
+    return !!(a?.dropAddress&&b?.dropAddress&&norm(a.dropAddress)===norm(b.dropAddress));
+  };
+  const fromDate=(order,startDate)=>!!order?.scheduleDate&&order.scheduleDate>=startDate;
+  const ensureProject=order=>{
+    if(!order?.projectName)return null;
+    let project=(order.projectId&&state.projects.find(item=>item.id===order.projectId))||state.projects.find(item=>norm(item.name)===norm(order.projectName));
+    if(!project){
+      project={id:uid(),name:order.projectName,address:order.dropAddress||'',defaultRecipientId:'',active:true,manualOverride:true,learnedFromOrder:true,createdAt:stamp()};
+      state.projects.push(project);
+    }
+    if(order.dropAddress&&norm(project.address)!==norm(order.dropAddress)){
+      project.address=order.dropAddress;project.manualOverride=true;project.manualEditedAt=stamp();project.learnedFromOrder=true;
+    }
+    order.projectId=project.id;
+    return project;
+  };
+  const ensureSupplierLocation=order=>{
+    if(!order?.pickupName||!order?.pickupAddress)return null;
+    let supplier=state.suppliers.find(item=>norm(item.name)===norm(order.pickupName)&&norm(item.address)===norm(order.pickupAddress));
+    if(!supplier){
+      supplier={id:uid(),name:order.pickupName,site:'',address:order.pickupAddress,pickupNote:order.pickupNote||'',note:order.pickupNote||'',isCentral:false,active:true,manualOverride:true,learnedFromOrder:true,createdAt:stamp()};
+      state.suppliers.push(supplier);
+    }
+    order.supplierId=supplier.id;
+    order.pickupNote=supplier.pickupNote||supplier.note||order.pickupNote||'';
+    return supplier;
+  };
+  const ensureRecipient=(order,project,draft={})=>{
+    const selected=draft.recipientId?state.recipients.find(item=>item.id===draft.recipientId):null;
+    const typedName=String(draft.recipientName??order.recipientName??'').trim();
+    const selectedMatches=!typedName||!selected||norm(selected.name)===norm(typedName);
+    let recipient=selectedMatches?selected:null;
+    if(!recipient&&typedName)recipient=state.recipients.find(item=>norm(item.name)===norm(typedName)&&(!project?.name||norm(item.project)===norm(project.name)));
+    if(!recipient&&typedName){
+      recipient={id:uid(),project:project?.name||order.projectName||'',name:typedName,phone:String(draft.recipientPhone??order.recipientPhone??'').trim(),email:String(draft.recipientEmail??order.recipientEmail??'').trim(),active:true,manualOverride:true,learnedFromOrder:true,createdAt:stamp()};
+      state.recipients.push(recipient);
+    }
+    if(!recipient)return null;
+    order.recipientId=recipient.id;order.recipientName=recipient.name||'';order.recipientPhone=recipient.phone||'';order.recipientEmail=recipient.email||'';
+    if(project){project.defaultRecipientId=recipient.id;project.manualOverride=true;project.manualEditedAt=stamp()}
+    return recipient;
+  };
+
+  function learnFromOrder(order,before=null,draft={}){
+    if(!order)return{changed:0};
+    const startDate=order.scheduleDate||today();
+    const project=ensureProject(order);
+    const supplier=ensureSupplierLocation(order);
+    const recipient=ensureRecipient(order,project,draft);
+    if(project)project.effectiveFrom=startDate;
+    if(supplier&&supplier.learnedFromOrder)supplier.effectiveFrom=supplier.effectiveFrom||startDate;
+    if(recipient){recipient.effectiveFrom=startDate;if(project)project.defaultRecipientEffectiveFrom=startDate}
+    const changedAddresses=[];
+    let changed=0;
+    for(const candidate of state.orders||[]){
+      if(candidate.id===order.id||!fromDate(candidate,startDate))continue;
+      if(project&&sameProject(candidate,order)){
+        if(order.dropAddress&&candidate.dropAddress!==order.dropAddress){changedAddresses.push(candidate.dropAddress);candidate.dropAddress=order.dropAddress;changedAddresses.push(candidate.dropAddress);changed++}
+        candidate.projectId=project.id;candidate.projectName=project.name;
+        if(recipient){candidate.recipientId=recipient.id;candidate.recipientName=recipient.name||'';candidate.recipientPhone=recipient.phone||'';candidate.recipientEmail=recipient.email||'';changed++}
+      }
+      const sameSupplier=norm(candidate.pickupName)===norm(order.pickupName);
+      const sameOldPickup=before?.pickupAddress?norm(candidate.pickupAddress)===norm(before.pickupAddress):!candidate.pickupAddress;
+      if(supplier&&sameSupplier&&sameOldPickup&&sameProject(candidate,order)){
+        if(candidate.pickupAddress!==supplier.address){changedAddresses.push(candidate.pickupAddress);candidate.pickupAddress=supplier.address;changedAddresses.push(candidate.pickupAddress);changed++}
+        candidate.supplierId=supplier.id;candidate.pickupNote=supplier.pickupNote||supplier.note||candidate.pickupNote||'';
+      }
+    }
+    if(changedAddresses.length&&typeof v28InvalidateRoutes==='function')v28InvalidateRoutes(changedAddresses);
+    state.masterDataVersion='forward-learning';
+    return{changed,project,supplier,recipient};
+  }
+
+  const orderForm=document.getElementById('orderForm');
+  if(orderForm){
+    const previous=orderForm.onsubmit;
+    orderForm.onsubmit=event=>{
+      const id=document.getElementById('orderId')?.value||'';
+      const before=id?{...(state.orders.find(item=>item.id===id)||{})}:null;
+      const draft={recipientId:document.getElementById('recipientId')?.value||'',recipientName:document.getElementById('recipientName')?.value||'',recipientPhone:document.getElementById('recipientPhone')?.value||'',recipientEmail:document.getElementById('recipientEmail')?.value||''};
+      previous?.(event);
+      const saved=id?state.orders.find(item=>item.id===id):state.orders[state.orders.length-1];
+      if(!saved)return;
+      learnFromOrder(saved,before,draft);
+      localStorage.setItem(KEY,JSON.stringify(state));
+      render();
+    };
+  }
+
+  function placePlannerControls(){
+    const controls=document.getElementById('plannerControls'),nav=document.querySelector('nav'),mobileHost=document.getElementById('plannerMobileControlHost');
+    if(!controls||!nav||!mobileHost)return;
+    const target=window.matchMedia('(min-width:1024px)').matches?nav:mobileHost;
+    if(controls.parentElement!==target)target.appendChild(controls);
+  }
+  placePlannerControls();
+  window.addEventListener('resize',placePlannerControls,{passive:true});
+  window.V47MasterLearning={learnFromOrder,placePlannerControls};
 })();
 
 /* ==================== V21 PATCH ==================== */
