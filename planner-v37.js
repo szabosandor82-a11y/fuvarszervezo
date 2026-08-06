@@ -54,9 +54,18 @@
   const bubbleGroups = orders => global.V33Planner?.orderedBubbleGroups?.(orders) || [];
   const pickupMoveKey = value => {
     const source = value?.orders?.[0] || value || {};
-    const name = value?.pickupName || source.pickupName || '';
+    const master = source?.supplierId && typeof state !== 'undefined'
+      ? (state.suppliers || []).find(item => item.id === source.supplierId)
+      : null;
+    const name = master?.name || value?.pickupName || source.pickupName || '';
     const address = value?.pickupAddress || source.pickupAddress || '';
-    return `${nrm(name || 'ismeretlen felrako')}||${nrm(address || '')}`;
+    if (name) {
+      const canonical = global.V35Planner?.canonicalStop
+        ? global.V35Planner.canonicalStop({ name, address: '' })
+        : nrm(name);
+      return `supplier:${canonical || nrm(name)}`;
+    }
+    return `address:${nrm(address || 'ismeretlen felrako')}`;
   };
 
   function ensureV37State() {
@@ -77,7 +86,8 @@
     for (const [key, pickupGroups] of byPickup.entries()) {
       pickupGroups.sort((a, b) => a.sequence - b.sequence || a.key.localeCompare(b.key, 'hu'));
       const allOrders = pickupGroups.flatMap(group => group.orders);
-      const ungrouped = allOrders.some(order => order.pickupMoveUngrouped);
+      // V47: egy beszállító az adott napon mindig egy mozgatási egység.
+      const ungrouped = false;
       if (ungrouped) {
         allOrders.slice().sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999) || String(a.orderNo || '').localeCompare(String(b.orderNo || ''), 'hu')).forEach((order, index) => {
           const singleGroup = bubbleGroups([order])[0];
@@ -361,20 +371,14 @@
   }
 
   function groupedBubbles(list, vehicleId, focus = false) {
-    const groups = bubbleGroups(list);
-    if (!groups.length) return '<div class="notice">Nincs fuvar.</div>';
-    return groups.map((group, index) => renderGroupBubble(group, index, vehicleId, { focus })).join('');
-  }
-
-  function focusGroupedBubbles(list, vehicleId) {
     const units = focusPickupUnits(list);
     if (!units.length) return '<div class="notice">Nincs fuvar.</div>';
     return units.map((unit, unitIndex) => {
       if (!unit.grouped) {
         const group = unit.groups[0];
         return renderGroupBubble(group, unitIndex, vehicleId, {
-          focus: true,
-          ungrouped: unit.ungrouped,
+          focus,
+          ungrouped: false,
           samePickupCount: unit.allPickupOrders.length,
           allPickupOrders: unit.allPickupOrders,
           displayLabel: String(unitIndex + 1)
@@ -387,12 +391,11 @@
       const resolvedPickup = unit.allPickupOrders.every(isResolvedBacklogOrder);
       return `<section class="pickup-move-block ${resolvedPickup ? 'resolved-pickup-block' : ''}" data-pickup-move-key="${escHtml(unit.pickupKey)}" data-order-ids="${escHtml(ids)}" data-vehicle-id="${escHtml(vehicleId)}">
         <div class="pickup-group-bar">
-          <span class="pickup-group-drag" title="A teljes felrakási blokk húzása">☷</span>
-          <div><b>${unitIndex + 1}. ${escHtml(pickupName)}</b><small>${escHtml(pickupAddress)} · ${orderCount} rendelés · együtt mozog</small></div>
-          <button type="button" class="ungroup-button" onclick="event.stopPropagation();v37SetPickupGrouping('${escHtml(ids)}',true)">Csoport bontása</button>
+          <span class="pickup-group-drag" title="A teljes beszállítói blokk húzása">☷</span>
+          <div><b>${unitIndex + 1}. ${escHtml(pickupName)}</b><small>${orderCount} rendelés · egy beszállító · mindig együtt mozog</small></div>
         </div>
         <div class="pickup-group-orders">${unit.groups.map((group, subIndex) => renderGroupBubble(group, subIndex, vehicleId, {
-          focus: true,
+          focus,
           insidePickupGroup: true,
           allPickupOrders: unit.allPickupOrders,
           samePickupCount: orderCount,
@@ -401,6 +404,8 @@
       </section>`;
     }).join('');
   }
+
+  function focusGroupedBubbles(list, vehicleId) { return groupedBubbles(list, vehicleId, true); }
 
   function ensureFocusDialog() {
     if (document.getElementById('v37DriverViewDialog')) return;
@@ -483,6 +488,36 @@
     });
   }
 
+  function moveSupplierOrdersTogether(seedIds, targetVehicleId, anchorSequence = null) {
+    const ids = Array.isArray(seedIds) ? seedIds.filter(Boolean) : String(seedIds || '').split(',').filter(Boolean);
+    const seed = ids.map(id => state.orders.find(order => order.id === id)).find(Boolean);
+    if (!seed || !targetVehicleId) return 0;
+    const date = seed.scheduleDate;
+    const key = pickupMoveKey(seed);
+    const related = (state.orders || []).filter(order => order.scheduleDate === date && pickupMoveKey(order) === key && !isResolvedBacklogOrder(order));
+    if (!related.length) return 0;
+
+    const relatedIds = new Set(related.map(order => order.id));
+    const seedSequences = ids.map(id => state.orders.find(order => order.id === id)).filter(Boolean).map(order => +order.sequence || 999);
+    const anchor = Number.isFinite(+anchorSequence) ? +anchorSequence : Math.min(...seedSequences, ...related.map(order => +order.sequence || 999));
+    related.forEach(order => { order.vehicleId = targetVehicleId; });
+
+    const targetOthers = (state.orders || []).filter(order => order.scheduleDate === date && order.vehicleId === targetVehicleId && !relatedIds.has(order.id))
+      .slice().sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999) || String(a.orderNo || '').localeCompare(String(b.orderNo || ''), 'hu'));
+    const orderedRelated = related.slice().sort((a, b) => String(a.orderNo || '').localeCompare(String(b.orderNo || ''), 'hu'));
+    const insertAt = Math.max(0, Math.min(targetOthers.length, Math.max(0, Math.round(anchor || 1) - 1)));
+    targetOthers.splice(insertAt, 0, ...orderedRelated);
+    targetOthers.forEach((order, index) => { order.sequence = index + 1; });
+
+    for (const vehicle of activeVehicles()) {
+      if (vehicle.id === targetVehicleId) continue;
+      (state.orders || []).filter(order => order.scheduleDate === date && order.vehicleId === vehicle.id)
+        .sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999))
+        .forEach((order, index) => { order.sequence = index + 1; });
+    }
+    return related.length;
+  }
+
   function trackPointer(event) {
     const touch = event?.touches?.[0] || event?.changedTouches?.[0];
     const y = touch?.clientY ?? event?.clientY;
@@ -533,10 +568,8 @@
     return new Sortable(element, {
       group: focus ? `focus-${vehicleId}` : 'vehicles-v37',
       animation: 180,
-      handle: focus ? '.pickup-group-drag, .drag' : '.drag',
-      draggable: focus
-        ? '.pickup-move-block:not(.resolved-pickup-block), .route-block:not(.inside-pickup-group):not(.resolved-backlog-block)'
-        : '.route-block:not(.resolved-backlog-block)',
+      handle: '.pickup-group-drag, .drag',
+      draggable: '.pickup-move-block:not(.resolved-pickup-block), .route-block:not(.inside-pickup-group):not(.resolved-backlog-block)',
       filter: '.resolved-backlog-block, .resolved-pickup-block',
       scroll: false,
       fallbackOnBody: true,
@@ -551,6 +584,7 @@
       },
       onEnd: event => {
         stopDragScroll();
+        const movedIds = String(event.item?.dataset?.orderIds || '').split(',').filter(Boolean);
         if (focus) updateSequencesFromContainer(element, vehicleId);
         else {
           activeVehicles().forEach(vehicle => {
@@ -558,8 +592,12 @@
             if (container) updateSequencesFromContainer(container, vehicle.id);
           });
         }
+        const targetVehicleId = focus ? vehicleId : String(event.to?.id || '').replace(/^route-/, '');
+        const anchorSequence = movedIds.map(id => state.orders.find(order => order.id === id)).filter(Boolean).reduce((min, order) => Math.min(min, +order.sequence || 999), 999);
+        moveSupplierOrdersTogether(movedIds, targetVehicleId, anchorSequence);
         state.routePlans = state.routePlans || {}; state.routePlans[selectedDate()] = {};
         save();
+        if (!focus && typeof renderRoutes === 'function') setTimeout(renderRoutes, 0);
       }
     });
   }
@@ -722,7 +760,8 @@
       driverFocusView: true,
       stickyFocusMap: true,
       pickupBlockDragging: true,
-      pickupUngrouping: true,
+      supplierMovesAsOneBlock: true,
+      pickupUngrouping: false,
       resolvedBacklogExcluded: true,
       ryngAddress: RYNG_ADDRESS
     });
@@ -744,6 +783,7 @@
     RYNG_ADDRESS,
     applyDirectionalRules,
     pickupMoveKey,
+    moveSupplierOrdersTogether,
     focusPickupUnits,
     v37SetPickupGrouping,
     isBacklogOrder,

@@ -24,6 +24,9 @@ V47 fő változások
 - Martin elsősorban a felismert szálas/platós fuvarokat kapja. Ha az adott napon nincs ilyen,
   Martin is részt vesz a Dobozos fuvarok egyenletes kiosztásában.
 - Azonos fizikai felrakóhely rendelései továbbra is együtt, egy sofőrnél maradnak.
+- Ugyanazon beszállító összes aznapi rendelése egy sofőrhöz kerül; a szétosztás nem szakíthatja ketté.
+- Kézi húzásnál az egész aznapi beszállítói blokk egyszerre vált sofőrt, és egy sofőrön belüli
+  sorrendmódosításnál is együtt mozog.
 - Lassított buborék-húzás közbeni automatikus görgetés.
 - Asztali nézetben a térképek fixen látszanak, csak a buboréklisták görgethetők;
   a fuvarszervezési műveletek a bal oldali menübe kerültek.
@@ -35,7 +38,7 @@ V47 fő változások
 - A „Mentett fotók” gomb a csoportosított Fuvarok-buborékokon és a Rendelések listában is elérhető.
 - Több rendelést tartalmazó buboréknál a galéria a csoport összes rendelésének fotóit megmutatja.
 - Nincs szállítólevél e-mail-küldő funkció.
-- Új PWA gyorsítótárnév: fuvarszervezo-v47-online-20260806-3.
+- Új PWA gyorsítótárnév: fuvarszervezo-v47-online-20260806-4.
 
 Telepítés GitHub Pages-re
 ------------------------

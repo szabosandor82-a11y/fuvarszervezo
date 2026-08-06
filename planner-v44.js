@@ -77,6 +77,19 @@
     return `location:name:${nrm(order?.pickupName || 'ismeretlen felrako')}`;
   }
 
+  function supplierAssignmentKey(order) {
+    if (centralOrder(order)) return 'supplier:central';
+    const master = order?.supplierId && typeof state !== 'undefined'
+      ? (state.suppliers || []).find(item => item.id === order.supplierId)
+      : null;
+    const name = master?.name || order?.pickupName || '';
+    if (!name) return '';
+    const canonical = global.V35Planner?.canonicalStop
+      ? global.V35Planner.canonicalStop({ name, address: '' })
+      : nrm(name);
+    return `supplier:${canonical || nrm(name)}`;
+  }
+
   function isResolved(order) {
     return !!(order?.backlogResolved && order?.completed);
   }
@@ -204,8 +217,24 @@
   }
 
   function makeBlocks(orders, profiles, drivers) {
-    const raw = [...groupBy(orders, locationKey).entries()].map(([key, grouped]) => ({
-      key,
+    // Egy napi kiosztási egységbe kerül minden azonos beszállító, és minden
+    // azonos fizikai felrakóhely is. Így sem ugyanaz a beszállító, sem ugyanaz
+    // a cím nem szakadhat két sofőrre.
+    const list = (orders || []).slice();
+    const parent = list.map((_, index) => index);
+    const find = index => parent[index] === index ? index : (parent[index] = find(parent[index]));
+    const join = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[rb] = ra; };
+    const supplierOwner = new Map(), locationOwner = new Map();
+    list.forEach((order, index) => {
+      const supplier = supplierAssignmentKey(order);
+      const location = locationKey(order);
+      if (supplier) { if (supplierOwner.has(supplier)) join(index, supplierOwner.get(supplier)); else supplierOwner.set(supplier, index); }
+      if (location) { if (locationOwner.has(location)) join(index, locationOwner.get(location)); else locationOwner.set(location, index); }
+    });
+    const components = new Map();
+    list.forEach((order, index) => { const root = find(index); if (!components.has(root)) components.set(root, []); components.get(root).push(order); });
+    const raw = [...components.values()].map(grouped => ({
+      key: `${supplierAssignmentKey(grouped[0]) || 'supplier:unknown'}||${locationKey(grouped[0])}`,
       orders: grouped.slice().sort((a, b) => String(a.orderNo || '').localeCompare(String(b.orderNo || ''), 'hu')),
       point: null,
       zone: '',
@@ -609,6 +638,7 @@
     version: VERSION,
     canonicalAddress,
     locationKey,
+    supplierAssignmentKey,
     pickupZone,
     fixedVehicleForOrder,
     vehicleHomeV44,
