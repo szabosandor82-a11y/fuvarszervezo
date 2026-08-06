@@ -5,7 +5,7 @@
    - Márió / Patrik / Martin névre rögzített fuvar automatikusan nem mozgatható.
    - Egy fizikai felrakóhely minden mozgatható rendelése egy sofőrhöz kerül.
    - Márió: pesti oldal. Patrik: budai oldal. Martin: platós/szálanyag + nyugati folyosó.
-   - Martin nem kap pesti címet pusztán terheléskiegyenlítés miatt.
+   - Martin elsősorban a platós/szálanyagos fuvarokat kapja; ha nincs ilyen, a Dobozos terhelésből is részt kap.
    - Márió Vác, Martin Felcsút, Patrik a központi raktár felől indul.
    - A szétosztás után azonnal felrakási sorrend készül; az optimalizálás sofőrt nem változtat.
 */
@@ -282,6 +282,9 @@
     if (block.zone === 'pest') return [mario || martin || patrik].filter(Boolean);
     if (block.zone === 'buda') return [patrik || martin || mario].filter(Boolean);
     if (block.zone === 'martin-corridor') return [martin || patrik || mario].filter(Boolean);
+    // A sima Dobozos fuvar Márió és Patrik közös terhelése. Martin csak a
+    // platós/szálanyagos vagy kifejezetten hozzá rögzített fuvarokat kapja.
+    if (block.movable) return [mario, patrik].filter(Boolean);
     return drivers.slice();
   }
 
@@ -299,13 +302,13 @@
     }).sort((a, b) => a.score - b.score || a.route - b.route || a.vehicle.id.localeCompare(b.vehicle.id))[0]?.vehicle || candidates[0];
   }
 
-  function blockCanMoveTo(block, target) {
+  function blockCanMoveTo(block, target, allowMartinBox = false) {
     if (!block.movable) return false;
     const key = driverKey(target);
-    if (block.zone === 'pest') return key === 'mario';
-    if (block.zone === 'buda') return key === 'patrik';
-    if (block.zone === 'martin-corridor') return key === 'martin';
-    return true;
+    // A Pest/Buda besorolás elsődleges preferencia, nem örök rögzítés.
+    // Túlsúlynál a Dobozos blokkok Márió és Patrik között átadhatók, és
+    // szálas munka nélküli napon Martin is részt vesz az egyenletes kiosztásban.
+    return key === 'mario' || key === 'patrik' || (allowMartinBox && key === 'martin');
   }
 
   function moveBlock(block, source, target, assignedBlocks, assignedOrders, reason) {
@@ -317,25 +320,30 @@
     assignmentReason(block, target, reason);
   }
 
-  function balanceFlexibleBlocks(drivers, assignedBlocks, assignedOrders, homes) {
+  function balanceFlexibleBlocks(drivers, assignedBlocks, assignedOrders, homes, allowMartinBox = false) {
+    const balanceDrivers = drivers.filter(vehicle => {
+      const key = driverKey(vehicle);
+      return key === 'mario' || key === 'patrik' || (allowMartinBox && key === 'martin');
+    });
+    if (balanceDrivers.length < 2) return;
     for (let guard = 0; guard < 60; guard++) {
-      const sorted = drivers.slice().sort((a, b) => stopCount(assignedBlocks[a.id]) - stopCount(assignedBlocks[b.id]));
+      const sorted = balanceDrivers.slice().sort((a, b) => stopCount(assignedBlocks[a.id]) - stopCount(assignedBlocks[b.id]));
       const low = sorted[0], high = sorted[sorted.length - 1];
       const spread = stopCount(assignedBlocks[high.id]) - stopCount(assignedBlocks[low.id]);
-      if (spread <= 2) break;
+      if (spread <= 1) break;
       const currentLowRoute = greedyRouteLength(homes[low.id], assignedBlocks[low.id]);
-      const candidates = assignedBlocks[high.id].filter(block => blockCanMoveTo(block, low)).map(block => {
+      const candidates = assignedBlocks[high.id].filter(block => blockCanMoveTo(block, low, allowMartinBox)).map(block => {
         const highAfter = assignedBlocks[high.id].filter(item => item !== block);
         const lowAfter = [...assignedBlocks[low.id], block];
         const routeIncrease = greedyRouteLength(homes[low.id], lowAfter) - currentLowRoute;
-        const newSpreadValues = drivers.map(vehicle => {
+        const newSpreadValues = balanceDrivers.map(vehicle => {
           if (vehicle.id === high.id) return stopCount(highAfter);
           if (vehicle.id === low.id) return stopCount(lowAfter);
           return stopCount(assignedBlocks[vehicle.id]);
         });
         const newSpread = Math.max(...newSpreadValues) - Math.min(...newSpreadValues);
         return { block, routeIncrease, newSpread };
-      }).filter(item => item.newSpread < spread && item.routeIncrease <= 14)
+      }).filter(item => item.newSpread < spread)
         .sort((a, b) => a.newSpread - b.newSpread || a.routeIncrease - b.routeIncrease || a.block.key.localeCompare(b.block.key, 'hu'));
       if (!candidates.length) break;
       moveBlock(candidates[0].block, high, low, assignedBlocks, assignedOrders, 'semleges/központi blokk terheléskiegyenlítése');
@@ -426,7 +434,8 @@
       assignWholeBlock(block, vehicle, assignedBlocks, assignedOrders, 'útvonal- és terhelésalapú semleges/központi kiosztás');
     }
 
-    balanceFlexibleBlocks(drivers, assignedBlocks, assignedOrders, homes);
+    const hasDetectedLongMaterial = blocks.some(block => hasLongMaterial(block));
+    balanceFlexibleBlocks(drivers, assignedBlocks, assignedOrders, homes, !hasDetectedLongMaterial);
     const splitConflicts = verifyNoMovableLocationSplit(blocks, drivers);
 
     // A sorrend ideiglenesen blokkonként marad együtt. A valódi felrakási sorrendet a V37/V44 útvonalépítő állítja be.
@@ -490,7 +499,7 @@
       await buildRoutePlansV44(result.profiles);
       if (typeof save === 'function') save();
       const conflictText = result.conflicts.length ? `\nFigyelem: ${result.conflicts.length} felrakóhelyen egymással ütköző fix sofőrjelölés maradt.` : '';
-      alert(`Fuvarok V47 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nMárió=Pest, Patrik=Buda, Martin=platós/nyugati folyosó. Martin pesti címet csak kézi vagy névre rögzített rendelésként kap.`);
+      alert(`Fuvarok V47 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nPest/Buda területi preferencia mellett a terhelés egyenletes. Martin elsősorban szálas/platós fuvarokat kap; ilyen fuvar nélkül a Dobozos kiosztásban is részt vesz.`);
       return result;
     } catch (error) {
       console.error('[V47] Szétosztási hiba', error);

@@ -19,6 +19,11 @@ V47 fő változások
   de új cím kézzel is felvehető anélkül, hogy a többi telephely felülíródna.
 - Az Outlook-előnézet ürítése nem törli a már jóváhagyott fuvarokat.
 - A kézzel másik sofőrhöz húzott buborék nem válik automatikusan rögzített fuvarrá.
+- A Dobozos felrakók számtól függetlenül a lehető legegyenletesebben oszlanak el.
+- Pest/Buda területi besorolása preferencia, nem merev rögzítés.
+- Martin elsősorban a felismert szálas/platós fuvarokat kapja. Ha az adott napon nincs ilyen,
+  Martin is részt vesz a Dobozos fuvarok egyenletes kiosztásában.
+- Azonos fizikai felrakóhely rendelései továbbra is együtt, egy sofőrnél maradnak.
 - Lassított buborék-húzás közbeni automatikus görgetés.
 - Asztali nézetben a térképek fixen látszanak, csak a buboréklisták görgethetők;
   a fuvarszervezési műveletek a bal oldali menübe kerültek.
@@ -30,7 +35,7 @@ V47 fő változások
 - A „Mentett fotók” gomb a csoportosított Fuvarok-buborékokon és a Rendelések listában is elérhető.
 - Több rendelést tartalmazó buboréknál a galéria a csoport összes rendelésének fotóit megmutatja.
 - Nincs szállítólevél e-mail-küldő funkció.
-- Új PWA gyorsítótárnév: fuvarszervezo-v47-online-20260806-1.
+- Új PWA gyorsítótárnév: fuvarszervezo-v47-online-20260806-3.
 
 Telepítés GitHub Pages-re
 ------------------------

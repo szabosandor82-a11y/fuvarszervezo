@@ -27,9 +27,10 @@ function ok(value, name) {
 ok(app.includes("APP_VERSION='V47'"), 'V47 alkalmazásverzió');
 ok(html.includes('<title>Fuvarszervező V47</title>'), 'V47 böngészőcím');
 ok(manifest.name === 'Fuvarszervező V47' && manifest.short_name === 'Fuvar V47', 'V47 PWA manifest');
-ok(sw.includes('fuvarszervezo-v47-online-20260806-1'), 'V47 service worker gyorsítótár');
+ok(sw.includes('fuvarszervezo-v47-online-20260806-3'), 'V47 service worker gyorsítótár');
 ok(sw.includes("'./online-config.js?v=47'") && sw.includes("'./online-v44-2.js?v=47'"), 'V47 online fájlok PWA gyorsítótárban');
 ok(planner44.includes("const VERSION = '47'"), 'aktív szétosztó/optimalizáló motor V47');
+ok(planner44.includes("allowMartinBox && key === 'martin'") && planner44.includes('balanceFlexibleBlocks(drivers, assignedBlocks, assignedOrders, homes, !hasDetectedLongMaterial)'), 'Dobozos terhelés minden felrakószámnál kiegyenlíthető, szálas nélkül Martinnal együtt');
 
 ok(config.includes('https://eswwxncdystrqzqzbkto.supabase.co'), 'helyes Supabase Project URL');
 ok(config.includes('sb_publishable_v_1PQY4MNAd5HjkFOv37lg_7sDUjPLs'), 'publishable key beállítva');

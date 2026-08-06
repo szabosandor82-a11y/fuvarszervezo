@@ -1,11 +1,15 @@
 Fuvarszervező V47 – ellenőrzési eredmény
 =======================================
 
-Kiadás előtti V47 ellenőrzés: 49/49 sikeres.
+Kiadás előtti V47 ellenőrzés: 50/50 sikeres.
+Külön szétosztási motor-teszt: 9/9 sikeres.
 
 Ellenőrizve:
 - V47 alkalmazás/PWA verzió és új service-worker cache;
 - aktív fuvarszétosztó és optimalizáló motorjelölés: V47;
+- 3 külön pesti Dobozos, szálas nélkül: 1 Márió / 1 Patrik / 1 Martin;
+- 4 külön pesti Dobozos, szálas nélkül: a lehető legegyenletesebb 2–1–1;
+- észlelt szálas fuvarnál Martin elsődlegesen a szálast kapja, a Dobozos Márió/Patrik között oszlik;
 - Supabase Project URL és publishable key;
 - Supabase Auth e-mail/jelszó belépés, nyilvános hardkódolt jelszó nélkül;
 - privát delivery-docs fotótár és rendeléshez kötött Mentett fotók;
