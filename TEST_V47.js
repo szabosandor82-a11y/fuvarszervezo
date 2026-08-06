@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const root = __dirname;
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 const auth = read('auth-v44-2.js');
@@ -25,10 +26,12 @@ function ok(value, name) {
 }
 
 ok(app.includes("APP_VERSION='V47'"), 'V47 alkalmazásverzió');
+execFileSync(process.execPath, ['--check', path.join(root, 'app.js')], { stdio: 'pipe' });
+ok(true, 'app.js JavaScript szintaxis ép');
 ok(html.includes('<title>Fuvarszervező V47</title>'), 'V47 böngészőcím');
 ok(manifest.name === 'Fuvarszervező V47' && manifest.short_name === 'Fuvar V47', 'V47 PWA manifest');
-ok(sw.includes('fuvarszervezo-v47-online-20260806-5'), 'V47 service worker gyorsítótár');
-ok(sw.includes("'./online-config.js?v=47.5'") && sw.includes("'./online-v44-2.js?v=47.5'"), 'V47 online fájlok PWA gyorsítótárban');
+ok(sw.includes('fuvarszervezo-v47-online-20260806-6'), 'V47 service worker gyorsítótár');
+ok(sw.includes("'./online-config.js?v=47.6'") && sw.includes("'./online-v44-2.js?v=47.6'"), 'V47 online fájlok PWA gyorsítótárban');
 ok(planner44.includes("const VERSION = '47'"), 'aktív szétosztó/optimalizáló motor V47');
 ok(planner44.includes("allowMartinBox && key === 'martin'") && planner44.includes('balanceFlexibleBlocks(drivers, assignedBlocks, assignedOrders, homes, !hasDetectedLongMaterial)'), 'Dobozos terhelés minden felrakószámnál kiegyenlíthető, szálas nélkül Martinnal együtt');
 ok(planner44.includes('supplierAssignmentKey') && planner44.includes('supplierOwner') && planner44.includes('locationOwner'), 'szétosztásnál azonos beszállító és azonos fizikai cím is oszthatatlan egység');

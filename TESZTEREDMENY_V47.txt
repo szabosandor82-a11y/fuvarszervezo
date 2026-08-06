@@ -1,11 +1,11 @@
 Fuvarszervező V47 – ellenőrzési eredmény
 =======================================
 
-Kiadás előtti V47 ellenőrzés: 52/52 sikeres.
+Kiadás előtti V47 ellenőrzés: 53/53 sikeres.
 Külön szétosztási és kézi mozgatási motor-teszt: 11/11 sikeres.
 
 Ellenőrizve:
-- V47 alkalmazás/PWA verzió és új service-worker cache;
+- V47 alkalmazás/PWA verzió, teljes app.js JavaScript-szintaxis és új service-worker cache;
 - aktív fuvarszétosztó és optimalizáló motorjelölés: V47;
 - 3 külön pesti Dobozos, szálas nélkül: 1 Márió / 1 Patrik / 1 Martin;
 - 4 külön pesti Dobozos, szálas nélkül: a lehető legegyenletesebb 2–1–1;

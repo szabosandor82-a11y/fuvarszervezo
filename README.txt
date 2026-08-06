@@ -38,7 +38,7 @@ V47 fő változások
 - A „Mentett fotók” gomb a csoportosított Fuvarok-buborékokon és a Rendelések listában is elérhető.
 - Több rendelést tartalmazó buboréknál a galéria a csoport összes rendelésének fotóit megmutatja.
 - Nincs szállítólevél e-mail-küldő funkció.
-- Új PWA gyorsítótárnév: fuvarszervezo-v47-online-20260806-5; az alkalmazásfájlok ?v=47.5 verziójelet kapnak, hogy a böngésző biztosan ne tartsa meg a korábbi V47 JavaScriptet.
+- Új PWA gyorsítótárnév: fuvarszervezo-v47-online-20260806-6; az alkalmazásfájlok ?v=47.6 verziójelet kapnak, hogy a böngésző biztosan ne tartsa meg a korábbi V47 JavaScriptet. A 47.6 javítja a korábban félbeszakadt app.js fájlt is.
 
 Telepítés GitHub Pages-re
 ------------------------
