@@ -1,4 +1,4 @@
-/* Fuvarszervező V48 – Supabase REST alapú online szinkron.
+/* Fuvarszervező V49 – Supabase REST alapú online szinkron.
    Külső klienskönyvtár nélkül működik, a böngésző beépített fetch API-jával. */
 (function (global) {
   'use strict';

@@ -1,4 +1,4 @@
-/* Fuvarszervező V48
+/* Fuvarszervező V49
    Determinisztikus felrakóhely-blokkos szétosztás.
 
    Kemény szabályok:
@@ -12,7 +12,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '48';
+  const VERSION = '49';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   const HOMES = {
     mario: { address: 'Vác, Magyarország', point: [47.7759, 19.1360] },
@@ -56,7 +56,10 @@
   const physicalLoad = order => global.V35Planner?.physicalLoad
     ? global.V35Planner.physicalLoad(order)
     : ({ long: order?.longMaterialReason ? 1 : 0, bulky: 0, full: 0 });
-  const centralOrder = order => /(\bkrpr\b|k[oö]zponti\s*rakt[aá]r|szigetszentmikl[oó]s|keresked[oő]\s*utca)/i.test(`${order?.orderType || ''} ${order?.pickupName || ''} ${order?.pickupAddress || ''}`);
+  // A szigetszentmiklósi városnév önmagában NEM jelent központi raktárt
+  // (pl. Niczuk is Szigetszentmiklóson van). Központ csak KRPR/PRPR vagy a
+  // Kereskedő utcai, kifejezetten központiként jelölt felrakó lehet.
+  const centralOrder = order => /(\b(?:krpr|prpr)\b|k[oö]zponti\s*rakt[aá]r|keresked[oő]\s*(?:utca|u\.?))/i.test(`${order?.orderType || ''} ${order?.pickupName || ''} ${order?.pickupAddress || ''}`);
 
   function canonicalAddress(value = '') {
     return nrm(value)
@@ -485,30 +488,212 @@
     };
   }
 
-  async function buildRoutePlansV44(profiles = null) {
-    const vehicles = typeof activeVehicles === 'function' ? activeVehicles() : [];
-    const before = new Map((state.orders || []).filter(order => order.scheduleDate === selectedDate()).map(order => [order.id, order.vehicleId]));
-    for (const vehicle of vehicles) {
-      if (global.V37Planner?.v37BuildRoutePlan) await global.V37Planner.v37BuildRoutePlan(vehicle.id, profiles);
-      else if (global.V35Planner?.v35BuildRoutePlan) await global.V35Planner.v35BuildRoutePlan(vehicle.id, profiles);
-      else {
-        const orders = (typeof dayOrders === 'function' ? dayOrders(vehicle.id) : []).slice();
-        const start = await vehicleHomeV44(vehicle);
-        const blocks = [...groupBy(orders, locationKey).values()].map(group => ({ orders: group, point: profiles?.[group[0].id]?.pickup, key: locationKey(group[0]) }));
-        let current = start, sequence = 1;
-        const left = blocks.slice();
-        while (left.length) {
-          left.sort((a, b) => km(current, a.point) - km(current, b.point) || a.key.localeCompare(b.key, 'hu'));
-          const next = left.shift();
-          next.orders.forEach(order => { order.sequence = sequence++; });
-          current = finitePoint(next.point) ? next.point : current;
+  function routeStopKeyV49(stop) {
+    const text = nrm(`${stop?.name || ''} ${stop?.address || ''}`);
+    // A beszállító neve elsőbbséget élvez a településnévnél. Ez különösen
+    // Niczuknál fontos: Szigetszentmiklós, de nem a KRPR központi raktár.
+    const named = [
+      ['niczuk', /\bniczuk\b/], ['gienger', /\bgienger\b/], ['cairox', /\bcairox\b/],
+      ['lambda', /\blambda\b/], ['sebok', /\bsebok\b/], ['szatmari', /\bszatmari\b/],
+      ['merkapt', /\bmerkapt\b/], ['ezerker', /\bezer\s*ker\b|\bezerker\b/]
+    ];
+    for (const [key, pattern] of named) if (pattern.test(text)) return key;
+    if (/hungarokomplex/.test(text)) return 'hungarokomplex';
+    if (/szerelvenybolt/.test(text)) return 'szerelvenybolt';
+    if (/szogker/.test(text)) return 'szogker';
+    if (/\bkrpr\b|kozponti raktar|kereskedo utca/.test(text)) return 'central';
+    return global.V35Planner?.canonicalStop ? global.V35Planner.canonicalStop(stop) : text;
+  }
+
+  const PICKUP_PRECEDENCE_V49 = {
+    mario: [
+      ['szatmari', 'merkapt'], ['merkapt', 'ezerker'], ['ezerker', 'szogker']
+    ],
+    patrik: [
+      ['central', 'niczuk'], ['niczuk', 'gienger'], ['niczuk', 'cairox'],
+      ['gienger', 'cairox'], ['cairox', 'sebok'], ['cairox', 'lambda'],
+      ['sebok', 'lambda'], ['sebok', 'fogarasi'], ['lambda', 'fogarasi']
+    ],
+    martin: [
+      ['sebok', 'hungarokomplex'], ['hungarokomplex', 'szerelvenybolt'],
+      ['sebok', 'niczuk'], ['niczuk', 'central'], ['central', 'empack'], ['empack', 'lambda']
+    ]
+  };
+
+  function stablePrecedenceOrderV49(stops, vehicle) {
+    const list = (stops || []).slice();
+    if (list.length < 2) return list;
+    const key = driverKey(vehicle);
+    const rules = PICKUP_PRECEDENCE_V49[key] || [];
+    if (!rules.length) return list;
+    const original = new Map(list.map((stop, index) => [stop, index]));
+    const incoming = new Map(list.map(stop => [stop, 0]));
+    const outgoing = new Map(list.map(stop => [stop, []]));
+    for (const [before, after] of rules) {
+      const from = list.filter(stop => routeStopKeyV49(stop) === before);
+      const to = list.filter(stop => routeStopKeyV49(stop) === after);
+      for (const a of from) for (const b of to) {
+        if (a === b || outgoing.get(a).includes(b)) continue;
+        outgoing.get(a).push(b);
+        incoming.set(b, incoming.get(b) + 1);
+      }
+    }
+    const ready = list.filter(stop => incoming.get(stop) === 0).sort((a, b) => original.get(a) - original.get(b));
+    const result = [];
+    while (ready.length) {
+      const next = ready.shift();
+      result.push(next);
+      for (const target of outgoing.get(next)) {
+        incoming.set(target, incoming.get(target) - 1);
+        if (incoming.get(target) === 0) {
+          ready.push(target);
+          ready.sort((a, b) => original.get(a) - original.get(b));
         }
       }
     }
+    return result.length === list.length ? result : list;
+  }
+
+  function preservePinnedPickupSlotsV49(original, ordered) {
+    const slots = new Array(original.length).fill(null);
+    const pinned = new Set(original.filter(event => (event.orders || []).some(id => state.orders.find(order => order.id === id)?.routePinned)));
+    original.forEach((event, index) => { if (pinned.has(event)) slots[index] = event; });
+    const movable = ordered.filter(event => !pinned.has(event));
+    let cursor = 0;
+    return slots.map(event => event || movable[cursor++]).filter(Boolean);
+  }
+
+  function dropKeyV49(order) {
+    const address = canonicalAddress(order?.dropAddress || '');
+    return address ? `drop:address:${address}` : `drop:name:${nrm(order?.projectName || 'ismeretlen lerako')}`;
+  }
+
+  function dropStopsV49(orders, profiles, excludedIds = new Set()) {
+    const groups = groupBy((orders || []).filter(order => !excludedIds.has(order.id) && String(order.dropAddress || '').trim()), dropKeyV49);
+    return [...groups.entries()].map(([key, grouped]) => {
+      const first = grouped[0];
+      const profile = grouped.map(order => profiles?.[order.id]?.drop).find(finitePoint) || null;
+      return {
+        type: 'drop', key, name: first.projectName || 'Lerakó', address: first.dropAddress || '',
+        orders: grouped.map(order => order.id), point: profile
+      };
+    });
+  }
+
+  async function roadMatrixV49(points) {
+    const fallback = points.map((a, i) => points.map((b, j) => i === j ? 0 : km(a, b)));
+    const valid = points.map((point, index) => ({ point, index })).filter(item => finitePoint(item.point));
+    if (valid.length < 2 || typeof fetch !== 'function') return fallback;
+    try {
+      const coords = valid.map(item => `${item.point[1]},${item.point[0]}`).join(';');
+      const response = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?annotations=distance`);
+      if (!response.ok) return fallback;
+      const json = await response.json();
+      if (!Array.isArray(json.distances)) return fallback;
+      valid.forEach((from, i) => valid.forEach((to, j) => {
+        const metres = json.distances?.[i]?.[j];
+        if (Number.isFinite(metres)) fallback[from.index][to.index] = metres / 1000;
+      }));
+    } catch (error) {
+      console.warn('[V49] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
+    }
+    return fallback;
+  }
+
+  async function orderDropStopsV49(stops, startPoint, homePoint) {
+    const known = (stops || []).filter(stop => finitePoint(stop.point));
+    const unknown = (stops || []).filter(stop => !finitePoint(stop.point));
+    if (known.length < 2) return [...known, ...unknown];
+    if (known.length > 12) {
+      const left = known.slice(), result = [];
+      let current = finitePoint(startPoint) ? startPoint : homePoint;
+      while (left.length) {
+        left.sort((a, b) => km(current, a.point) - km(current, b.point) || a.key.localeCompare(b.key, 'hu'));
+        const next = left.shift(); result.push(next); current = next.point;
+      }
+      return [...result, ...unknown];
+    }
+    const start = finitePoint(startPoint) ? startPoint : homePoint;
+    const home = finitePoint(homePoint) ? homePoint : start;
+    const points = [start, ...known.map(stop => stop.point), home];
+    const matrix = await roadMatrixV49(points);
+    const n = known.length, endIndex = n + 1;
+    let states = new Map();
+    for (let i = 0; i < n; i++) states.set(`${1 << i}|${i}`, { cost: matrix[0][i + 1], path: [i] });
+    for (let mask = 1; mask < (1 << n); mask++) {
+      for (let last = 0; last < n; last++) {
+        const stateItem = states.get(`${mask}|${last}`);
+        if (!stateItem) continue;
+        for (let next = 0; next < n; next++) {
+          if (mask & (1 << next)) continue;
+          const nextMask = mask | (1 << next), nextCost = stateItem.cost + matrix[last + 1][next + 1];
+          const stateKey = `${nextMask}|${next}`, previous = states.get(stateKey);
+          if (!previous || nextCost < previous.cost) states.set(stateKey, { cost: nextCost, path: [...stateItem.path, next] });
+        }
+      }
+    }
+    const fullMask = (1 << n) - 1;
+    let best = null;
+    for (let last = 0; last < n; last++) {
+      const candidate = states.get(`${fullMask}|${last}`);
+      if (!candidate) continue;
+      const total = candidate.cost + matrix[last + 1][endIndex];
+      if (!best || total < best.total) best = { total, path: candidate.path };
+    }
+    return [...(best?.path || known.map((_, index) => index)).map(index => known[index]), ...unknown];
+  }
+
+  async function buildVehicleRouteV49(vehicle, profiles) {
+    const allOrders = (typeof dayOrders === 'function' ? dayOrders(vehicle.id) : []).slice().sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
+    const isResolved = order => global.V37Planner?.isResolvedBacklogOrder ? global.V37Planner.isResolvedBacklogOrder(order) : false;
+    const activeOrders = allOrders.filter(order => !isResolved(order));
+    if (!activeOrders.length) return [];
+
+    let baseEvents = [];
+    if (global.V37Planner?.v37BuildRoutePlan) baseEvents = await global.V37Planner.v37BuildRoutePlan(vehicle.id, profiles);
+    else if (global.V35Planner?.v35BuildRoutePlan) baseEvents = await global.V35Planner.v35BuildRoutePlan(vehicle.id, profiles);
+    // V49-ben az útvonalterv kizárólag a felrakási sorrend. Lerakó soha nem
+    // kerül az optimalizálási események közé, teljes autós tételnél sem.
+    const normalPickupsOriginal = baseEvents.filter(event => event.type === 'pickup')
+      .sort((a, b) => {
+        const aSeq = Math.min(...(a.orders || []).map(id => +state.orders.find(order => order.id === id)?.sequence || 999));
+        const bSeq = Math.min(...(b.orders || []).map(id => +state.orders.find(order => order.id === id)?.sequence || 999));
+        return aSeq - bSeq;
+      });
+    const orderedNormal = preservePinnedPickupSlotsV49(normalPickupsOriginal, stablePrecedenceOrderV49(normalPickupsOriginal, vehicle));
+
+    let sequence = 1;
+    for (const pickup of orderedNormal) {
+      (pickup.orders || []).map(id => state.orders.find(order => order.id === id)).filter(Boolean)
+        .sort((a, b) => String(a.orderNo || '').localeCompare(String(b.orderNo || ''), 'hu'))
+        .forEach(order => { order.sequence = sequence++; });
+    }
+
+    const events = orderedNormal;
+    state.routePlans = state.routePlans || {}; state.routePlans[selectedDate()] = state.routePlans[selectedDate()] || {};
+    state.routePlans[selectedDate()][vehicle.id] = events;
+    return events;
+  }
+
+  async function buildRoutePlansV44(profiles = null) {
+    const vehicles = typeof activeVehicles === 'function' ? activeVehicles() : [];
+    const before = new Map((state.orders || []).filter(order => order.scheduleDate === selectedDate()).map(order => [order.id, order.vehicleId]));
+    const routeProfiles = profiles || await buildProfiles((state.orders || []).filter(order => order.scheduleDate === selectedDate()));
+    for (const vehicle of vehicles) await buildVehicleRouteV49(vehicle, routeProfiles);
     const changed = (state.orders || []).filter(order => order.scheduleDate === selectedDate() && before.has(order.id) && before.get(order.id) !== order.vehicleId);
     if (changed.length) {
       changed.forEach(order => { order.vehicleId = before.get(order.id); });
       throw new Error('Az útvonal-optimalizálás sofőrt próbált változtatni, ezért visszaállítottam.');
+    }
+  }
+
+  async function persistOnlineV49() {
+    if (typeof save === 'function') save();
+    const online = global.V44Online;
+    const onlineProfile = online?.getProfile?.();
+    const onlineSession = online?.getSession?.();
+    if (online?.configured?.() && onlineProfile?.role === 'admin' && onlineSession?.access_token) {
+      await online.syncOrders(state.orders || [], onlineProfile);
     }
   }
 
@@ -526,12 +711,13 @@
       state.routePlans = state.routePlans || {}; state.routePlans[selectedDate()] = {};
       state.routeStats = state.routeStats || {}; state.routeStats[selectedDate()] = {};
       await buildRoutePlansV44(result.profiles);
-      if (typeof save === 'function') save();
+      await persistOnlineV49();
+      if (typeof render === 'function') render();
       const conflictText = result.conflicts.length ? `\nFigyelem: ${result.conflicts.length} felrakóhelyen egymással ütköző fix sofőrjelölés maradt.` : '';
-      alert(`Fuvarok V48 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nPest/Buda területi preferencia mellett a terhelés egyenletes. Martin elsősorban szálas/platós fuvarokat kap; ilyen fuvar nélkül a Dobozos kiosztásban is részt vesz.`);
+      alert(`Fuvarok V49 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
       return result;
     } catch (error) {
-      console.error('[V48] Szétosztási hiba', error);
+      console.error('[V49] Szétosztási hiba', error);
       alert(`A fuvarok szétosztása közben hiba történt: ${error?.message || error}`);
       return null;
     }
@@ -545,11 +731,12 @@
       await buildRoutePlansV44(profiles);
       const changed = orders.filter(order => before.get(order.id) !== order.vehicleId);
       if (changed.length) throw new Error('Az optimalizálás sofőrt változtatott.');
-      if (typeof save === 'function') save();
-      alert('V48 felrakási sorrend elkészült a sofőrök valódi indulási pontjából. Azonos felrakók együtt maradtak; sofőr nem változott.');
+      await persistOnlineV49();
+      if (typeof render === 'function') render();
+      alert('V49 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
       return true;
     } catch (error) {
-      console.error('[V48] Optimalizálási hiba', error);
+      console.error('[V49] Optimalizálási hiba', error);
       alert(`Az optimalizálás közben hiba történt: ${error?.message || error}`);
       return false;
     }
@@ -596,18 +783,86 @@
     return true;
   }
 
+  function escapeHtmlV49(value) {
+    return String(value || '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  }
+
+  function scrollToEventBubbleV49(vehicleId, orderIds) {
+    if (typeof document === 'undefined') return false;
+    const ids = new Set((orderIds || []).map(String));
+    const container = document.getElementById(`route-${vehicleId}`);
+    if (!container || !ids.size) return false;
+    const candidates = [...container.querySelectorAll('[data-order-ids]')];
+    const match = candidates.find(element => String(element.dataset.orderIds || '').split(',').some(id => ids.has(id)));
+    const target = match?.closest?.('.pickup-move-block') || match || [...container.querySelectorAll('.bubble[data-id]')].find(element => ids.has(String(element.dataset.id || '')));
+    if (!target) return false;
+    const wantedTop = Math.max(0, target.offsetTop - Math.max(0, (container.clientHeight - target.offsetHeight) / 2));
+    if (typeof container.scrollTo === 'function') container.scrollTo({ top: wantedTop, behavior: 'smooth' });
+    else target.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    target.classList.add('map-route-highlight');
+    setTimeout(() => target.classList.remove('map-route-highlight'), 2600);
+    return true;
+  }
+
+  async function drawMapV49(vehicleId) {
+    if (typeof document === 'undefined' || typeof maps === 'undefined' || !global.L) return;
+    const map = maps[vehicleId];
+    if (!map) return;
+    const vehicle = (state.vehicles || []).find(item => item.id === vehicleId);
+    const home = await vehicleHomeV44(vehicle || {});
+    let events = (state.routePlans?.[selectedDate()]?.[vehicleId] || []).filter(event => event.type === 'pickup');
+    if (!events.length && (state.orders || []).some(order => order.scheduleDate === selectedDate() && order.vehicleId === vehicleId)) {
+      const profiles = await buildProfiles((state.orders || []).filter(order => order.scheduleDate === selectedDate()));
+      events = (await buildVehicleRouteV49(vehicle, profiles)).filter(event => event.type === 'pickup');
+    }
+    const points = [];
+    if (finitePoint(home)) points.push(home);
+    let pickupIndex = 0;
+    for (const event of events) {
+      if (!finitePoint(event.point)) continue;
+      points.push(event.point);
+      const isPickup = event.type === 'pickup';
+      if (!isPickup) continue;
+      const number = ++pickupIndex;
+      const prefix = 'F';
+      const icon = global.L.divIcon({
+        className: 'v49-map-marker v49-pickup-marker',
+        html: `<span>${prefix}${number}</span>`, iconSize: [32, 32], iconAnchor: [16, 16]
+      });
+      const marker = global.L.marker(event.point, { icon, title: `Felrakó: ${event.name || ''}` }).addTo(map);
+      marker.bindPopup(`<b>${prefix}${number}. Felrakó</b><br>${escapeHtmlV49(event.name)}<br>${escapeHtmlV49(event.address || '')}`);
+      marker.on('click', () => scrollToEventBubbleV49(vehicleId, event.orders || []));
+    }
+    if (finitePoint(home)) points.push(home);
+    if (points.length === 1) map.setView(points[0], 13);
+    if (points.length > 1) {
+      let coords = points, route = null;
+      if (typeof roadRoute === 'function') {
+        try { route = await roadRoute(points); } catch (_) { route = null; }
+      }
+      if (route?.geometry?.coordinates) coords = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+      const line = global.L.polyline(coords, { weight: 4, opacity: .82 }).addTo(map);
+      map.fitBounds(line.getBounds(), { padding: [20, 20] });
+      state.routeStats = state.routeStats || {}; state.routeStats[selectedDate()] = state.routeStats[selectedDate()] || {};
+      state.routeStats[selectedDate()][vehicleId] = {
+        km: route ? route.distance / 1000 : points.slice(1).reduce((sum, point, index) => sum + km(points[index], point), 0),
+        minutes: route ? route.duration / 60 : 0
+      };
+    }
+  }
+
   function bindV44() {
     const balanceButton = document.getElementById('balanceBtn');
     const optimizeButton = document.getElementById('optimizeBtn');
     if (balanceButton) {
       balanceButton.onclick = event => { event.preventDefault(); return balanceActionV44(); };
       balanceButton.dataset.algorithmVersion = VERSION;
-      balanceButton.title = 'V48: felrakóhely-blokkok; Márió=Pest, Patrik=Buda, Martin=platós/nyugati folyosó';
+      balanceButton.title = 'V49: teljes beszállítói blokkok; Márió=Pest, Patrik=Buda, Martin=platós/szálas';
     }
     if (optimizeButton) {
       optimizeButton.onclick = event => { event.preventDefault(); return optimizeActionV44(); };
       optimizeButton.dataset.algorithmVersion = VERSION;
-      optimizeButton.title = 'V48: felrakási sorrend a sofőr indulási pontjából, sofőrváltás nélkül';
+      optimizeButton.title = 'V49: kizárólag a felrakók optimalizálása, sofőrváltás nélkül';
     }
     document.getElementById('clearAllMastersBtn')?.addEventListener('click', clearAllMasterDataV44);
     document.getElementById('loadBuiltInMastersBtn')?.addEventListener('click', loadBuiltInMasterDataV44);
@@ -618,11 +873,13 @@
       version: VERSION,
       balanceHandler: balanceButton?.dataset.algorithmVersion || VERSION,
       optimizeHandler: optimizeButton?.dataset.algorithmVersion || VERSION,
-      assignmentUnit: 'fizikai felrakóhely',
+      assignmentUnit: 'azonos napi beszállítói blokk',
       territoryRule: 'Márió=Pest; Patrik=Buda; Martin=platós/nyugati folyosó',
       fixedDriverRule: 'névre rögzített fuvar csak kézzel mozgatható',
       homeRule: 'Márió=Vác; Martin=Felcsút; Patrik=központi raktár',
-      duplicateSupplierRule: 'egy mozgatható felrakóhely egy sofőr'
+      duplicateSupplierRule: 'egy beszállító egy sofőr',
+      routeRule: 'kizárólag felrakási sorrend; lerakó nem része az optimalizálásnak',
+      mapClick: 'címjelölő -> kapcsolódó buborék'
     });
   }
 
@@ -630,11 +887,13 @@
   if (typeof optimizeAll !== 'undefined') optimizeAll = optimizeActionV44;
   global.balance = balanceActionV44;
   global.optimizeAll = optimizeActionV44;
+  if (typeof drawMap !== 'undefined') drawMap = drawMapV49;
+  global.drawMap = drawMapV49;
   global.vehicleHomeV44 = vehicleHomeV44;
   global.clearAllMasterDataV44 = clearAllMasterDataV44;
   global.loadBuiltInMasterDataV44 = loadBuiltInMasterDataV44;
 
-  global.V44Planner = {
+  global.V49Planner = {
     version: VERSION,
     canonicalAddress,
     locationKey,
@@ -646,15 +905,21 @@
     makeBlocks,
     distributeOrderSetV44,
     buildRoutePlansV44,
+    buildVehicleRouteV49,
+    stablePrecedenceOrderV49,
+    orderDropStopsV49,
+    scrollToEventBubbleV49,
+    drawMapV49,
     balanceActionV44,
     optimizeActionV44,
     cloneBuiltInMasterData,
     clearAllMasterDataV44,
     loadBuiltInMasterDataV44
   };
+  global.V44Planner = global.V49Planner;
 
   if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindV44, { once: true });
-    else bindV44();
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(bindV44, 0), { once: true });
+    else setTimeout(bindV44, 0);
   }
 })(typeof window !== 'undefined' ? window : globalThis);

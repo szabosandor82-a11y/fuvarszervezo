@@ -1,10 +1,10 @@
-FUVAR­SZERVEZŐ V48 – ONLINE SUPABASE / GITHUB PAGES
+FUVAR­SZERVEZŐ V49 – ONLINE SUPABASE / GITHUB PAGES
 =================================================
 
-A V48 a korábbi stabil fuvarszervezőre épül, a belépés és a közös adatok
+A V49 a korábbi stabil fuvarszervezőre épül, a belépés és a közös adatok
 Supabase-en keresztül működnek.
 
-V48 fő változások
+V49 fő változások
 -----------------
 - Supabase e-mail + jelszó hitelesítés.
 - Admin e-mail: szabo.sandor82@gmail.com.
@@ -36,13 +36,17 @@ V48 fő változások
   a fuvarszervezési műveletek a bal oldali menübe kerültek.
 - A buborékszerkesztő bezáró gombja görgetés közben is látható.
 - Pasztell felületi színvilág.
-- A szétosztás/optimalizálás aktív algoritmusjelölése: V48.
+- A szétosztás/optimalizálás aktív algoritmusjelölése: V49.
+- A felrakási optimalizálás KIZÁRÓLAG a felrakókat rendezi; lerakó nem kerül az optimalizált útvonalba.
+- A központi raktár felismerése KRPR/PRPR/Kereskedő utca alapján történik; más szigetszentmiklósi beszállító (pl. Niczuk) nem minősül központinak.
+- A jóváhagyott 3/4/5-ös tesztnap kötelező regressziós teszt: Martin Sebők → Hungarokomplex → Szerelvénybolt; Márió Szatmári → Merkapt → Ezerker → Szögker; Patrik KRPR → Niczuk → Gienger → Cairox → Lambda.
+- A térképi felrakójelölőre kattintva az adott sofőr oszlopában a hozzá tartozó buborékhoz görget a felület.
 - A szállítólevél-fotók a rendeléshez kapcsolódnak és a Supabase Storage-ba kerülnek.
 - A rendeléshez mentett fotók a „Mentett fotók” gombbal visszanézhetők.
 - A „Mentett fotók” gomb a csoportosított Fuvarok-buborékokon és a Rendelések listában is elérhető.
 - Több rendelést tartalmazó buboréknál a galéria a csoport összes rendelésének fotóit megmutatja.
 - Nincs szállítólevél e-mail-küldő funkció.
-- Új PWA gyorsítótárnév: fuvarszervezo-v48-online-20260807-1; az alkalmazásfájlok ?v=48.0 verziójelet kapnak, hogy a böngésző biztosan az aktuális V48 JavaScriptet használja.
+- Új PWA gyorsítótárnév: fuvarszervezo-v49-online-20260807-1; az alkalmazásfájlok ?v=49.0 verziójelet kapnak, hogy a böngésző biztosan az aktuális V49 JavaScriptet használja.
 
 Telepítés GitHub Pages-re
 ------------------------
@@ -55,7 +59,7 @@ Telepítés GitHub Pages-re
 Belépés
 -------
 - A belépőképernyő a Supabase Authentication → Users alatt létrehozott fiókokat használja.
-- A V48 nem hoz létre új fiókot és nem küld regisztrációs e-mailt.
+- A V49 nem hoz létre új fiókot és nem küld regisztrációs e-mailt.
 - Az admin belépéshez a Supabase-ben a szabo.sandor82@gmail.com fiók jelszavának
   meg kell egyeznie azzal a jelszóval, amit a belépőképernyőn megadsz.
 
@@ -63,7 +67,7 @@ Fotók
 -----
 - A kamera/fájlválasztóval mentett szállítólevél a delivery-docs bucketbe kerül.
 - A delivery_reports és delivery_report_files táblák őrzik a rendeléshez való kapcsolatot.
-- A Storage bucket privát; a V48 rövid ideig érvényes aláírt URL-lel jeleníti meg a fotókat.
+- A Storage bucket privát; a V49 rövid ideig érvényes aláírt URL-lel jeleníti meg a fotókat.
 
 Biztonság
 ---------

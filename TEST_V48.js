@@ -25,13 +25,13 @@ function ok(value, name) {
   passed++;
 }
 
-ok(app.includes("APP_VERSION='V48'"), 'V48 alkalmazásverzió');
+ok(app.includes("APP_VERSION='V49'"), 'V49 alkalmazásverzió');
 execFileSync(process.execPath, ['--check', path.join(root, 'app.js')], { stdio: 'pipe' });
 ok(true, 'app.js JavaScript szintaxis ép');
-ok(html.includes('<title>Fuvarszervező V48</title>'), 'V48 böngészőcím');
-ok(manifest.name === 'Fuvarszervező V48' && manifest.short_name === 'Fuvar V48', 'V48 PWA manifest');
-ok(sw.includes('fuvarszervezo-v48-online-20260807-1'), 'V48 service worker gyorsítótár');
-ok(sw.includes("'./online-config.js?v=48.0'") && sw.includes("'./online-v44-2.js?v=48.0'"), 'V48 online fájlok PWA gyorsítótárban');
+ok(html.includes('<title>Fuvarszervező V49</title>'), 'V49 böngészőcím');
+ok(manifest.name === 'Fuvarszervező V49' && manifest.short_name === 'Fuvar V49', 'V49 PWA manifest');
+ok(sw.includes('fuvarszervezo-v49-online-20260807-1'), 'V49 service worker gyorsítótár');
+ok(sw.includes("'./online-config.js?v=49.0'") && sw.includes("'./online-v44-2.js?v=49.0'"), 'V49 online fájlok PWA gyorsítótárban');
 ok(!planner37.includes('class="pickup-group-bar"'), 'A csoportosított felrakók fölött nincs külön group sáv');
 ok(planner41.includes("supplierAddressSource: 'uploaded-master-only'") && planner41.includes('autoSupplierMaster: false'), 'Outlook felrakócím kizárólag a feltöltött beszállítói törzsből jön');
 ok(!planner41.includes('autoCreatedFromOutlook: true') && planner41.includes("entry.pickupAddress = '';"), 'ismeretlen Outlook-beszállító nem kap kitalált címet és nem kerül automatikusan a törzsbe');
@@ -40,7 +40,8 @@ ok(app.includes('if(supplier&&sameSupplier&&sameOldPickup){') && !app.includes('
 ok(auth.includes("refreshButton.id = 'manualOnlineRefresh'") && auth.includes("refreshButton.innerHTML = '<span>↻</span><small>Frissítés</small>'"), 'főmenüben kézi Frissítés gomb');
 ok(auth.includes('global.V44Online?.stopPolling?.();') && !auth.includes('global.V44Online.startPolling(async orders =>'), 'automatikus főnézeti polling kikapcsolva');
 ok(auth.includes('function captureViewScroll()') && auth.includes('function restoreViewScroll(snapshot)') && auth.includes("document.querySelectorAll('.route-list[id]')"), 'kézi frissítés megőrzi az oldal és a sofőroszlopok görgetési helyét');
-ok(planner44.includes("const VERSION = '48'"), 'aktív szétosztó/optimalizáló motor V48');
+ok(planner44.includes("const VERSION = '49'"), 'aktív szétosztó/optimalizáló motor V49');
+ok(planner44.includes('setTimeout(bindV44, 0)'), 'V49 gombkezelők a régi planner-kezelők után, utolsóként kötődnek be');
 ok(planner44.includes("allowMartinBox && key === 'martin'") && planner44.includes('balanceFlexibleBlocks(drivers, assignedBlocks, assignedOrders, homes, !hasDetectedLongMaterial)'), 'Dobozos terhelés minden felrakószámnál kiegyenlíthető, szálas nélkül Martinnal együtt');
 ok(planner44.includes('supplierAssignmentKey') && planner44.includes('supplierOwner') && planner44.includes('locationOwner'), 'szétosztásnál azonos beszállító és azonos fizikai cím is oszthatatlan egység');
 ok(planner37.includes('moveSupplierOrdersTogether') && planner37.includes("draggable: '.pickup-move-block"), 'kézi húzásnál az egész aznapi beszállítói blokk együtt mozog');
@@ -90,8 +91,11 @@ const clearBlock = planner41.slice(planner41.indexOf('function clearAllImports()
 ok(clearBlock.includes('már jóváhagyott fuvarok megmaradnak') && !clearBlock.includes('state.orders ='), 'Outlook ürítés nem töröl mentett fuvarokat');
 ok(planner44.includes("order.importVehicleLocked && ['mario', 'patrik', 'martin'].includes(category)"), 'kézi áthúzás nem lesz automatikusan sofőrhöz rögzített');
 ok((planner43.match(/mergeSeedMasterData\(\);/g) || []).length === 0 && !html.includes('loadBuiltInMastersBtn'), 'régi seed nem keveredik vissza automatikusan');
-ok(app.includes('window.V48MasterLearning') && app.includes('order.scheduleDate>=startDate'), 'törzsadat-tanulás csak a módosítás napjától előre');
+ok(app.includes('window.V49MasterLearning') && app.includes('order.scheduleDate>=startDate'), 'törzsadat-tanulás csak a módosítás napjától előre');
+ok(planner44.includes("const centralOrder = order => /(\\b(?:krpr|prpr)\\b") && !planner44.includes("szigetszentmikl[oó]s|keresked"), 'Niczuk nem minősül központi raktárnak pusztán Szigetszentmiklós miatt');
+ok(planner44.includes("baseEvents.filter(event => event.type === 'pickup')") && planner44.includes('const events = orderedNormal;'), 'V49 optimalizálás kizárólag felrakókat tartalmaz');
+ok(planner44.includes('scrollToEventBubbleV49') && planner44.includes("marker.on('click'"), 'térképi felrakó kattintás buborékra görget');
 ok(online.includes('fetchMasterData') && online.includes('syncMasterData') && online.includes('loadMasterIntoState'), 'online törzsadat-szinkron');
 ok(schema.includes('create table if not exists public.master_data') && schema.includes("public.current_role()='admin'"), 'Supabase törzsadat-tábla admin RLS-sel');
 
-console.log(`Sikeres V48 tesztek: ${passed}/${passed}`);
+console.log(`Sikeres V49 kiadási tesztek: ${passed}/${passed}`);

@@ -412,7 +412,21 @@
       if (master) return { id: master.id || '', name: master.name || special.name, address: master.address || '', pickupNote: master.pickupNote || master.note || '', reason: `${special.reason || 'visszáru felismerés'} · törzsadatból`, autoMaster: false };
       return { id: '', name: special.name || '', address: '', pickupNote: '', reason: 'felismert beszállító nincs a törzsadatokban', autoMaster: false, unmatchedMaster: true };
     }
-    const supplier = bestSupplier(`${subject}\n${core}`) || bestSupplier(combined);
+    let supplier = bestSupplier(`${subject}\n${core}`) || bestSupplier(combined);
+    // Visszárunál a levél gyakran csak a telephely nevét írja (pl. „Késmárkba”).
+    // Ilyenkor is kizárólag a feltöltött törzsből választunk, és csak akkor,
+    // ha a telephelyszöveg pontosan egy beszállítót azonosít.
+    if (!supplier && typeof state !== 'undefined') {
+      const text = nrm(`${subject} ${core}`);
+      const common = new Set(['budapest','magyarorszag','utca','kft','zrt','telephely','raktar']);
+      const matches = (state.suppliers || []).filter(item => significantTokens(`${item.name || ''} ${item.address || ''}`)
+        .filter(token => token.length >= 5 && !common.has(token))
+        .some(token => text.includes(token)));
+      if (matches.length === 1) {
+        const master = matches[0];
+        supplier = { id: master.id || '', name: master.name || '', address: master.address || '', pickupNote: master.pickupNote || master.note || '', reason: 'visszáru telephely-egyezés · törzsadatból', autoMaster: false };
+      }
+    }
     if (supplier && /k[oö]zponti\s+rakt[aá]r/i.test(supplier.name || '') && !/k[oö]zponti\s+rakt[aá]r(?:ba|hoz|nak|b[oő]l)/i.test(core)) return null;
     return supplier;
   }
@@ -986,7 +1000,7 @@ ${entry.subject || ''}`) || project;
     renderPending();
     setDropStatus('dobozos', 'Még nincs fájl.');
     setDropStatus('martin', 'Még nincs fájl.');
-    updateSummary();
+    if (typeof updateSummary === 'function') updateSummary();
   }
 
   function bindDropZone(zoneId, inputId, category) {

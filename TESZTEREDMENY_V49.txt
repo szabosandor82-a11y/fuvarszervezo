@@ -1,0 +1,32 @@
+Fuvarszervező V49 – kiadás előtti ellenőrzés
+================================================
+
+Ellenőrzés dátuma: 2026-08-07
+
+Az összes automatikus teszt sikeres.
+
+Kiemelt V49 elfogadási próba:
+- Martin: Sebők → Hungarokomplex → Szerelvénybolt (3 beszállítói blokk)
+- Márió: Szatmári → Merkapt → Ezerker → Szögker (4 beszállítói blokk)
+- Patrik: KRPR → Niczuk → Gienger → Cairox → Lambda (5 beszállítói blokk)
+- a két Szerelvénybolt-rendelés együtt, Martinnál marad;
+- optimalizálás sofőrt nem változtat;
+- az útvonalterv kizárólag felrakókat tartalmaz, lerakót nem;
+- szétosztás és optimalizálás után a Fuvarok nézet azonnal újrarajzolódik;
+- térképi felrakójelölő a kapcsolódó buborékra görget.
+
+Javított V48 gyökérokok:
+- Szigetszentmiklós településnév többé nem tesz automatikusan központi raktárrá egy beszállítót; Niczuk külön beszállítói blokk marad.
+- A V49 gombkezelők az oldal indulásakor utolsóként kötődnek be, ezért régi planner-réteg nem írhatja felül őket.
+- A műveletek a mentés/szinkron után azonnal újrarajzolják a felületet.
+- Új PWA cache és ?v=49.0 fájlverziók akadályozzák meg a régi V48 JavaScript visszamaradását.
+
+Tesztfájlok:
+- TEST_V33.js
+- TEST_V34.js
+- TEST_V35.js
+- TEST_V37.js
+- TEST_V41.js
+- TEST_V44.js
+- TEST_V48.js (V49 kiadási integrációs ellenőrzés)
+- TEST_V49.js (konkrét elfogadási nap)
