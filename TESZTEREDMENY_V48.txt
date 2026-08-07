@@ -1,0 +1,36 @@
+Fuvarszervező V48 – ellenőrzési eredmény
+=======================================
+
+Kiadás előtti V48 ellenőrzés: 61/61 sikeres.
+Külön szétosztási és kézi mozgatási motor-teszt: 11/11 sikeres.
+Outlook/törzsadat regressziós teszt: 14/14 sikeres.
+
+Ellenőrizve:
+- V48 alkalmazás/PWA verzió, teljes app.js JavaScript-szintaxis és új service-worker cache;
+- aktív fuvarszétosztó és optimalizáló motorjelölés: V48;
+- 3 külön pesti Dobozos, szálas nélkül: 1 Márió / 1 Patrik / 1 Martin;
+- 4 külön pesti Dobozos, szálas nélkül: a lehető legegyenletesebb 2–1–1;
+- észlelt szálas fuvarnál Martin elsődlegesen a szálast kapja, a Dobozos Márió/Patrik között oszlik;
+- azonos beszállító eltérő címmel sem kerülhet két sofőrhöz;
+- már szétszakadt azonos beszállító egyik buborékjának áthúzása az összes aznapi rendelését együtt mozgatja;
+- Supabase Project URL és publishable key;
+- Supabase Auth e-mail/jelszó belépés, nyilvános hardkódolt jelszó nélkül;
+- privát delivery-docs fotótár és rendeléshez kötött Mentett fotók;
+- nincs e-mail-küldő végpont;
+- szerveroldali fuvar/hátralék/átadás RPC-k;
+- fixen látható térképek, külön görgethető buboréklisták;
+- rögzített buborékszerkesztő bezárógomb;
+- lassított drag közbeni automatikus görgetés;
+- Outlook felrakócím kizárólag a feltöltött beszállítói törzsből; ismeretlennél üres cím és hibajelzés;
+- hasonló nevű ismeretlen cég (pl. Két Kör) nem kaphat másik beszállító címét;
+- buborékszerkesztésben a kiválasztott beszállító összes törzs szerinti telephelye választható;
+- automatikus főnézeti frissítés kikapcsolva, kézi Frissítés gombbal és görgetési pozíció megőrzésével;
+- Outlook előnézet ürítése nem töröl mentett fuvarokat;
+- kézi sofőrhöz húzás nem rögzíti automatikusan a fuvar sofőrjét;
+- régi beépített törzs nem keveredik automatikusan vissza;
+- törzsadat-tanulás a módosítás napjától előre;
+- Supabase master_data online törzsadat-szinkron admin RLS-sel;
+- pasztell felületi színpaletta.
+
+Megjegyzés: a tényleges Supabase Auth jelszavakat a Supabase Authentication felületén kell
+beállítani; a nyilvános GitHub Pages forrás nem tartalmaz jelszót.

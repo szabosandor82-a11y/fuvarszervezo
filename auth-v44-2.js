@@ -1,9 +1,9 @@
-/* Fuvarszervező V47 – online többfelhasználós mobil felület.
+/* Fuvarszervező V48 – online többfelhasználós mobil felület.
    A hitelesítés, a fuvarok, átadások és szállítólevél-fotók Supabase-ben tárolódnak. */
 (function (global) {
   'use strict';
 
-  const VERSION = '47-online';
+  const VERSION = '48-online';
   const USERS = {
     'schmidt.martin@stand98.hu': { role: 'driver', driverKey: 'martin', displayName: 'Schmidt Martin' },
     'polgar.patrik@stand98.hu': { role: 'driver', driverKey: 'patrik', displayName: 'Polgár Patrik' },
@@ -84,6 +84,30 @@
     el.dataset.state = detail.state || 'online';
   }
 
+  function captureViewScroll() {
+    const scrolling = document.scrollingElement || document.documentElement;
+    return {
+      pageTop: scrolling?.scrollTop || global.scrollY || 0,
+      routeTops: [...document.querySelectorAll('.route-list[id]')].map(element => [element.id, element.scrollTop]),
+      navTop: document.querySelector('nav')?.scrollTop || 0
+    };
+  }
+
+  function restoreViewScroll(snapshot) {
+    if (!snapshot) return;
+    const apply = () => {
+      const scrolling = document.scrollingElement || document.documentElement;
+      if (scrolling) scrolling.scrollTop = snapshot.pageTop || 0;
+      document.querySelector('nav')?.scrollTo?.({ top: snapshot.navTop || 0, behavior: 'auto' });
+      for (const [id, top] of snapshot.routeTops || []) {
+        const element = byId(id);
+        if (element) element.scrollTop = top || 0;
+      }
+    };
+    global.requestAnimationFrame?.(() => global.requestAnimationFrame?.(apply));
+    global.setTimeout(apply, 180);
+  }
+
   function showLogin(message = '') {
     document.body.classList.remove('auth-pending', 'mode-admin', 'mode-driver');
     document.body.classList.add('mode-login');
@@ -108,7 +132,7 @@
     document.querySelector('nav')?.classList.remove('auth-app-hidden');
     byId('accountBar')?.classList.remove('hidden');
     if (byId('accountIdentity')) byId('accountIdentity').textContent = `${currentProfile?.display_name || currentSession?.user?.email} · ADMIN`;
-    setAppTitle('Fuvarszervező V47');
+    setAppTitle('Fuvarszervező V48');
     if (typeof render === 'function') render();
     await renderAdminOnlinePage();
   }
@@ -121,7 +145,7 @@
     document.querySelector('main')?.classList.add('auth-app-hidden');
     document.querySelector('nav')?.classList.add('auth-app-hidden');
     byId('driverPortal')?.classList.remove('hidden');
-    setAppTitle('Fuvarszervező V47');
+    setAppTitle('Fuvarszervező V48');
     selectedDriverDate = allowedDates().includes(selectedDriverDate) ? selectedDriverDate : allowedDates()[0];
     await renderDriverPortal();
   }
@@ -174,7 +198,7 @@
 
   async function refreshTransfers() {
     try { transferCache = await global.V44Online.listTransfers(); }
-    catch (error) { console.warn('[V47] Átadások betöltési hibája', error); transferCache = []; }
+    catch (error) { console.warn('[V48] Átadások betöltési hibája', error); transferCache = []; }
     return transferCache;
   }
 
@@ -204,7 +228,10 @@
 
   async function refreshOnlineNow() {
     if (refreshInProgress) return;
+    const scrollSnapshot = captureViewScroll();
     refreshInProgress = true;
+    const refreshButton = byId('manualOnlineRefresh');
+    if (refreshButton) { refreshButton.disabled = true; refreshButton.querySelector('small').textContent = 'Frissítés…'; }
     try {
       suppressOnlineSave = true;
       await global.V44Online.loadOrdersIntoState();
@@ -213,7 +240,11 @@
       if (isAdmin()) await renderAdminOnlinePage(); else await renderDriverPortal();
     } catch (error) {
       alert(`Online frissítési hiba: ${error.message}`);
-    } finally { suppressOnlineSave = false; refreshInProgress = false; }
+    } finally {
+      suppressOnlineSave = false; refreshInProgress = false;
+      if (refreshButton) { refreshButton.disabled = false; refreshButton.querySelector('small').textContent = 'Frissítés'; }
+      restoreViewScroll(scrollSnapshot);
+    }
   }
   global.refreshOnlineNow = refreshOnlineNow;
 
@@ -247,7 +278,7 @@
     try {
       if (currentProfile.role === 'admin') {
         try { await global.V44Online.loadMasterIntoState({ preserveLocalIfRemoteEmpty: true }); }
-        catch (error) { console.warn('[V47] Online törzsadat betöltési hiba', error); }
+        catch (error) { console.warn('[V48] Online törzsadat betöltési hiba', error); }
       }
       if (currentProfile.role === 'admin' && !remoteOrders.length && localOrders.length) {
         const migrate = confirm(`Az online adatbázis üres, ezen az eszközön viszont ${localOrders.length} fuvar van. Feltöltsem őket az online adatbázisba?`);
@@ -353,12 +384,12 @@
         if (currentProfile.role === 'admin') {
           try { await global.V44Online.syncMasterData(state, currentProfile); }
           catch (error) {
-            console.warn('[V47] Törzsadat-szinkron hiba', error);
+            console.warn('[V48] Törzsadat-szinkron hiba', error);
             setSyncStatus({ state: 'error', message: 'A fuvarok mentve, a törzsadat-szinkronhoz SQL-frissítés kell.' });
           }
         }
       } catch (error) {
-        console.error('[V47] Online mentési hiba', error);
+        console.error('[V48] Online mentési hiba', error);
         setSyncStatus({ state: 'error', message: `Mentési hiba: ${error.message}` });
       }
     }, 900);
@@ -452,6 +483,15 @@
       document.querySelector('nav')?.append(navButton);
       navButton.onclick = () => { if (typeof showPage === 'function') showPage('onlineAdmin'); renderAdminOnlinePage(); };
     }
+    if (!byId('manualOnlineRefresh')) {
+      const refreshButton = document.createElement('button');
+      refreshButton.id = 'manualOnlineRefresh'; refreshButton.type = 'button'; refreshButton.className = 'nav manual-online-refresh';
+      refreshButton.innerHTML = '<span>↻</span><small>Frissítés</small>';
+      const nav = document.querySelector('nav');
+      const controls = byId('plannerControls');
+      if (nav) nav.insertBefore(refreshButton, controls?.parentElement === nav ? controls : null);
+      refreshButton.onclick = refreshOnlineNow;
+    }
     if (!byId('transferDialog')) {
       const dialog = document.createElement('dialog'); dialog.id = 'transferDialog';
       dialog.innerHTML = `<form id="transferForm"><div class="dialog-head"><h3 id="transferTitle">Fuvar átadása</h3><button type="button" class="close" data-close-transfer>×</button></div><input id="transferOrderId" type="hidden"><p id="transferInfo" class="notice"></p><label>Átvevő sofőr<select id="transferTarget"></select></label><label>Megjegyzés<textarea id="transferNote" rows="3" placeholder="Opcionális"></textarea></label><button type="submit">Átadási kérés elküldése</button></form>`;
@@ -462,18 +502,8 @@
   }
 
   function startPolling() {
-    global.V44Online.startPolling(async orders => {
-      if (!currentProfile || refreshInProgress) return;
-      suppressOnlineSave = true;
-      try {
-        state.orders = orders;
-        state.backlog = await global.V44Online.fetchBacklog();
-        if (typeof save === 'function') save(false);
-        await refreshTransfers();
-        if (isAdmin()) { if (typeof render === 'function') render(); await renderAdminOnlinePage(); }
-        else await renderDriverPortal();
-      } finally { suppressOnlineSave = false; }
-    });
+    // V48: a főnézet nem frissül automatikusan. A felhasználó a Frissítés gombbal kér új adatokat.
+    global.V44Online?.stopPolling?.();
   }
 
   async function restoreOnlineSession() {
@@ -488,7 +518,7 @@
       await applySession();
       startPolling();
     } catch (error) {
-      console.warn('[V47] Munkamenet visszaállítási hiba', error);
+      console.warn('[V48] Munkamenet visszaállítási hiba', error);
       await global.V44Online.signOut().catch(() => {});
       showLogin('A munkamenet lejárt. Jelentkezz be újra.');
     }

@@ -1,10 +1,10 @@
-FUVAR­SZERVEZŐ V47 – ONLINE SUPABASE / GITHUB PAGES
+FUVAR­SZERVEZŐ V48 – ONLINE SUPABASE / GITHUB PAGES
 =================================================
 
-A V47 a korábbi stabil fuvarszervezőre épül, a belépés és a közös adatok
+A V48 a korábbi stabil fuvarszervezőre épül, a belépés és a közös adatok
 Supabase-en keresztül működnek.
 
-V47 fő változások
+V48 fő változások
 -----------------
 - Supabase e-mail + jelszó hitelesítés.
 - Admin e-mail: szabo.sandor82@gmail.com.
@@ -15,8 +15,12 @@ V47 fő változások
 - A törzsadatok admin módosításai a Supabase master_data táblájába is menthetők.
 - Új cím/átvevő a módosítás napjától előre tanulódik; a korábbi napok nem változnak.
 - Az átvevő telefonszáma/e-mailje a törzsadatból automatikusan kitöltődik.
-- Több telephelyes beszállítónál (pl. Szatmári) csak az adott beszállító címei választhatók,
-  de új cím kézzel is felvehető anélkül, hogy a többi telephely felülíródna.
+- Az Outlook import felrakócímként kizárólag a feltöltött beszállítói törzs címeit használja.
+  Ha nincs biztos törzsegyezés, a felrakó/cím üres marad és ellenőrzendőként jelenik meg.
+- Több telephelyes beszállítónál csak az adott beszállító törzs szerinti címei választhatók;
+  egy buborékban kézzel rögzített új cím a korábbi szabály szerint a módosítás napjától tanulható.
+- Az automatikus főnézeti frissítés ki van kapcsolva. A bal menü Frissítés gombja tölti le az online
+  adatokat, és frissítés után megtartja az oldal/sofőroszlop görgetési helyét.
 - Az Outlook-előnézet ürítése nem törli a már jóváhagyott fuvarokat.
 - A kézzel másik sofőrhöz húzott buborék nem válik automatikusan rögzített fuvarrá.
 - A Dobozos felrakók számtól függetlenül a lehető legegyenletesebben oszlanak el.
@@ -32,13 +36,13 @@ V47 fő változások
   a fuvarszervezési műveletek a bal oldali menübe kerültek.
 - A buborékszerkesztő bezáró gombja görgetés közben is látható.
 - Pasztell felületi színvilág.
-- A szétosztás/optimalizálás aktív algoritmusjelölése: V47.
+- A szétosztás/optimalizálás aktív algoritmusjelölése: V48.
 - A szállítólevél-fotók a rendeléshez kapcsolódnak és a Supabase Storage-ba kerülnek.
 - A rendeléshez mentett fotók a „Mentett fotók” gombbal visszanézhetők.
 - A „Mentett fotók” gomb a csoportosított Fuvarok-buborékokon és a Rendelések listában is elérhető.
 - Több rendelést tartalmazó buboréknál a galéria a csoport összes rendelésének fotóit megmutatja.
 - Nincs szállítólevél e-mail-küldő funkció.
-- Új PWA gyorsítótárnév: fuvarszervezo-v47-online-20260806-6; az alkalmazásfájlok ?v=47.6 verziójelet kapnak, hogy a böngésző biztosan ne tartsa meg a korábbi V47 JavaScriptet. A 47.6 javítja a korábban félbeszakadt app.js fájlt is.
+- Új PWA gyorsítótárnév: fuvarszervezo-v48-online-20260807-1; az alkalmazásfájlok ?v=48.0 verziójelet kapnak, hogy a böngésző biztosan az aktuális V48 JavaScriptet használja.
 
 Telepítés GitHub Pages-re
 ------------------------
@@ -51,7 +55,7 @@ Telepítés GitHub Pages-re
 Belépés
 -------
 - A belépőképernyő a Supabase Authentication → Users alatt létrehozott fiókokat használja.
-- A V47 nem hoz létre új fiókot és nem küld regisztrációs e-mailt.
+- A V48 nem hoz létre új fiókot és nem küld regisztrációs e-mailt.
 - Az admin belépéshez a Supabase-ben a szabo.sandor82@gmail.com fiók jelszavának
   meg kell egyeznie azzal a jelszóval, amit a belépőképernyőn megadsz.
 
@@ -59,7 +63,7 @@ Fotók
 -----
 - A kamera/fájlválasztóval mentett szállítólevél a delivery-docs bucketbe kerül.
 - A delivery_reports és delivery_report_files táblák őrzik a rendeléshez való kapcsolatot.
-- A Storage bucket privát; a V47 rövid ideig érvényes aláírt URL-lel jeleníti meg a fotókat.
+- A Storage bucket privát; a V48 rövid ideig érvényes aláírt URL-lel jeleníti meg a fotókat.
 
 Biztonság
 ---------

@@ -12,7 +12,9 @@ global.state = {
     { id:'s-szat', name:'Szatmári Kft. – Késmárk', address:'1158 Budapest, Késmárk utca 9.' },
     { id:'s-sebok', name:'Sebők és Társa Kft', address:'2045 Törökbálint, Kinizsi utca 28.' },
     { id:'s-merkapt', name:'Merkapt Zrt.', address:'1106 Budapest, Maglódi út 14/B' },
-    { id:'s-szer', name:'Szerelvénybolt Kft.', address:'1182 Budapest, Üllői út 800.' }
+    { id:'s-szer', name:'Szerelvénybolt Kft.', address:'1182 Budapest, Üllői út 800.' },
+    { id:'s-ezer-gyor', name:'Ezer-Ker Kft.', address:'9023 Győr, Mészáros Lőrinc u 13.', isCentral:false },
+    { id:'s-ezer-kada', name:'Ezer-Ker Kft.', address:'1106 Budapest, Kada utca 149.', isCentral:true }
   ],
   projects: [
     { id:'p-m76', name:'Budapest_M76', address:'1095 Budapest, Mester u. 76.' },
@@ -39,12 +41,14 @@ const returnBody = `Kekelit visszáru - Cosmo\nTo: kratochwil.balazs@szatmari.hu
 test('rendelésszám típussal és perjel utáni azonosítóval', () => eq(V.extractOrderRefs('2026-KRPR/000745'), [{year:'2026',type:'KRPR',no:'000745',full:'2026-KRPR/000745'}]));
 test('visszáru három eredeti rendelésszámát megtartja', () => eq(V.extractOrderRefs(returnBody).map(x=>x.no), ['002226','001998','001832']));
 test('ismeretlen cég Felvétel címe blokkból', () => {
-  const x=V.extractExplicitPickup(cityBody); eq(x.name,'Gali SwimTex Kft.'); eq(x.address,'2142 Nagytarcsa, Gránit utca 15'); ok(x.autoMaster);
+  const x=V.extractExplicitPickup(cityBody); eq(x.name,'Gali SwimTex Kft.'); eq(x.address,'2142 Nagytarcsa, Gránit utca 15'); ok(!x.autoMaster); ok(x.detectedFromDocument);
 });
-test('City Pearl import: Gali → City Pearl', () => {
+test('ismeretlen Outlook-beszállító címe üres marad és hibajelzést kap', () => {
   const e=V.buildExtractedEntry({category:'dobozos',sourceName:'Megrendelés_City Pearl_II_260804_004932.msg',subject:'Megrendelés_City Pearl_II_260804_004932',body:cityBody,pdfText:cityPdf,pdfLines:cityPdf.split('\n')});
-  eq(e.orderNo,'004932'); eq(e.pickupName,'Gali SwimTex Kft.'); eq(e.pickupAddress,'2142 Nagytarcsa, Gránit utca 15'); eq(e.projectName,'Budapest_City_pearl_II.ütem'); eq(e.dropAddress,'1095 Budapest, Soroksári út 58.'); ok(e.newSupplierData);
+  eq(e.orderNo,'004932'); eq(e.pickupName,''); eq(e.pickupAddress,''); eq(e.supplierId,''); eq(e.projectName,'Budapest_City_pearl_II.ütem'); eq(e.dropAddress,'1095 Budapest, Soroksári út 58.'); eq(e.newSupplierData,null); ok(e.warnings.some(w=>/beszállítói törzsadatokban/.test(w)));
 });
+test('Ezer-Ker csak a törzsadatból kap címet, a központi telephely az alapértelmezett', () => { const s=V.bestSupplier('Ezer-Ker Kft. rendelés'); eq(s.id,'s-ezer-kada'); eq(s.address,'1106 Budapest, Kada utca 149.'); });
+test('hasonló nevű ismeretlen cég nem kap Ezer-Ker címet', () => eq(V.bestSupplier('Két Kör Kft. rendelés'),null));
 test('KRPR: felrakó mindig a központi raktár', () => {
   const e=V.buildExtractedEntry({category:'dobozos',sourceName:'Raktárközi_Lejardin_000745.msg',subject:'Raktárközi_Lejardin_000745',body:'',pdfText:krprPdf,pdfLines:krprPdf.split('\n')});
   eq(e.orderType,'KRPR'); eq(e.orderNo,'000745'); eq(e.pickupAddress,'2310 Szigetszentmiklós, Kereskedő utca 2.'); eq(e.projectName,'Budapest_LeJardin_II_felépítmény'); eq(e.dropAddress,'1134 Budapest, Rozsnyai utca 14–18.');
@@ -65,9 +69,9 @@ test('visszáru megfordítja az irányt és egy buborékban tartja a számokat',
   const e=V.buildExtractedEntry({category:'dobozos',sourceName:'Kekelit visszáru - Cosmo.msg',subject:'Kekelit visszáru - Cosmo',body:returnBody,pdfText:'',pdfLines:[]});
   eq(e.orderType,'VISSZARU'); eq(e.pickupName,'Budapest_Cosmo_Residence'); eq(e.pickupAddress,'1133 Budapest, Hegedűs Gyula utca 53.'); eq(e.projectName,'Szatmári Kft. – Késmárk'); eq(e.dropAddress,'1158 Budapest, Késmárk utca 9.'); eq(e.orderNo,'002226, 001998, 001832'); eq(e.items[0].qty,'400');
 });
-test('új beszállító automatikusan bekerül a törzsbe', () => {
+test('Outlook import nem hoz létre új beszállítót a törzsben', () => {
   const before=state.suppliers.length; const entry={newSupplierData:{name:'Új Teszt Kft.',address:'2222 Teszt, Próba utca 1.',phone:'123',email:'a@b.hu'},pickupRole:'supplier',pickupName:'Új Teszt Kft.'};
-  const s=V.ensureSupplierMaster(entry); eq(state.suppliers.length,before+1); eq(s.address,'2222 Teszt, Próba utca 1.'); ok(s.autoCreatedFromOutlook);
+  const s=V.ensureSupplierMaster(entry); eq(state.suppliers.length,before); eq(s,null);
 });
 test('Szerelvénybolt címmigráció', () => { V.migrateV41MasterData(); eq(state.suppliers.find(x=>x.id==='s-szer').address,'1182 Budapest, Üllői út 807/B'); });
 test('hátralékból csak a leokézott tétel kerül ki', () => {

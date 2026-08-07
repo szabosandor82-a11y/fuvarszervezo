@@ -103,7 +103,7 @@
     const phone = (contactLine.match(/(?:\+?36\s*)?(?:20|30|70)[\s\/-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}/) || [])[0] || '';
     const email = (sources.filter(Boolean).join(' ').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i) || [])[0] || '';
     if (!company && !address) return null;
-    return { name: company.replace(/\s+/g, ' ').trim(), address, phone, email, pickupNote: [contactLine, phone].filter(Boolean)[0] || '', reason: 'levél/PDF külön Felvétel címe mező', autoMaster: true };
+    return { name: company.replace(/\s+/g, ' ').trim(), address, phone, email, pickupNote: [contactLine, phone].filter(Boolean)[0] || '', reason: 'levél/PDF külön Felvétel címe mező', autoMaster: false, detectedFromDocument: true };
   }
 
   function extractRequestedDate(text = '') {
@@ -209,24 +209,38 @@
   }
 
   function bestSupplier(sourceText) {
+    const suppliers = typeof state !== 'undefined' ? state.suppliers || [] : [];
     const explicit = extractExplicitPickup(sourceText);
     if (explicit?.name && explicit?.address) {
-      const master = (typeof state !== 'undefined' ? state.suppliers || [] : []).find(item => nrm(item.name) === nrm(explicit.name) || nrm(item.address) === nrm(explicit.address));
-      return { ...explicit, id: master?.id || '', pickupNote: explicit.pickupNote || master?.pickupNote || master?.note || '', autoMaster: !master };
+      const sameName = suppliers.filter(item => nrm(item.name) === nrm(explicit.name));
+      const master = suppliers.find(item => nrm(item.name) === nrm(explicit.name) && nrm(item.address) === nrm(explicit.address))
+        || suppliers.find(item => nrm(item.address) === nrm(explicit.address))
+        || sameName.find(item => item.isCentral)
+        || sameName[0]
+        || null;
+      if (master) return { id: master.id || '', name: master.name || explicit.name, address: master.address || '', pickupNote: master.pickupNote || master.note || explicit.pickupNote || '', phone: master.phone || explicit.phone || '', email: master.email || explicit.email || '', reason: 'levél/PDF felrakó biztos törzsadat-egyezéssel', autoMaster: false };
+      return { id: '', name: '', address: '', pickupNote: '', detectedName: explicit.name || '', reason: 'felismert beszállító nincs a törzsadatokban', autoMaster: false, unmatchedMaster: true };
     }
     const special = supplierSpecial(sourceText);
     if (special) {
-      const master = (typeof state !== 'undefined' ? state.suppliers || [] : []).find(supplier => {
+      const master = suppliers.find(supplier => {
         const combined = nrm(`${supplier.name || ''} ${supplier.address || ''} ${supplier.site || ''}`);
         return special.name.startsWith('Szatmári') ? combined.includes('kesmark') : special.name.startsWith('Fogarasi') ? combined.includes('hunyadi') : special.name.startsWith('Szerelvénybolt') ? combined.includes('szerelvenybolt') : combined.includes('larex');
       });
-      return { ...special, id: master?.id || '', pickupNote: master?.pickupNote || master?.note || '', autoMaster: !master };
+      if (master) return { id: master.id || '', name: master.name || special.name, address: master.address || '', pickupNote: master.pickupNote || master.note || '', phone: master.phone || '', email: master.email || '', reason: `${special.reason || 'speciális felismerés'} · törzsadatból`, autoMaster: false };
+      return { id: '', name: '', address: '', pickupNote: '', detectedName: special.name || '', reason: 'felismert beszállító nincs a törzsadatokban', autoMaster: false, unmatchedMaster: true };
     }
     const sourceNorm = nrm(sourceText);
-    const candidates = (typeof state !== 'undefined' ? state.suppliers || [] : []).map(supplier => ({ supplier, score: supplierScore(supplier, sourceNorm) })).sort((a, b) => b.score - a.score);
-    if (!candidates.length || candidates[0].score < 10) return null;
+    const candidates = suppliers.map(supplier => {
+      const nameNorm = nrm(supplier.name || '');
+      const nameTokens = significantTokens(supplier.name);
+      const exactName = !!nameNorm && sourceNorm.includes(nameNorm);
+      const allDistinctiveTokens = nameTokens.length > 0 && nameTokens.every(token => sourceNorm.includes(token)) && nameTokens.some(token => token.length >= 5);
+      return { supplier, score: supplierScore(supplier, sourceNorm), strict: exactName || allDistinctiveTokens };
+    }).filter(candidate => candidate.strict).sort((a, b) => b.score - a.score || Number(Boolean(b.supplier.isCentral)) - Number(Boolean(a.supplier.isCentral)));
+    if (!candidates.length) return null;
     const winner = candidates[0].supplier;
-    return { id: winner.id || '', name: winner.name || '', address: winner.address || '', pickupNote: winner.pickupNote || winner.note || '', phone: winner.phone || '', email: winner.email || '', reason: `törzsadat-egyezés (${candidates[0].score})`, autoMaster: false };
+    return { id: winner.id || '', name: winner.name || '', address: winner.address || '', pickupNote: winner.pickupNote || winner.note || '', phone: winner.phone || '', email: winner.email || '', reason: `biztos törzsadat-egyezés (${candidates[0].score})`, autoMaster: false };
   }
 
 
@@ -244,9 +258,11 @@
       if (tokens.length && tokens.every(token => sourceNorm.includes(token))) score += 55;
       if (/niczuk/.test(nameNorm) && /niczuk/.test(sourceNorm)) score += 180;
       if (/stand\s*98/.test(nameNorm)) score -= 500;
-      return { supplier, score };
-    }).sort((a, b) => b.score - a.score || Number(Boolean(b.supplier.address)) - Number(Boolean(a.supplier.address)));
-    if (!candidates.length || candidates[0].score < 25) return null;
+      const exactName = !!nameNorm && sourceNorm.includes(nameNorm);
+      const allDistinctiveTokens = tokens.length > 0 && tokens.every(token => sourceNorm.includes(token)) && tokens.some(token => token.length >= 5);
+      return { supplier, score, strict: exactName || allDistinctiveTokens || (/niczuk/.test(nameNorm) && /niczuk/.test(sourceNorm)) };
+    }).filter(candidate => candidate.strict).sort((a, b) => b.score - a.score || Number(Boolean(b.supplier.isCentral)) - Number(Boolean(a.supplier.isCentral)) || Number(Boolean(b.supplier.address)) - Number(Boolean(a.supplier.address)));
+    if (!candidates.length) return null;
     const winner = candidates[0].supplier;
     return {
       id: winner.id || '',
@@ -393,7 +409,8 @@
     const special = supplierSpecial(`${subject}\n${core}`);
     if (special) {
       const master = (typeof state !== 'undefined' ? state.suppliers || [] : []).find(item => nrm(item.address) === nrm(special.address) || significantTokens(special.name).every(token => nrm(item.name).includes(token)));
-      return { ...special, id: master?.id || '', pickupNote: master?.pickupNote || master?.note || '', autoMaster: !master };
+      if (master) return { id: master.id || '', name: master.name || special.name, address: master.address || '', pickupNote: master.pickupNote || master.note || '', reason: `${special.reason || 'visszáru felismerés'} · törzsadatból`, autoMaster: false };
+      return { id: '', name: special.name || '', address: '', pickupNote: '', reason: 'felismert beszállító nincs a törzsadatokban', autoMaster: false, unmatchedMaster: true };
     }
     const supplier = bestSupplier(`${subject}\n${core}`) || bestSupplier(combined);
     if (supplier && /k[oö]zponti\s+rakt[aá]r/i.test(supplier.name || '') && !/k[oö]zponti\s+rakt[aá]r(?:ba|hoz|nak|b[oő]l)/i.test(core)) return null;
@@ -541,6 +558,7 @@
     const warnings = [];
     if (!sourceOrderNos.length) warnings.push('Rendelésszám nem található');
     if (!pickup?.name) warnings.push('Felrakó nem azonosítható');
+    if (pickupRole === 'supplier' && (!pickup?.id || pickup?.unmatchedMaster)) warnings.push(`Felrakó nincs a beszállítói törzsadatokban${pickup?.detectedName ? `: ${pickup.detectedName}` : ''}`);
     if (!pickup?.address) warnings.push('Felrakó címe hiányzik');
     if (!drop?.name) warnings.push('Lerakó/projekt nem azonosítható');
     if (!drop?.address) warnings.push('Lerakó címe hiányzik a törzsadatból');
@@ -554,7 +572,7 @@
       pickupName: pickup?.name || '', pickupAddress: pickup?.address || '', supplierId: pickupRole === 'supplier' ? (pickup?.id || '') : '', pickupNote: pickup?.pickupNote || '', pickupRole,
       projectName: drop?.name || hint || '', projectId: dropRole === 'project' ? (drop?.id || '') : '', dropAddress: drop?.address || '', dropRole,
       returnSourceProjectId: returnMode ? (project?.id || '') : '', returnDestinationSupplierId: returnMode ? (supplier?.id || '') : '',
-      newSupplierData: supplier?.autoMaster ? { name: supplier.name, address: supplier.address, phone: supplier.phone || '', email: supplier.email || '', pickupNote: supplier.pickupNote || '', autoCreatedFromOutlook: true } : null,
+      newSupplierData: null,
       ...recipientFromProject(dropRole === 'project' ? drop : null), items, warnings, duplicate: false, existingOrderNos,
       extractionReason: unique(reasons).join(' · '), sourceBody: body || '', sourcePdfText: pdfText || ''
     };
@@ -661,12 +679,9 @@
     const locations = (typeof state !== 'undefined' ? state.suppliers || [] : [])
       .filter(item => nrm(item.name) === nrm(entry.pickupName))
       .sort((a, b) => Number(Boolean(b.isCentral)) - Number(Boolean(a.isCentral)) || String(a.address || '').localeCompare(String(b.address || ''), 'hu'));
-    if (entry.pickupAddress && !locations.some(item => nrm(item.address) === nrm(entry.pickupAddress))) {
-      locations.unshift({ id: entry.supplierId || '', address: entry.pickupAddress, pickupNote: 'felismert / egyedi cím', isCentral: false });
-    }
     const listId = `supplier-addresses-${String(entry._id || 'entry').replace(/[^a-zA-Z0-9_-]/g, '')}`;
     const options = locations.map(item => `<option value="${htmlEsc(item.address || '')}">${htmlEsc(`${item.isCentral ? 'Központ · ' : ''}${item.site || ''}${item.pickupNote ? `${item.site ? ' · ' : ''}${item.pickupNote}` : ''}`)}</option>`);
-    return `<input data-field="pickupAddress" data-kind="supplier-address" list="${htmlEsc(listId)}" value="${htmlEsc(entry.pickupAddress || '')}" placeholder="Válassz vagy írj be új felrakó címet…"><datalist id="${htmlEsc(listId)}">${options.join('')}</datalist>`;
+    return `<input data-field="pickupAddress" data-kind="supplier-address" list="${htmlEsc(listId)}" value="${htmlEsc(entry.pickupAddress || '')}" placeholder="Válassz címet a beszállítói törzsből…"><datalist id="${htmlEsc(listId)}">${options.join('')}</datalist>`;
   }
 
   function projectNameSelect(entry) {
@@ -686,6 +701,7 @@
     entry.warnings = (entry.warnings || []).filter(warning => !/Rendelésszám|Felrakó|Projekt címe|Lerakó\/projekt|Lerakó címe|már szerepel|duplik/i.test(warning));
     if (!entry.orderNo) entry.warnings.push('Rendelésszám nem található');
     if (!entry.pickupName) entry.warnings.push('Felrakó nem azonosítható');
+    if ((entry.pickupRole || 'supplier') === 'supplier' && !entry.supplierId) entry.warnings.push('Felrakó nincs a beszállítói törzsadatokban');
     if (!entry.pickupAddress) entry.warnings.push('Felrakó címe hiányzik');
     if (!entry.projectName) entry.warnings.push('Lerakó/projekt nem azonosítható');
     if (!entry.dropAddress) entry.warnings.push('Projekt címe hiányzik a törzsadatból');
@@ -758,12 +774,14 @@
           if (supplier) {
             entry.supplierId = supplier.id || '';
             entry.pickupName = supplier.name || entry.pickupName;
+            entry.pickupAddress = supplier.address || '';
             entry.pickupNote = supplier.pickupNote || supplier.note || '';
             entry.newSupplierData = null;
-          } else if (entry.pickupName && entry.pickupAddress) {
+          } else {
             entry.supplierId = '';
+            entry.pickupAddress = '';
             entry.pickupNote = '';
-            entry.newSupplierData = { name: entry.pickupName, address: entry.pickupAddress, pickupNote: '' };
+            entry.newSupplierData = null;
           }
         } else if (input.dataset.kind === 'project-name') {
           const selected = [...input.options].find(option => option.selected);
@@ -849,21 +867,17 @@ ${entry.subject || ''}`) || project;
   }
 
   function ensureSupplierMaster(entry) {
-    const data = entry.newSupplierData;
-    if (!data?.name || !data?.address) return null;
-    let supplier = (state.suppliers || []).find(item => nrm(item.name) === nrm(data.name) && nrm(item.address) === nrm(data.address));
-    if (supplier) return supplier;
-    supplier = { id: id(), name: data.name, site: '', address: data.address, phone: data.phone || '', email: data.email || '', pickupNote: data.pickupNote || '', note: data.pickupNote || '', active: true, manualOverride: true, autoCreatedFromOutlook: true, createdAt: new Date().toISOString() };
-    state.suppliers = state.suppliers || [];
-    state.suppliers.push(supplier);
-    entry.supplierId = supplier.id;
-    if (entry.pickupRole === 'supplier') entry.pickupName = supplier.name;
-    return supplier;
+    if ((entry?.pickupRole || 'supplier') !== 'supplier') return null;
+    const name = String(entry?.pickupName || '').trim();
+    const address = String(entry?.pickupAddress || '').trim();
+    if (!name || !address) return null;
+    return (state.suppliers || []).find(item => nrm(item.name) === nrm(name) && nrm(item.address) === nrm(address)) || null;
   }
 
   function entryToOrder(entry) {
-    const createdSupplier = ensureSupplierMaster(entry);
+    const existingSupplier = ensureSupplierMaster(entry);
     const { supplier, project } = masterIdsForEntry(entry);
+    const resolvedSupplier = supplier || existingSupplier;
     if (entry.orderType === 'KRPR' && project?.address && !entry.dropAddress) {
       entry.projectId = project.id || entry.projectId || '';
       entry.projectName = project.name || entry.projectName || '';
@@ -878,16 +892,16 @@ ${entry.subject || ''}`) || project;
     return {
       id: id(), scheduleDate: entry.scheduleDate || selectedImportDate() || tomorrowISO(), vehicleId: isMartin ? (martin?.id || '') : (mario?.id || ''), sequence: 999,
       orderNo: entry.orderNo || sourceNos.join(', '), sourceOrderNos: sourceNos, fullOrderRefs: entry.fullOrderRefs || [], orderType: entry.orderType || 'SR0', isReturn: !!entry.isReturn,
-      topicName: entry.projectName, pickupName: entry.pickupName, pickupAddress: entry.pickupAddress, pickupNote: supplier?.pickupNote || supplier?.note || createdSupplier?.pickupNote || entry.pickupNote || '', supplierId: entry.pickupRole === 'supplier' ? (supplier?.id || createdSupplier?.id || entry.supplierId || '') : '',
+      topicName: entry.projectName, pickupName: entry.pickupRole === 'supplier' ? (resolvedSupplier?.name || '') : entry.pickupName, pickupAddress: entry.pickupRole === 'supplier' ? (resolvedSupplier?.address || '') : entry.pickupAddress, pickupNote: resolvedSupplier?.pickupNote || resolvedSupplier?.note || entry.pickupNote || '', supplierId: entry.pickupRole === 'supplier' ? (resolvedSupplier?.id || '') : '',
       projectName: entry.projectName, projectId: entry.dropRole === 'project' ? (project?.id || entry.projectId || '') : '', dropAddress: entry.dropAddress,
-      pickupRole: entry.pickupRole || 'supplier', dropRole: entry.dropRole || 'project', returnSourceProjectId: entry.returnSourceProjectId || '', returnDestinationSupplierId: entry.returnDestinationSupplierId || createdSupplier?.id || '',
+      pickupRole: entry.pickupRole || 'supplier', dropRole: entry.dropRole || 'project', returnSourceProjectId: entry.returnSourceProjectId || '', returnDestinationSupplierId: entry.returnDestinationSupplierId || '',
       recipientId: recipient?.id || entry.recipientId || '', recipientName: recipient?.name || entry.recipientName || '', recipientPhone: recipient?.phone || entry.recipientPhone || '', recipientEmail: recipient?.email || entry.recipientEmail || '',
       requestedDeadline: entry.requestedDate || '', note: `Outlook import · ${entry.orderType || 'SR0'} · ${entry.sourceName}${entry.pdfName ? ` · ${entry.pdfName}` : ''}`,
       items: (entry.items || []).map(item => ({ ...item, _id: item._id || id(), received: false, missingQty: '' })),
       longMaterialReason: isMartin ? ((entry.items || []).find(item => item.longMaterial)?.name || 'Martin / Platós Outlook import') : '',
       markedMartin: isMartin, importVehicleCategory: isMartin ? 'martin' : 'dobozos', importAutoRaw: isMartin ? 'Martin' : 'Dobozos', importVehicleLocked: isMartin,
       messageOrderNos: entry.messageOrderNos?.length ? entry.messageOrderNos.slice() : sourceNos.slice(),
-      missingSupplierMaster: ((entry.pickupRole || 'supplier') === 'supplier' && !entry.pickupAddress) || (entry.dropRole === 'supplier' && !entry.dropAddress),
+      missingSupplierMaster: ((entry.pickupRole || 'supplier') === 'supplier' && !resolvedSupplier?.id) || (entry.dropRole === 'supplier' && !entry.returnDestinationSupplierId),
       missingProjectMaster: (entry.pickupRole === 'project' && !entry.pickupAddress) || ((entry.dropRole || 'project') === 'project' && !entry.dropAddress),
       outlookImport: true, outlookSourceFile: entry.sourceName, outlookPdfFile: entry.pdfName || '', outlookImportedAt: new Date().toISOString(), completed: false
     };
@@ -1054,7 +1068,7 @@ ${entry.subject || ''}`) || project;
     renderPending();
     global.FUVARSZERVEZO_VERSION = VERSION;
     const previousDiagnostics = global.getFuvarszervezoDiagnostics;
-    global.getFuvarszervezoDiagnostics = () => ({ ...(typeof previousDiagnostics === 'function' ? previousDiagnostics() : {}), version: VERSION, outlookImport: true, outlookImportCategories: ['Dobozos', 'Martin / Platós'], outlookOrderNoRule: 'csak a / utáni rész', outlookPdfAttachments: true, outlookMsgReader: 'beépített helyi CFB parser', krprRule: true, prprRule: true, returnRule: true, autoSupplierMaster: true, itemLevelBacklog: true });
+    global.getFuvarszervezoDiagnostics = () => ({ ...(typeof previousDiagnostics === 'function' ? previousDiagnostics() : {}), version: VERSION, outlookImport: true, outlookImportCategories: ['Dobozos', 'Martin / Platós'], outlookOrderNoRule: 'csak a / utáni rész', outlookPdfAttachments: true, outlookMsgReader: 'beépített helyi CFB parser', krprRule: true, prprRule: true, returnRule: true, autoSupplierMaster: false, supplierAddressSource: 'uploaded-master-only', itemLevelBacklog: true });
   }
 
   const V41_API = {

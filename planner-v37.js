@@ -390,10 +390,6 @@
       const orderCount = unit.allPickupOrders.length;
       const resolvedPickup = unit.allPickupOrders.every(isResolvedBacklogOrder);
       return `<section class="pickup-move-block ${resolvedPickup ? 'resolved-pickup-block' : ''}" data-pickup-move-key="${escHtml(unit.pickupKey)}" data-order-ids="${escHtml(ids)}" data-vehicle-id="${escHtml(vehicleId)}">
-        <div class="pickup-group-bar">
-          <span class="pickup-group-drag" title="A teljes beszállítói blokk húzása">☷</span>
-          <div><b>${unitIndex + 1}. ${escHtml(pickupName)}</b><small>${orderCount} rendelés · egy beszállító · mindig együtt mozog</small></div>
-        </div>
         <div class="pickup-group-orders">${unit.groups.map((group, subIndex) => renderGroupBubble(group, subIndex, vehicleId, {
           focus,
           insidePickupGroup: true,
@@ -568,7 +564,7 @@
     return new Sortable(element, {
       group: focus ? `focus-${vehicleId}` : 'vehicles-v37',
       animation: 180,
-      handle: '.pickup-group-drag, .drag',
+      handle: '.drag',
       draggable: '.pickup-move-block:not(.resolved-pickup-block), .route-block:not(.inside-pickup-group):not(.resolved-backlog-block)',
       filter: '.resolved-backlog-block, .resolved-pickup-block',
       scroll: false,
