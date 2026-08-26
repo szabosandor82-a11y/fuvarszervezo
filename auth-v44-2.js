@@ -1,4 +1,4 @@
-/* Fuvarszervező V49 – online többfelhasználós mobil felület.
+/* Fuvarszervező V50 – online többfelhasználós mobil felület.
    A hitelesítés, a fuvarok, átadások és szállítólevél-fotók Supabase-ben tárolódnak. */
 (function (global) {
   'use strict';
@@ -132,7 +132,7 @@
     document.querySelector('nav')?.classList.remove('auth-app-hidden');
     byId('accountBar')?.classList.remove('hidden');
     if (byId('accountIdentity')) byId('accountIdentity').textContent = `${currentProfile?.display_name || currentSession?.user?.email} · ADMIN`;
-    setAppTitle('Fuvarszervező V49');
+    setAppTitle('Fuvarszervező V50');
     if (typeof render === 'function') render();
     await renderAdminOnlinePage();
   }
@@ -145,7 +145,7 @@
     document.querySelector('main')?.classList.add('auth-app-hidden');
     document.querySelector('nav')?.classList.add('auth-app-hidden');
     byId('driverPortal')?.classList.remove('hidden');
-    setAppTitle('Fuvarszervező V49');
+    setAppTitle('Fuvarszervező V50');
     selectedDriverDate = allowedDates().includes(selectedDriverDate) ? selectedDriverDate : allowedDates()[0];
     await renderDriverPortal();
   }

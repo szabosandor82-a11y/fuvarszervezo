@@ -1,4 +1,4 @@
-# Fuvarszervező V49 – Supabase ellenőrzőlista
+# Fuvarszervező V50 – Supabase ellenőrzőlista
 
 ## Ami már be van állítva
 

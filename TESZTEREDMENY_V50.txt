@@ -1,0 +1,17 @@
+Fuvarszervező V50 – 2026-08-07
+
+Új munkanap-szabály:
+- Péntek után hétfő a következő fuvarnap.
+- Szombat és vasárnap nem lehet normál fuvarnap; hétfőre normalizálódik.
+- Manuális fuvarfelvitel ugyanezt használja.
+- Outlook import ugyanezt használja.
+- A főoldali és mobil/app napi navigáció péntek után hétfőre lép.
+- Hétfőről visszalapozva péntek következik.
+- A 16:00 utáni automatikus áthelyezés és a meghiúsult fuvar áthelyezése is a következő munkanapra kerül.
+
+Automatikus ellenőrzések:
+- V50 munkanap teszt: 8/8 sikeres.
+- V49 szétosztás/optimalizálás regressziós teszt: 7/7 sikeres.
+- V41 Outlook regressziós teszt: 8/8 sikeres.
+- V44 szétosztási/mozgási regressziós teszt: 11/11 sikeres.
+- Minden top-level JavaScript fájl: node --check OK.

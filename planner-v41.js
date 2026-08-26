@@ -26,8 +26,21 @@
     : String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const id = () => typeof uid === 'function' ? uid() : `v43-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const localISO = date => { const d = new Date(date); const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; };
-  const tomorrowISO = () => { const d = new Date(); d.setDate(d.getDate() + 1); return localISO(d); };
-  const selectedImportDate = () => ((typeof document !== 'undefined' ? document.getElementById('v38ImportDate')?.value : '') || tomorrowISO());
+  const shiftWorkdayISO = (value, direction = 1) => {
+    const d = value instanceof Date ? new Date(value) : new Date(`${value}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return '';
+    const step = direction < 0 ? -1 : 1;
+    do { d.setDate(d.getDate() + step); } while (d.getDay() === 0 || d.getDay() === 6);
+    return localISO(d);
+  };
+  const normalizeWorkdayISO = value => {
+    const d = value instanceof Date ? new Date(value) : new Date(`${value}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return '';
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+    return localISO(d);
+  };
+  const tomorrowISO = () => shiftWorkdayISO(localISO(new Date()), 1);
+  const selectedImportDate = () => normalizeWorkdayISO((typeof document !== 'undefined' ? document.getElementById('v38ImportDate')?.value : '') || tomorrowISO()) || tomorrowISO();
   const cleanText = value => String(value || '').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/\r/g, '').replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
   const unique = values => [...new Set(values.filter(Boolean))];
   const significantTokens = (value, noise = LEGAL_WORDS) => nrm(value).split(' ').filter(token => token.length >= 3 && !noise.has(token) && !/^\d+$/.test(token));
@@ -904,7 +917,7 @@ ${entry.subject || ''}`) || project;
     const recipient = project?.defaultRecipientId ? (state.recipients || []).find(item => item.id === project.defaultRecipientId) : null;
     const sourceNos = entry.sourceOrderNos?.length ? entry.sourceOrderNos : orderNumbersOf(entry);
     return {
-      id: id(), scheduleDate: entry.scheduleDate || selectedImportDate() || tomorrowISO(), vehicleId: isMartin ? (martin?.id || '') : (mario?.id || ''), sequence: 999,
+      id: id(), scheduleDate: normalizeWorkdayISO(entry.scheduleDate || selectedImportDate() || tomorrowISO()), vehicleId: isMartin ? (martin?.id || '') : (mario?.id || ''), sequence: 999,
       orderNo: entry.orderNo || sourceNos.join(', '), sourceOrderNos: sourceNos, fullOrderRefs: entry.fullOrderRefs || [], orderType: entry.orderType || 'SR0', isReturn: !!entry.isReturn,
       topicName: entry.projectName, pickupName: entry.pickupRole === 'supplier' ? (resolvedSupplier?.name || '') : entry.pickupName, pickupAddress: entry.pickupRole === 'supplier' ? (resolvedSupplier?.address || '') : entry.pickupAddress, pickupNote: resolvedSupplier?.pickupNote || resolvedSupplier?.note || entry.pickupNote || '', supplierId: entry.pickupRole === 'supplier' ? (resolvedSupplier?.id || '') : '',
       projectName: entry.projectName, projectId: entry.dropRole === 'project' ? (project?.id || entry.projectId || '') : '', dropAddress: entry.dropAddress,
@@ -941,7 +954,7 @@ ${entry.subject || ''}`) || project;
         continue;
       }
       entry.sourceOrderNos = numbers;
-      entry.scheduleDate = entry.scheduleDate || selectedImportDate() || tomorrowISO();
+      entry.scheduleDate = normalizeWorkdayISO(entry.scheduleDate || selectedImportDate() || tomorrowISO());
       acceptedEntries.push(entry);
     }
     if (!acceptedEntries.length) return alert(`Nem került be rendelés.\n${skipped.join('\n')}`);
@@ -1070,7 +1083,8 @@ ${entry.subject || ''}`) || project;
     const dateInput = document.getElementById('v38ImportDate');
     if (dateInput && !dateInput.value) dateInput.value = tomorrowISO();
     dateInput?.addEventListener('change', () => {
-      const date = dateInput.value || tomorrowISO();
+      const date = normalizeWorkdayISO(dateInput.value || tomorrowISO()) || tomorrowISO();
+      dateInput.value = date;
       pending.forEach(entry => { if (!entry.scheduleDateManual) entry.scheduleDate = date; });
       renderPending();
     });
@@ -1118,6 +1132,8 @@ ${entry.subject || ''}`) || project;
     projectMasterByIdentity,
     matchingOutlookOrders,
     tomorrowISO,
+    shiftWorkdayISO,
+    normalizeWorkdayISO,
     getPending: () => pending.slice(),
     setPending: value => { pending = Array.isArray(value) ? value : []; if (typeof document !== 'undefined') renderPending(); }
   };

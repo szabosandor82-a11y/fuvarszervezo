@@ -1,4 +1,4 @@
-/* Fuvarszervező V49
+/* Fuvarszervező V50
    Determinisztikus felrakóhely-blokkos szétosztás.
 
    Kemény szabályok:
@@ -12,7 +12,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '49';
+  const VERSION = '50';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   const HOMES = {
     mario: { address: 'Vác, Magyarország', point: [47.7759, 19.1360] },
@@ -595,7 +595,7 @@
         if (Number.isFinite(metres)) fallback[from.index][to.index] = metres / 1000;
       }));
     } catch (error) {
-      console.warn('[V49] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
+      console.warn('[V50] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
     }
     return fallback;
   }
@@ -652,7 +652,7 @@
     let baseEvents = [];
     if (global.V37Planner?.v37BuildRoutePlan) baseEvents = await global.V37Planner.v37BuildRoutePlan(vehicle.id, profiles);
     else if (global.V35Planner?.v35BuildRoutePlan) baseEvents = await global.V35Planner.v35BuildRoutePlan(vehicle.id, profiles);
-    // V49-ben az útvonalterv kizárólag a felrakási sorrend. Lerakó soha nem
+    // V50-ben az útvonalterv kizárólag a felrakási sorrend. Lerakó soha nem
     // kerül az optimalizálási események közé, teljes autós tételnél sem.
     const normalPickupsOriginal = baseEvents.filter(event => event.type === 'pickup')
       .sort((a, b) => {
@@ -714,10 +714,10 @@
       await persistOnlineV49();
       if (typeof render === 'function') render();
       const conflictText = result.conflicts.length ? `\nFigyelem: ${result.conflicts.length} felrakóhelyen egymással ütköző fix sofőrjelölés maradt.` : '';
-      alert(`Fuvarok V49 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
+      alert(`Fuvarok V50 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
       return result;
     } catch (error) {
-      console.error('[V49] Szétosztási hiba', error);
+      console.error('[V50] Szétosztási hiba', error);
       alert(`A fuvarok szétosztása közben hiba történt: ${error?.message || error}`);
       return null;
     }
@@ -733,10 +733,10 @@
       if (changed.length) throw new Error('Az optimalizálás sofőrt változtatott.');
       await persistOnlineV49();
       if (typeof render === 'function') render();
-      alert('V49 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
+      alert('V50 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
       return true;
     } catch (error) {
-      console.error('[V49] Optimalizálási hiba', error);
+      console.error('[V50] Optimalizálási hiba', error);
       alert(`Az optimalizálás közben hiba történt: ${error?.message || error}`);
       return false;
     }
@@ -857,12 +857,12 @@
     if (balanceButton) {
       balanceButton.onclick = event => { event.preventDefault(); return balanceActionV44(); };
       balanceButton.dataset.algorithmVersion = VERSION;
-      balanceButton.title = 'V49: teljes beszállítói blokkok; Márió=Pest, Patrik=Buda, Martin=platós/szálas';
+      balanceButton.title = 'V50: teljes beszállítói blokkok; Márió=Pest, Patrik=Buda, Martin=platós/szálas';
     }
     if (optimizeButton) {
       optimizeButton.onclick = event => { event.preventDefault(); return optimizeActionV44(); };
       optimizeButton.dataset.algorithmVersion = VERSION;
-      optimizeButton.title = 'V49: kizárólag a felrakók optimalizálása, sofőrváltás nélkül';
+      optimizeButton.title = 'V50: kizárólag a felrakók optimalizálása, sofőrváltás nélkül';
     }
     document.getElementById('clearAllMastersBtn')?.addEventListener('click', clearAllMasterDataV44);
     document.getElementById('loadBuiltInMastersBtn')?.addEventListener('click', loadBuiltInMasterDataV44);
@@ -893,7 +893,7 @@
   global.clearAllMasterDataV44 = clearAllMasterDataV44;
   global.loadBuiltInMasterDataV44 = loadBuiltInMasterDataV44;
 
-  global.V49Planner = {
+  global.V50Planner = {
     version: VERSION,
     canonicalAddress,
     locationKey,
@@ -916,7 +916,8 @@
     clearAllMasterDataV44,
     loadBuiltInMasterDataV44
   };
-  global.V44Planner = global.V49Planner;
+  global.V49Planner = global.V50Planner;
+  global.V44Planner = global.V50Planner;
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(bindV44, 0), { once: true });
