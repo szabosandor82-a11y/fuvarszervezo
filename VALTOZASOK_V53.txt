@@ -1,0 +1,127 @@
+FUVARSZERVEZŐ V53 – A SZÉTOSZTÁS ÉS AZ OPTIMALIZÁLÁS JAVÍTÁSA
+=============================================================
+
+A V53 kizárólag a fuvarszétosztó és útvonaltervező logikát módosítja.
+A belépés, a jogosultságok, a Supabase-séma, az import, a mobilnézet, a
+hátralékkezelés, a fotófeltöltés és a törzsadatkezelés változatlan.
+
+MÓDOSÍTOTT FÁJLOK
+-----------------
+planner-v44.js   a szétosztó- és sorrendmotor (a program ezt futtatja)
+index.html       csak a gyorsítótár verziószáma: ?v=52.0 -> ?v=53.0
+sw.js            csak a gyorsítótár neve: v52 -> v53
+TEST_V44.js      a Patrik-lakhelyre vonatkozó állítás frissítve
+TEST_V49.js      a Patrik-sorrendre vonatkozó állítás frissítve
+TEST_V52.js      a verzióállítás 52 -> 53
+TEST_V53.js      ÚJ: az új szabályok elfogadási tesztje
+
+Minden más fájl bitre azonos az V52 csomaggal.
+
+
+1. SOFŐRÖK INDULÁSI PONTJA
+--------------------------
+Régi: Márió = Vác, Martin = Felcsút, Patrik = szigetszentmiklósi raktár.
+Új:   Márió = Vác, Martin = Felcsút, Patrik = Pesterzsébet.
+
+A régi beállítás földrajzilag középre tette Patrikot, ezért a motor szinte
+minden budapesti felrakót hozzá akart osztani.
+
+
+2. TERÜLETI SÁVOK
+-----------------
+Régi: Márió = Pest, Patrik = Buda, Martin = platós/nyugat.
+Új:   Márió  = észak/kelet Pest
+        III, IV, X, XIII, XIV, XV, XVI, XVII, XVIII kerület
+        Vác, Dunakeszi, Gödöllő, Kistarcsa, Nagytarcsa, Maglód, Pécel,
+        Csömör, Fót, Veresegyház, Szada, Isaszeg, Kerepes, Mogyoród
+      Patrik = közép/dél Pest és Buda
+        I, II, V, VI, VII, VIII, IX, XI, XII, XIX, XX, XXI, XXII, XXIII
+        Dunaharaszti, Szigetszentmiklós, Tököl, Szigethalom, Halásztelek,
+        Budaörs, Törökbálint, Érd, Biatorbágy, Diósd, Sóskút, Budakeszi,
+        Gyál, Vecsés, Üllő, Dunavarsány, Délegyháza
+        A központi raktár is ebbe a sávba tartozik.
+      Martin = nyugati folyosó
+        Felcsút, Bicske, Alcsútdoboz, Csákvár, Vértesacsa, Etyek,
+        Tatabánya, Martonvásár, Szár, Tabajd, Vértesboglár
+
+A Pest korábban nem volt kettéosztva, ezért Márió és Patrik között nem
+volt valódi határvonal.
+
+Ha egy felrakó egyik listában sem szerepel, a motor a három lakhelyhez
+mért távolság alapján sorolja be.
+
+
+3. SZÁLANYAG-SZABÁLY
+--------------------
+Régi: bármilyen 4, 5 vagy 6 méteres tétel Martinhoz került.
+Új:   kizárólag az 5-6 méteres szálanyag köti Martinhoz a fuvart. Ez kemény
+      szabály: sem a sáv, sem a terheléskiegyenlítés nem írja felül.
+
+A felismerő három lyukát javítottuk. Korábban nem ismerte fel:
+   "6 fm-es cső"          folyóméter rövidítés
+   "csatorna cső 6 fm"    folyóméter rövidítés
+   "KPE cső 6000"         mértékegység nélküli hossz
+A 4 méteres tétel V53-ban már NEM szálanyag.
+
+A felrakóhely-egység szabálya miatt, ha egy felrakón van szálanyag, az
+adott felrakó teljes aznapi anyaga Martinhoz kerül.
+
+
+4. KÖZPONTI RAKTÁR
+------------------
+Régi: a raktár összes aznapi rendelése egyetlen blokk volt, tehát egyetlen
+      sofőrhöz került.
+Új:   a raktár projektenként bontható, mert ott mindhárom autó rakodhat.
+      Ez a terheléskiegyenlítés elsődleges eszköze.
+
+A külső felrakóhelyekre a régi szabály változatlanul él: egy fizikai cím
+összes aznapi rendelése egy sofőrhöz kerül.
+
+
+5. TERHELÉSKIEGYENLÍTÉS
+-----------------------
+A fő mérőszám a felrakók száma, mert az adja a napi időt.
+A motor akkor avatkozik be, ha két sofőr között 2-nél nagyobb a különbség.
+Átadásra először a központi raktár és a semleges blokkok kerülnek sorra,
+és csak utána a sávon belüli blokkok. A szálanyagot soha nem mozdítja el.
+
+
+6. FELRAKÁSI SORREND
+--------------------
+Régi: a felrakók sorrendje egy rögzített beszállítói elsőbbségi táblából
+      jött (például Patriknál mindig a központi raktár volt az első).
+Új:   a nap egy lánc: lakhely -> felrakók -> építkezések. A motor a teljes
+      láncot optimalizálja, tehát az utolsó felrakó a lerakókhoz közel
+      esik, hogy a kirakás onnan folytatódhasson.
+
+Módszer: legközelebbi szomszéd indulás, majd 2-opt javítás, ahol a
+költséghez hozzáadódik az utolsó felrakótól a nap lerakóinak
+súlypontjáig tartó út.
+
+A rögzített buborékok a helyükön maradnak, és a lerakó továbbra sem
+külön megálló az útvonaltervben.
+
+
+AMIT MÉG ÉRDEMES ÁTNÉZNI
+------------------------
+- A lerakók súlypontja csak akkor számítható, ha a projektek címe szerepel
+  a törzsadatban és le van geokódolva. Ahol nincs cím, ott a motor a régi,
+  lakhely-alapú sorrendre esik vissza.
+- A napi prioritások (kötelező első felrakó, délelőtti határidő, sztornó)
+  ma is csak szabad szövegben léteznek az e-mailekben. A motor ezeket nem
+  látja; ezekhez külön mező kellene a rendelésen.
+- A Szatmári, Merkapt és Szerelvénybolt a korábbi napokon mindkét sofőrnél
+  előfordult. A V53 ezeket Márió sávjába sorolja, de a terheléskiegyenlítés
+  átadhatja Patriknak.
+
+
+TESZTEK
+-------
+TEST_V53.js   15/15 sikeres – az új szabályok elfogadási tesztje
+TEST_V52.js    8/8  – kiadási és munkanapteszt
+TEST_V49.js    7/7  – szétosztás és optimalizálás
+TEST_V44.js   11/11 – szétosztási és mozgatási regresszió
+TEST_V41.js   14/14 – Outlook/import regresszió
+TEST_V37/35/34/33 – korábbi regressziók, mind sikeres
+
+Futtatás: node TEST_V53.js

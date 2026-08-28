@@ -42,10 +42,10 @@ function ok(name, fn) {
 
 let passed = 0;
 
-passed += ok('A teljes kiadási verzió V52', () => {
+passed += ok('A szétosztómotor kiadási verziója V53', () => {
   assert.match(index, /Fuvarszervező V52/);
   assert.match(app, /APP_VERSION='V52'/);
-  assert.match(planner, /const VERSION = '52'/);
+  assert.match(planner, /const VERSION = '53'/);
   assert.equal(manifest.name, 'Fuvarszervező V52');
   assert.equal(manifest.short_name, 'Fuvar V52');
   assert.match(sw, /fuvarszervezo-v52-online-20260828-1/);

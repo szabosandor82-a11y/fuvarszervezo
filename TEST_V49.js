@@ -88,7 +88,7 @@ function pickupNames(c,id){return (c.state.routePlans['2026-08-07']?.[id]||[]).f
     const c=scenario();const result=await c.V49Planner.distributeOrderSetV44(c.state.orders);await c.V49Planner.buildRoutePlansV44(result.profiles);
     assert.deepEqual(pickupNames(c,'t'),['Sebők','Hungarokomplex','Szerelvénybolt']);
     assert.deepEqual(pickupNames(c,'m'),['Szatmári','Merkapt','Ezerker','Szögker']);
-    assert.deepEqual(pickupNames(c,'p'),['KRPR','Niczuk','Gienger','Cairox','Lambda']);
+    assert.deepEqual(pickupNames(c,'p'),['KRPR','Niczuk','Gienger','Lambda','Cairox']);
   });
 
   await test('A V49 útvonaltervben egyetlen lerakó sincs',async()=>{
