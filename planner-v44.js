@@ -1,4 +1,4 @@
-/* Fuvarszervező V51
+/* Fuvarszervező V52
    Determinisztikus felrakóhely-blokkos szétosztás.
 
    Kemény szabályok:
@@ -12,7 +12,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '51';
+  const VERSION = '52';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   const HOMES = {
     mario: { address: 'Vác, Magyarország', point: [47.7759, 19.1360] },

@@ -1,10 +1,11 @@
-/* Fuvarszervező V51 – Supabase REST alapú online szinkron.
+/* Fuvarszervező V52 – Supabase REST alapú online szinkron.
    Külső klienskönyvtár nélkül működik, a böngésző beépített fetch API-jával. */
 (function (global) {
   'use strict';
 
   const config = global.FUVARSZERVEZO_ONLINE_CONFIG || {};
-  const SESSION_KEY = 'fuvarszervezo_online_session_v44_2';
+  const SESSION_KEY = 'fuvarszervezo_online_session_v52';
+  const LEGACY_SESSION_KEYS = ['fuvarszervezo_online_session_v44_2'];
   const DRIVER_VEHICLES = { mario: 'v-mario', patrik: 'v-patrik', martin: 'v-martin' };
   let session = null;
   let profile = null;
@@ -42,6 +43,7 @@
     else localStorage.removeItem(SESSION_KEY);
   }
   function restoreSession() {
+    for (const key of LEGACY_SESSION_KEYS) localStorage.removeItem(key);
     try { session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); }
     catch (_) { session = null; }
     return session;
@@ -103,45 +105,18 @@
     return session;
   }
 
-  function loginRedirectUrl() {
-    const url = new URL(global.location.href);
-    url.hash = '';
-    url.search = '';
-    return url.href;
-  }
-
-  async function requestLoginLink(email) {
-    emit('loading', 'Belépési link küldése…');
-    const redirectTo = encodeURIComponent(loginRedirectUrl());
-    await authRequest(`otp?redirect_to=${redirectTo}`, {
+  async function signInWithPassword(email, password) {
+    emit('loading', 'Belépés…');
+    const data = await authRequest('token?grant_type=password', {
       method: 'POST',
-      body: { email: normalize(email), create_user: false }
+      body: { email: normalize(email), password: String(password || '') }
     });
-    emit('online', 'A belépési linket elküldtük.');
-  }
-
-  async function acceptLoginLink() {
-    const params = new URLSearchParams(String(global.location.hash || '').replace(/^#/, ''));
-    const accessToken = params.get('access_token');
-    if (!accessToken) return false;
-    const refreshToken = params.get('refresh_token') || '';
-    const expiresIn = +(params.get('expires_in') || 3600);
-    const user = await authRequest('user', {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-    saveSession({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      expires_in: expiresIn,
-      expires_at: nowSeconds() + expiresIn,
-      token_type: params.get('token_type') || 'bearer',
-      user
-    });
-    profile = await fetchProfile();
-    global.history?.replaceState?.({}, global.document?.title || '', `${global.location.pathname}${global.location.search}`);
-    emit('online', 'Online kapcsolat létrejött.');
-    return true;
+    if (!data?.access_token) throw new Error('A Supabase nem adott vissza érvényes munkamenetet.');
+    const expiresIn = +(data.expires_in || 3600);
+    saveSession({ ...data, expires_at: nowSeconds() + expiresIn });
+    profile = null;
+    emit('online', 'Sikeres belépés.');
+    return session;
   }
 
   async function signOut() {
@@ -393,7 +368,7 @@
     getSession: () => session,
     getProfile: () => profile,
     setStatusListener: listener => { statusListener = listener; },
-    requestLoginLink, acceptLoginLink, signOut, refreshSession, ensureSession, fetchProfile, listUsers,
+    signInWithPassword, signOut, refreshSession, ensureSession, fetchProfile, listUsers,
     fetchOrders, fetchBacklog, syncOrders, syncBacklog, loadOrdersIntoState, fetchMasterData, syncMasterData, loadMasterIntoState, masterSnapshot, requestTransfer, acceptTransfer, rejectTransfer, cancelTransfer, listTransfers,
     createDeliveryReport, listDeliveryFiles,
     startPolling, stopPolling, driverKeyFromOrder, DRIVER_VEHICLES

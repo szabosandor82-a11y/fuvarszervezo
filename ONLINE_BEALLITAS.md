@@ -1,4 +1,4 @@
-# Fuvarszervező V51 – Supabase ellenőrzőlista
+# Fuvarszervező V52 – Supabase ellenőrzőlista
 
 ## Meglévő beállítások
 
@@ -8,23 +8,27 @@
 - A szükséges táblák, Data API-függvények és a `delivery-docs` Storage bucket rendelkezésre állnak.
 - A táblák és a Storage hozzáférése `authenticated` szerepkörhöz kötött.
 
-## V51: e-mailes belépési link
+## V52: e-mail–jelszó belépés
 
-A V51 nem kér jelszót. Az e-mail-cím beküldése után a Supabase egyszer használható
-belépési linket küld. A link megnyitásakor hitelesített munkamenet jön létre, ezért
-nem kell nyilvános `anon` írási jogosultságot adni az adatbázishoz.
+A V52 az e-mail-címet és a jelszót közvetlenül a Supabase Auth szolgáltatásának
+küldi el. A jelszó nem kerül a GitHub Pages fájljaiba vagy az adatbázis
+`allowed_users` táblájába. Sikeres belépéskor hitelesített munkamenet jön létre,
+ezért nem kell nyilvános `anon` írási jogosultságot adni az adatbázishoz.
 
 Ellenőrizd a Supabase Dashboardon:
 
 1. Authentication → Providers → Email legyen engedélyezve.
-2. Authentication → URL Configuration → Site URL:
-   `https://szabosandor82-a11y.github.io/fuvarszervezo/`
-3. Ugyanez az URL szerepeljen az engedélyezett Redirect URLs listában is.
-4. Authentication → Email Templates → Magic Link sablon tartalmazza a
-   `{{ .ConfirmationURL }}` hivatkozást.
+2. Authentication → Users alatt mind az öt engedélyezett e-mail-cím létezzen.
+3. Meglévő felhasználónál a sor jobb oldali hárompontos menüjében válaszd a
+   Send password recovery műveletet; a felhasználó a levélben állítja be a jelszót.
+4. Új felhasználónál Authentication → Users → Add user → Create new user alatt
+   add meg az e-mail-címet és a jelszót.
+5. Authentication → Providers → Email alatt a Confirm Email beállítást a saját
+   működésetekhez igazítsd. A Dashboardból kézzel létrehozott felhasználót erősítsd
+   meg, ha a felület erre lehetőséget ad.
 
-A V51 `create_user: false` beállítással kér linket, ezért ismeretlen e-mail-címhez
-nem hoz létre új felhasználót.
+Legalább 8 karakteres, egyedi jelszó ajánlott. A jelszavak nem azonosak a Supabase
+Dashboard-fiók vagy a Postgres-adatbázis jelszavával.
 
 ## Adatbázis és Data API
 
@@ -43,10 +47,10 @@ A Data API → Settings → Exposed functions résznél ezek legyenek engedélye
 
 ## Gyors ellenőrzés
 
-1. Töltsd fel a V51 fájljait GitHub Pages-re.
-2. Kérj belépési linket az admin e-mail-címre, és nyisd meg.
+1. Töltsd fel a V52 fájljait GitHub Pages-re.
+2. Lépj be az admin e-mail-címével és a Supabase Auth alatt beállított jelszóval.
 3. Ellenőrizd, hogy az adminfelület és a közös fuvaradatok betöltődnek.
-4. Másik eszközön kérj linket egy sofőrfiókhoz.
+4. Másik eszközön lépj be egy sofőrfiók e-mail-címével és jelszavával.
 5. Ellenőrizd, hogy a sofőr csak a saját mai és következő munkanapi fuvarjait látja.
 6. Ments egy szállítólevél-fotót, majd nyisd meg a Mentett fotók nézetet.
 
@@ -54,4 +58,3 @@ A Data API → Settings → Exposed functions résznél ezek legyenek engedélye
 
 Az `online-config.js` fájlba csak Project URL és publishable key kerülhet.
 Secret vagy service_role kulcsot soha ne tölts fel GitHubra.
-

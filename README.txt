@@ -1,21 +1,19 @@
-FUVAR­SZERVEZŐ V51 – ONLINE SUPABASE / GITHUB PAGES
+FUVAR­SZERVEZŐ V52 – ONLINE SUPABASE / GITHUB PAGES
 =================================================
 
-A V51 a V50 teljes fuvarszervezési, munkanap-, mobil- és online működését
-megtartja. A belépéshez sem az admin-, sem a sofőr-/tesztfelületen nem kell
-jelszót megadni.
+A V52 a V51 teljes fuvarszervezési, munkanap-, mobil- és online működését
+megtartja, a belépést pedig e-mail–jelszó hitelesítésre állítja át.
 
-V51 fő változások
+V52 fő változások
 -----------------
-- A belépőképernyőn csak az engedélyezett e-mail-címet kell megadni.
-- A rendszer egyszer használható belépési linket küld a megadott e-mail-címre.
-- A link megnyitása után a Supabase ugyanúgy hitelesített munkamenetet hoz létre,
-  ezért a meglévő adatbázis- és Storage-jogosultságok változatlanul működnek.
-- A sofőrnézetből kikerült a jelszómódosító gomb.
-- Az admin, sofőr és teszt szerepkörök, valamint a korábbi hozzáférési korlátok
-  változatlanok.
+- Az admin, a három sofőr és a tesztfelhasználó e-mail-címmel és jelszóval lép be.
+- Nincs napi belépési e-mail és nincs Magic Link-függőség.
+- A jelszavakat kizárólag a Supabase Authentication tárolja.
+- A GitHub Pages-csomag és a nyilvános JavaScript egyetlen felhasználói jelszót sem tartalmaz.
+- A V51 régi munkamenete nem kerül át: a V52 első megnyitásakor újra be kell jelentkezni.
+- Az admin, sofőr és teszt szerepkörök, valamint a korábbi hozzáférési korlátok változatlanok.
 - A péntek utáni mobil napfül hétfőre lép; hétvége nem lesz normál fuvarnap.
-- Az alkalmazás, a PWA-manifest, a szétosztómotor és a gyorsítótár V51-re frissült.
+- Az alkalmazás, a PWA-manifest, a szétosztómotor és a gyorsítótár V52-re frissült.
 
 Megmaradó jogosultságok
 ----------------------
@@ -26,15 +24,31 @@ Megmaradó jogosultságok
 - Sofőr és teszt: tételpipálás, tételmegjegyzés, tételszintű hátralék,
   fuvarátadás és szállítólevél-fotó továbbra is használható.
 
+Jelszavak beállítása a Supabase-ben
+----------------------------------
+Meglévő felhasználó:
+1. Supabase Dashboard → Fuvarszervező projekt → Authentication → Users.
+2. A felhasználó sorának jobb oldali hárompontos menüje.
+3. Send password recovery.
+4. A felhasználó az egyszeri e-mailben kapott linken állítja be a jelszavát.
+
+Új felhasználó:
+1. Authentication → Users → Add user → Create new user.
+2. Add meg az e-mail-címet és a jelszót.
+3. Az e-mail-cím az allowed_users táblában is szerepeljen a megfelelő szerepkörrel.
+
+Jelszót ne írj az online-config.js, az auth-v44-2.js, a README vagy más GitHubra
+feltöltött fájlba. A jelszó nem azonos a Supabase-fiókod, illetve az adatbázis
+postgres felhasználójának jelszavával.
+
 Belépés
 -------
 1. Add meg az engedélyezett e-mail-címet.
-2. Nyomd meg a „Belépési link kérése” gombot.
-3. Nyisd meg az érkező e-mailt ugyanazon az eszközön.
-4. Kattints a levélben található linkre; az alkalmazás automatikusan beléptet.
+2. Add meg az e-mailhez a Supabase Authentication alatt beállított jelszót.
+3. Nyomd meg a „Belépés” gombot.
 
-A V51 nem hoz létre új fiókot. Csak a Supabase Authentication alatt már
-meglévő és az allowed_users táblában aktívként szereplő e-mail-címek használhatók.
+Csak a Supabase Authentication alatt létező és az allowed_users táblában aktívként
+szereplő e-mail-címek használhatók.
 
 Telepítés GitHub Pages-re
 ------------------------
@@ -46,15 +60,15 @@ Telepítés GitHub Pages-re
 
 Biztonság
 ---------
-- A belépési link rövid ideig használható, és a felhasználó e-mail-fiókjához kötött.
 - A publishable key kliensoldali használatra készült, ezért szerepelhet a GitHub Pages csomagban.
-- service_role vagy secret kulcsot soha ne tölts fel GitHubra.
+- service_role vagy secret kulcsot és felhasználói jelszót soha ne tölts fel GitHubra.
 - A hozzáféréseket továbbra is a Supabase Auth és az RLS szabályok korlátozzák.
+- A Supabase-ben legalább 8 karakteres, egyedi jelszó használata ajánlott.
 
 Kiadási ellenőrzések
 --------------------
-- TEST_V51.js: V51 verzió, belépési felület, linkes hitelesítés és munkanap-kezelés.
+- TEST_V52.js: V52 verzió, jelszavas belépési felület és munkanap-kezelés.
+- TEST_V52_LOGIN.js: Supabase e-mail–jelszó belépés és munkamenet egységtesztje.
 - TEST_V49.js: szétosztás és optimalizálás regressziós ellenőrzése.
 - TEST_V41_MSG.js: Outlook/MSG import regressziós ellenőrzése.
 - TEST_V44.js: fuvarblokkos szétosztási regressziós ellenőrzés.
-

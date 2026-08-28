@@ -1,0 +1,42 @@
+JELSZAVAK BEÁLLÍTÁSA A V52-HÖZ
+==============================
+
+FONTOS
+------
+A Fuvarszervező felhasználóinak jelszavai a Supabase Authentication rendszerében
+vannak. Ne írd őket az online-config.js fájlba, a GitHubra vagy az allowed_users
+táblába.
+
+MEGLÉVŐ FELHASZNÁLÓ JELSZAVÁNAK BEÁLLÍTÁSA
+------------------------------------------
+1. Nyisd meg: https://supabase.com/dashboard
+2. Válaszd ki a Fuvarszervező projektet.
+3. Bal oldalt: Authentication.
+4. Nyisd meg a Users oldalt.
+5. Keresd meg a felhasználó e-mail-címét.
+6. A sor jobb oldalán nyisd meg a hárompontos menüt.
+7. Válaszd a Send password recovery műveletet.
+8. A felhasználó nyissa meg az egyszeri e-mailt, és a linken állítsa be a jelszavát.
+9. Ezután a V52-ben az e-mail-címével és az új jelszóval léphet be.
+
+ÚJ FELHASZNÁLÓ LÉTREHOZÁSA
+--------------------------
+1. Authentication → Users → Add user → Create new user.
+2. Add meg az e-mail-címet és a jelszót.
+3. Erősítsd meg az e-mail-címet, ha a felület ezt külön felajánlja.
+4. Az e-mail-cím az allowed_users táblában is szerepeljen a megfelelő szerepkörrel.
+
+JAVASOLT JELSZÓSZABÁLY
+----------------------
+- Legalább 8 karakter.
+- Tartalmazzon kis- és nagybetűt, számot és különleges karaktert.
+- Minden felhasználónak külön jelszó legyen.
+- A jelszó nem azonos a Supabase Dashboard- vagy a Postgres-adatbázis jelszavával.
+
+HA NEM ÉRKEZIK MEG A HELYREÁLLÍTÓ E-MAIL
+----------------------------------------
+1. Ellenőrizd, hogy a Supabase projekt Active állapotú.
+2. Authentication → Logs alatt nézd meg a levélküldési hibát.
+3. Ellenőrizd a levélszemét/spam mappát.
+4. A Supabase alapértelmezett levélküldése korlátozott; tartós használathoz saját
+   SMTP beállítása ajánlott.

@@ -1,4 +1,4 @@
-/* Fuvarszervező V51 – online kapcsolat.
+/* Fuvarszervező V52 – online kapcsolat.
    1) Hozz létre egy Supabase projektet.
    2) Futtasd le a supabase/schema.sql fájlt.
    3) Másold ide a Project URL és Publishable/anon key értékét.

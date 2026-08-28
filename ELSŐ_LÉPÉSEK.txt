@@ -1,14 +1,14 @@
-FUVAR­SZERVEZŐ V47 ONLINE – ELSŐ LÉPÉSEK
+FUVAR­SZERVEZŐ V52 ONLINE – ELSŐ LÉPÉSEK
 
 A közös telefonos fuvarokhoz a ZIP GitHubra feltöltése önmagában nem elég.
 
 1. A meglévő Supabase projektedet használd.
-2. Futtasd le egyszer a V47 ZIP-ben lévő supabase/schema.sql fájlt a Supabase SQL Editorban. Ez létrehozza az új online törzsadat-táblát is.
+2. Ha a V51 adatbázisa már működik, a V52-höz nem szükséges új séma. Új telepítésnél futtasd le egyszer a ZIP-ben lévő supabase/schema.sql fájlt a Supabase SQL Editorban.
 3. Az online-config.js ebben a csomagban már ki van töltve a megadott Supabase Project URL-lel és Publishable key-jel; ezt nem kell kézzel szerkesztened.
 4. Töltsd fel a csomag teljes webes tartalmát a GitHub Pages repository gyökerébe.
-5. Lépj be adminnal. Ha az online adatbázis üres, a program a meglévő helyi adatokat fel tudja tölteni.
+5. Állíts be jelszót az Authentication → Users alatt, majd lépj be adminnal. Ha az online adatbázis üres, a program a meglévő helyi adatokat fel tudja tölteni.
 
 Részletes leírás: ONLINE_BEALLITAS.md
 
 A szállítólevél-fotók közvetlenül a rendeléshez kerülnek. E-mail-küldő funkció és Resend-beállítás nincs.
-Az előző V46 schema.sql önmagában nem elég a V47 online törzsadat-szinkronjához, ezért a V47-es schema.sql egyszeri újrafuttatása szükséges. A script nem törli a meglévő fuvarokat.
+A V52 a V51 adatbázis-sémáját használja; a váltás csak a belépési módot módosítja.

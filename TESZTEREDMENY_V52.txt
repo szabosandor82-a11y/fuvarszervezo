@@ -1,0 +1,27 @@
+Fuvarszervező V52 – 2026-08-28
+
+Új belépési működés:
+- Az admin-, sofőr- és tesztfelületen e-mail- és jelszómező van.
+- A belépés a Supabase password grant végpontját használja.
+- Nincs Magic Link- vagy OTP-kérés a napi belépéshez.
+- A felhasználói jelszó nem kerül a GitHub Pages forrásába vagy a localStorage-ba.
+- A V51 régi munkamenete törlődik, ezért a V52 minden eszközön új belépést kér.
+- Az öt engedélyezett e-mail-cím és a korábbi szerepkörök megmaradtak.
+
+Automatikus ellenőrzések:
+- V52 kiadási és munkanapteszt: 8/8 sikeres.
+- V52 jelszavas belépés egységteszt: 3/3 sikeres.
+- V49 szétosztás/optimalizálás regressziós teszt: 7/7 sikeres.
+- V44 szétosztási és mozgatási regressziós teszt: 11/11 sikeres.
+- V41 Outlook/import regressziós teszt: 14/14 sikeres.
+- V41 módosítási regressziós teszt: 8/8 sikeres.
+- V44 Outlook-regressziós teszt: 2/2 sikeres.
+- Minden top-level JavaScript fájl szintaxisellenőrzése sikeres.
+
+Külső ellenőrzés:
+- Az éles belépéshez minden e-mail-címhez jelszót kell beállítani a Supabase
+  Authentication → Users felületén.
+- Az éles Supabase-belépést csak a jelszavak beállítása és a V52 GitHub Pages-re
+  feltöltése után lehet végponttól végpontig kipróbálni.
+- A TEST_V41_MSG.js külső /mnt/data MSG mintafájlokra támaszkodik; ezek ebben a
+  munkakörnyezetben nem álltak rendelkezésre, ezért ezt a külön tesztet nem lehetett lefuttatni.
