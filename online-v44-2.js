@@ -1,4 +1,4 @@
-/* Fuvarszervező V50 – Supabase REST alapú online szinkron.
+/* Fuvarszervező V51 – Supabase REST alapú online szinkron.
    Külső klienskönyvtár nélkül működik, a böngésző beépített fetch API-jával. */
 (function (global) {
   'use strict';
@@ -103,13 +103,45 @@
     return session;
   }
 
-  async function signIn(email, password) {
-    emit('loading', 'Belépés…');
-    const data = await authRequest('token?grant_type=password', { method: 'POST', body: { email: normalize(email), password } });
-    saveSession({ ...data, expires_at: nowSeconds() + (+data.expires_in || 3600) });
+  function loginRedirectUrl() {
+    const url = new URL(global.location.href);
+    url.hash = '';
+    url.search = '';
+    return url.href;
+  }
+
+  async function requestLoginLink(email) {
+    emit('loading', 'Belépési link küldése…');
+    const redirectTo = encodeURIComponent(loginRedirectUrl());
+    await authRequest(`otp?redirect_to=${redirectTo}`, {
+      method: 'POST',
+      body: { email: normalize(email), create_user: false }
+    });
+    emit('online', 'A belépési linket elküldtük.');
+  }
+
+  async function acceptLoginLink() {
+    const params = new URLSearchParams(String(global.location.hash || '').replace(/^#/, ''));
+    const accessToken = params.get('access_token');
+    if (!accessToken) return false;
+    const refreshToken = params.get('refresh_token') || '';
+    const expiresIn = +(params.get('expires_in') || 3600);
+    const user = await authRequest('user', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    saveSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_in: expiresIn,
+      expires_at: nowSeconds() + expiresIn,
+      token_type: params.get('token_type') || 'bearer',
+      user
+    });
     profile = await fetchProfile();
+    global.history?.replaceState?.({}, global.document?.title || '', `${global.location.pathname}${global.location.search}`);
     emit('online', 'Online kapcsolat létrejött.');
-    return { session, profile };
+    return true;
   }
 
   async function signOut() {
@@ -117,11 +149,6 @@
     catch (_) {}
     stopPolling();
     saveSession(null); profile = null; remoteLoaded = false;
-  }
-
-  async function updatePassword(password) {
-    await ensureSession();
-    return rawRequest(`${baseUrl()}/auth/v1/user`, { method: 'PUT', body: { password } });
   }
 
   async function fetchProfile() {
@@ -366,7 +393,7 @@
     getSession: () => session,
     getProfile: () => profile,
     setStatusListener: listener => { statusListener = listener; },
-    signIn, signOut, updatePassword, refreshSession, ensureSession, fetchProfile, listUsers,
+    requestLoginLink, acceptLoginLink, signOut, refreshSession, ensureSession, fetchProfile, listUsers,
     fetchOrders, fetchBacklog, syncOrders, syncBacklog, loadOrdersIntoState, fetchMasterData, syncMasterData, loadMasterIntoState, masterSnapshot, requestTransfer, acceptTransfer, rejectTransfer, cancelTransfer, listTransfers,
     createDeliveryReport, listDeliveryFiles,
     startPolling, stopPolling, driverKeyFromOrder, DRIVER_VEHICLES

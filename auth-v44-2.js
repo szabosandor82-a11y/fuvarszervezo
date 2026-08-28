@@ -1,9 +1,9 @@
-/* Fuvarszervező V50 – online többfelhasználós mobil felület.
+/* Fuvarszervező V51 – online többfelhasználós mobil felület.
    A hitelesítés, a fuvarok, átadások és szállítólevél-fotók Supabase-ben tárolódnak. */
 (function (global) {
   'use strict';
 
-  const VERSION = '48-online';
+  const VERSION = '51-online';
   const USERS = {
     'schmidt.martin@stand98.hu': { role: 'driver', driverKey: 'martin', displayName: 'Schmidt Martin' },
     'polgar.patrik@stand98.hu': { role: 'driver', driverKey: 'patrik', displayName: 'Polgár Patrik' },
@@ -28,7 +28,22 @@
     const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + offset);
     return typeof localISO === 'function' ? localISO(d) : d.toISOString().slice(0, 10);
   };
-  const allowedDates = () => [localDate(0), localDate(1)];
+  const fallbackShiftWorkday = (date, amount = 1) => {
+    const d = new Date(`${date}T12:00:00`);
+    const direction = amount < 0 ? -1 : 1;
+    let remaining = Math.abs(amount);
+    while (remaining > 0) {
+      d.setDate(d.getDate() + direction);
+      if (d.getDay() !== 0 && d.getDay() !== 6) remaining -= 1;
+    }
+    return typeof localISO === 'function' ? localISO(d) : d.toISOString().slice(0, 10);
+  };
+  const allowedDates = () => {
+    const rawToday = localDate(0);
+    const current = typeof normalizeWorkday === 'function' ? normalizeWorkday(rawToday) : rawToday;
+    const next = typeof shiftWorkday === 'function' ? shiftWorkday(current, 1) : fallbackShiftWorkday(current, 1);
+    return [current, next];
+  };
   const appUser = email => USERS[normalizeEmail(email)] || null;
   const isAdmin = () => currentProfile?.role === 'admin';
   const isRestrictedUser = () => !!currentProfile && !isAdmin();
@@ -132,7 +147,7 @@
     document.querySelector('nav')?.classList.remove('auth-app-hidden');
     byId('accountBar')?.classList.remove('hidden');
     if (byId('accountIdentity')) byId('accountIdentity').textContent = `${currentProfile?.display_name || currentSession?.user?.email} · ADMIN`;
-    setAppTitle('Fuvarszervező V50');
+    setAppTitle('Fuvarszervező V51');
     if (typeof render === 'function') render();
     await renderAdminOnlinePage();
   }
@@ -145,7 +160,7 @@
     document.querySelector('main')?.classList.add('auth-app-hidden');
     document.querySelector('nav')?.classList.add('auth-app-hidden');
     byId('driverPortal')?.classList.remove('hidden');
-    setAppTitle('Fuvarszervező V50');
+    setAppTitle('Fuvarszervező V51');
     selectedDriverDate = allowedDates().includes(selectedDriverDate) ? selectedDriverDate : allowedDates()[0];
     await renderDriverPortal();
   }
@@ -253,19 +268,13 @@
     authMessage('');
     if (!global.V44Online?.configured()) return authMessage('Az online háttér nincs beállítva. Nyisd meg az ONLINE_BEALLITAS.md fájlt.', true);
     const email = normalizeEmail(byId('authEmail')?.value);
-    const enteredPassword = byId('authPassword')?.value || '';
     const cfg = appUser(email);
     if (!cfg) return authMessage('Ez az e-mail-cím nincs engedélyezve.', true);
-    if (!enteredPassword) return authMessage('Add meg a jelszót.', true);
     const submit = byId('authSubmit');
     if (submit) submit.disabled = true;
     try {
-      await global.V44Online.signIn(email, enteredPassword);
-      currentSession = global.V44Online.getSession();
-      currentProfile = global.V44Online.getProfile() || await global.V44Online.fetchProfile();
-      await initialOnlineLoad();
-      await applySession();
-      startPolling();
+      await global.V44Online.requestLoginLink(email);
+      authMessage('A belépési linket elküldtük. Nyisd meg az e-mailt ezen az eszközön, majd kattints a linkre.', false);
     } catch (error) {
       authMessage(`Belépési hiba: ${error.message}`, true);
     } finally { if (submit) submit.disabled = false; }
@@ -291,18 +300,6 @@
       if (typeof render === 'function') render();
       await refreshTransfers();
     } finally { suppressOnlineSave = false; }
-  }
-
-  async function changeOwnPassword() {
-    const fixed = appUser(currentSession?.user?.email)?.fixedPassword;
-    if (fixed) return alert('Ennél a fix teszt/admin fióknál a jelszó az alkalmazásban nem módosítható.');
-    const newPassword = prompt('Új jelszó (legalább 6 karakter):');
-    if (newPassword === null) return;
-    if (newPassword.length < 6) return alert('Az új jelszó legalább 6 karakter legyen.');
-    const confirmation = prompt('Új jelszó ismét:');
-    if (confirmation !== newPassword) return alert('A két új jelszó nem egyezik.');
-    try { await global.V44Online.updatePassword(newPassword); alert('A jelszó módosítva.'); }
-    catch (error) { alert(`Jelszómódosítási hiba: ${error.message}`); }
   }
 
   async function logout() {
@@ -508,6 +505,12 @@
 
   async function restoreOnlineSession() {
     if (!global.V44Online?.configured()) return showLogin();
+    try { await global.V44Online.acceptLoginLink(); }
+    catch (error) {
+      console.warn('[V51] Belépési link feldolgozási hiba', error);
+      await global.V44Online.signOut().catch(() => {});
+      return showLogin(`Belépési hiba: ${error.message}`);
+    }
     const restored = global.V44Online.getSession();
     if (!restored?.access_token) return showLogin();
     try {
@@ -518,20 +521,19 @@
       await applySession();
       startPolling();
     } catch (error) {
-      console.warn('[V48] Munkamenet visszaállítási hiba', error);
+      console.warn('[V51] Munkamenet visszaállítási hiba', error);
       await global.V44Online.signOut().catch(() => {});
-      showLogin('A munkamenet lejárt. Jelentkezz be újra.');
+      showLogin('A munkamenet lejárt. Kérj új belépési linket.');
     }
   }
 
   function bindUi() {
     byId('authForm')?.addEventListener('submit', handleLogin);
     byId('driverLogout')?.addEventListener('click', logout);
-    byId('driverChangePassword')?.addEventListener('click', changeOwnPassword);
     byId('accountLogout')?.addEventListener('click', logout);
     document.querySelectorAll('[data-close="mediaGalleryDialog"]').forEach(button => button.addEventListener('click', () => byId('mediaGalleryDialog')?.close()));
     global.addEventListener('fuvar-online-status', event => setSyncStatus(event.detail));
-    if (byId('authHint')) byId('authHint').textContent = 'Add meg az e-mail-címedet és a Supabase-ben beállított jelszavadat.';
+    if (byId('authHint')) byId('authHint').textContent = 'Írd be az e-mail-címedet; belépési linket küldünk.';
   }
 
   async function init() {

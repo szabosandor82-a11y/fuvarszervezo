@@ -1,37 +1,37 @@
-# Fuvarszervező V50 – Supabase ellenőrzőlista
+# Fuvarszervező V51 – Supabase ellenőrzőlista
 
-## Ami már be van állítva
+## Meglévő beállítások
 
-- Project URL: `https://eswwxncdystrqzqzbkto.supabase.co`
-- Publishable key: az `online-config.js` fájlban kitöltve.
+- A Project URL és a publishable key az `online-config.js` fájlban szerepel.
 - Authentication → Email provider: engedélyezve.
-- Site URL / Redirect URL: `https://szabosandor82-a11y.github.io/fuvarszervezo/`
-- Az öt felhasználó létrehozva az Authentication → Users alatt.
-- A nyolc szükséges tábla létrehozva.
-- Data API → Exposed tables: 8 / 8.
-- Storage bucket: `delivery-docs`.
-- Storage INSERT és SELECT policy: authenticated.
+- Az öt engedélyezett felhasználó az Authentication → Users és az `allowed_users` táblában szerepel.
+- A szükséges táblák, Data API-függvények és a `delivery-docs` Storage bucket rendelkezésre állnak.
+- A táblák és a Storage hozzáférése `authenticated` szerepkörhöz kötött.
 
-## Még 1: belépési jelszavak
+## V51: e-mailes belépési link
 
-A V47 nem tárol jelszót a nyilvános forráskódban. A belépés közvetlenül a Supabase Authtal történik.
+A V51 nem kér jelszót. Az e-mail-cím beküldése után a Supabase egyszer használható
+belépési linket küld. A link megnyitásakor hitelesített munkamenet jön létre, ezért
+nem kell nyilvános `anon` írási jogosultságot adni az adatbázishoz.
 
-Az admin fiók: `szabo.sandor82@gmail.com`
-Teszt/mobil fiók: `szabo.sandor@stand98.hu`
+Ellenőrizd a Supabase Dashboardon:
 
-A két tényleges jelszót a Supabase Authentication → Users alatt kell beállítani. A V47 a beírt
-e-mailt és jelszót változtatás nélkül a Supabase Auth felé küldi; jelszó nincs a GitHub-fájlokban.
+1. Authentication → Providers → Email legyen engedélyezve.
+2. Authentication → URL Configuration → Site URL:
+   `https://szabosandor82-a11y.github.io/fuvarszervezo/`
+3. Ugyanez az URL szerepeljen az engedélyezett Redirect URLs listában is.
+4. Authentication → Email Templates → Magic Link sablon tartalmazza a
+   `{{ .ConfirmationURL }}` hivatkozást.
 
-## Még 2: V47 adatbázis-frissítés
+A V51 `create_user: false` beállítással kér linket, ezért ismeretlen e-mail-címhez
+nem hoz létre új felhasználót.
 
-A V47 az online törzsadat-szinkronhoz egy új `master_data` táblát használ. A Supabase SQL Editorban
-futtasd le egyszer a ZIP-ben található frissített `supabase/schema.sql` fájlt. A script idempotens,
-ezért a már meglévő táblákat és fuvaradatokat nem törli. Ezután az admin törzsmódosításai a
-Supabase-be is mentődnek, így a következő verzió már ebből a friss törzsből tud továbbindulni.
+## Adatbázis és Data API
 
-## Még 3: a szükséges Data API függvények engedélyezése
+A ZIP-ben található `supabase/schema.sql` idempotens. Szükség esetén a Supabase
+SQL Editorban újra lefuttatható; a meglévő fuvaradatokat nem törli.
 
-A Data API → Settings → **Exposed functions** résznél jelöld be ezt a 7 függvényt, majd Save:
+A Data API → Settings → Exposed functions résznél ezek legyenek engedélyezve:
 
 1. `update_own_order_payload`
 2. `sync_own_orders`
@@ -41,22 +41,17 @@ A Data API → Settings → **Exposed functions** résznél jelöld be ezt a 7 f
 6. `reject_transfer`
 7. `cancel_transfer`
 
-A többi segédfüggvényt nem kell külön kitenni a Data API-ra.
-
-Ez a lépés azért kell, hogy a sofőrök tételmódosítása, hátraléka és fuvarátadása is
-biztonságosan a szerveroldali RPC függvényeken keresztül menjen.
-
 ## Gyors ellenőrzés
 
-1. GitHub Pages frissítés után nyisd meg a V47-et.
-2. Lépj be adminnal.
-3. Hozz létre vagy nyiss meg egy mai/holnapi rendelést.
-4. Sofőrrel lépj be egy másik eszközön.
-5. Készíts egy szállítólevél-fotót és mentsd a rendeléshez.
-6. Nyomd meg a „Mentett fotók” gombot; a képnek meg kell jelennie.
-7. Ellenőrizd, hogy a másik eszköz frissítés után ugyanazt a rendelésállapotot látja.
+1. Töltsd fel a V51 fájljait GitHub Pages-re.
+2. Kérj belépési linket az admin e-mail-címre, és nyisd meg.
+3. Ellenőrizd, hogy az adminfelület és a közös fuvaradatok betöltődnek.
+4. Másik eszközön kérj linket egy sofőrfiókhoz.
+5. Ellenőrizd, hogy a sofőr csak a saját mai és következő munkanapi fuvarjait látja.
+6. Ments egy szállítólevél-fotót, majd nyisd meg a Mentett fotók nézetet.
 
 ## Fontos
 
 Az `online-config.js` fájlba csak Project URL és publishable key kerülhet.
-Secret/service_role kulcsot soha ne tölts fel GitHubra.
+Secret vagy service_role kulcsot soha ne tölts fel GitHubra.
+

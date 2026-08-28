@@ -1,0 +1,118 @@
+const fs = require('fs');
+const vm = require('vm');
+const assert = require('assert');
+
+const read = name => fs.readFileSync(__dirname + '/' + name, 'utf8');
+const index = read('index.html');
+const app = read('app.js');
+const auth = read('auth-v44-2.js');
+const online = read('online-v44-2.js');
+const sw = read('sw.js');
+const planner = read('planner-v44.js');
+const outlook = read('planner-v41.js');
+const manifest = JSON.parse(read('manifest.webmanifest'));
+
+function appDateApi() {
+  const start = app.indexOf('const localISO=');
+  const end = app.indexOf('function esc', start);
+  assert.ok(start >= 0 && end > start, 'Az app dátumsegédei nem találhatók.');
+  const ctx = { Date, String, Number, isNaN };
+  ctx.globalThis = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(app.slice(start, end) + ';globalThis.dateApi={shiftWorkday,normalizeWorkday};', ctx);
+  return ctx.dateApi;
+}
+
+function outlookDateApi() {
+  const start = outlook.indexOf('  const localISO =');
+  const end = outlook.indexOf('  const cleanText', start);
+  assert.ok(start >= 0 && end > start, 'Az Outlook dátumsegédei nem találhatók.');
+  const ctx = { Date, String, Number };
+  ctx.globalThis = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(outlook.slice(start, end) + ';globalThis.dateApi={shiftWorkdayISO,normalizeWorkdayISO};', ctx);
+  return ctx.dateApi;
+}
+
+function ok(name, fn) {
+  try { fn(); console.log('OK', name); return 1; }
+  catch (error) { console.error('HIBA', name, error.message); process.exitCode = 1; return 0; }
+}
+
+let passed = 0;
+
+passed += ok('A teljes kiadási verzió V51', () => {
+  assert.match(index, /Fuvarszervező V51/);
+  assert.match(app, /APP_VERSION='V51'/);
+  assert.match(planner, /const VERSION = '51'/);
+  assert.equal(manifest.name, 'Fuvarszervező V51');
+  assert.equal(manifest.short_name, 'Fuvar V51');
+  assert.match(sw, /fuvarszervezo-v51-online-20260826-1/);
+  assert.ok(!index.includes('?v=50.0'));
+  assert.match(index, /\?v=51\.0/);
+});
+
+passed += ok('Nincs jelszómező egyik belépési felületen sem', () => {
+  assert.doesNotMatch(index, /type=["']password["']/i);
+  assert.doesNotMatch(index, /authPassword|authPasswordConfirm|driverChangePassword/);
+  assert.doesNotMatch(index, />Jelszó</i);
+});
+
+passed += ok('A belépés e-mailes linket kér', () => {
+  assert.match(index, /Belépési link kérése/);
+  assert.match(auth, /V44Online\.requestLoginLink\(email\)/);
+  assert.doesNotMatch(auth, /enteredPassword|changeOwnPassword|updatePassword/);
+});
+
+passed += ok('A Supabase linkkérés nem hoz létre új fiókot', () => {
+  assert.match(online, /otp\?redirect_to=/);
+  assert.match(online, /create_user: false/);
+  assert.doesNotMatch(online, /grant_type=password|updatePassword/);
+});
+
+passed += ok('A visszatérő linkből hitelesített munkamenet készül', () => {
+  assert.match(online, /params\.get\('access_token'\)/);
+  assert.match(online, /Authorization: `Bearer \$\{accessToken\}`/);
+  assert.match(online, /profile = await fetchProfile\(\)/);
+  assert.match(auth, /V44Online\.acceptLoginLink\(\)/);
+});
+
+passed += ok('Az öt engedélyezett fiók és a szerepkörök megmaradtak', () => {
+  for (const email of [
+    'schmidt.martin@stand98.hu',
+    'polgar.patrik@stand98.hu',
+    'berki.mario@stand98.hu',
+    'szabo.sandor82@gmail.com',
+    'szabo.sandor@stand98.hu'
+  ]) assert.ok(auth.includes(email), `Hiányzó fiók: ${email}`);
+  assert.match(auth, /role: 'admin'/);
+  assert.match(auth, /role: 'driver'/);
+  assert.match(auth, /role: 'test'/);
+});
+
+passed += ok('A sofőr jogosultsága továbbra is saját fuvarra és engedélyezett napra korlátozott', () => {
+  assert.match(auth, /allowedDates\(\)\.includes\(order\.scheduleDate\)/);
+  assert.match(auth, /order\.vehicleId === vehicle\.id/);
+  assert.match(auth, /if \(currentProfile\.role === 'test'\) return true/);
+});
+
+passed += ok('A teljes V50 munkanap-logika megmaradt, a mobil napfüllel együtt', () => {
+  const api = appDateApi();
+  const outlookApi = outlookDateApi();
+  assert.equal(api.shiftWorkday('2026-08-07', 1), '2026-08-10');
+  assert.equal(api.shiftWorkday('2026-08-10', -1), '2026-08-07');
+  for (const date of ['2026-08-08', '2026-08-09']) {
+    assert.equal(api.normalizeWorkday(date), '2026-08-10');
+    assert.equal(outlookApi.normalizeWorkdayISO(date), '2026-08-10');
+  }
+  assert.equal(outlookApi.shiftWorkdayISO('2026-08-07', 1), '2026-08-10');
+  assert.match(app, /function syncScheduleDate\(\)[\s\S]*normalizeWorkday\(\$\('#scheduleDate'\)\.value\)/);
+  assert.match(outlook, /scheduleDate: normalizeWorkdayISO\(entry\.scheduleDate/);
+  assert.match(outlook, /entry\.scheduleDate = normalizeWorkdayISO\(entry\.scheduleDate/);
+  assert.match(app, /#prevDay'[\s\S]*shiftWorkday\(selectedDate\(\),-1\)/);
+  assert.match(app, /#nextDay'[\s\S]*shiftWorkday\(selectedDate\(\),1\)/);
+  assert.match(app, /function applyAfterFourRule\(\)[\s\S]*nd=shiftWorkday\(d,1\)/);
+  assert.match(auth, /shiftWorkday\(current, 1\)/);
+});
+
+if (!process.exitCode) console.log(`\nV51 kiadási teszt: ${passed}/8 sikeres.`);

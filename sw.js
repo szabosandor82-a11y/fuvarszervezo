@@ -1,11 +1,11 @@
-const CACHE_NAME = 'fuvarszervezo-v50-online-20260807-1';
+const CACHE_NAME = 'fuvarszervezo-v51-online-20260826-1';
 const APP_ASSETS = [
-  './', './index.html', './styles.css?v=50.0', './app.js?v=50.0', './data.js?v=50.0',
-  './planner-v32.js?v=50.0', './planner-v33.js?v=50.0', './planner-v34.js?v=50.0',
-  './planner-v35.js?v=50.0', './planner-v37.js?v=50.0', './planner-v41.js?v=50.0',
-  './planner-v43.js?v=50.0', './planner-v44.js?v=50.0', './auth-v44-2.js?v=50.0',
-  './online-config.js?v=50.0', './online-v44-2.js?v=50.0',
-  './ole-msg-reader.js?v=50.0', './manifest.webmanifest', './icon-192.png', './icon-512.png'
+  './', './index.html', './styles.css?v=51.0', './app.js?v=51.0', './data.js?v=51.0',
+  './planner-v32.js?v=51.0', './planner-v33.js?v=51.0', './planner-v34.js?v=51.0',
+  './planner-v35.js?v=51.0', './planner-v37.js?v=51.0', './planner-v41.js?v=51.0',
+  './planner-v43.js?v=51.0', './planner-v44.js?v=51.0', './auth-v44-2.js?v=51.0',
+  './online-config.js?v=51.0', './online-v44-2.js?v=51.0',
+  './ole-msg-reader.js?v=51.0', './manifest.webmanifest', './icon-192.png', './icon-512.png'
 ];
 self.addEventListener('install', event => event.waitUntil(
   caches.open(CACHE_NAME).then(cache => cache.addAll(APP_ASSETS)).then(() => self.skipWaiting())

@@ -1,0 +1,23 @@
+Fuvarszervező V51 – 2026-08-26
+
+Új belépési működés:
+- Sem az admin-, sem a sofőr-/tesztfelületen nincs jelszómező.
+- A sofőrnézetből kikerült a jelszómódosító gomb.
+- Csak az öt engedélyezett e-mail-cím kérhet belépési linket.
+- A Supabase-kérés create_user=false beállítással fut, ezért nem hoz létre új fiókot.
+- A linkből hitelesített Supabase-munkamenet készül; a meglévő RLS-jogosultságok megmaradnak.
+
+Automatikus ellenőrzések:
+- V51 kiadási és munkanapteszt: 8/8 sikeres.
+- V51 linkes belépés egységteszt: 2/2 sikeres.
+- V49 szétosztás/optimalizálás regressziós teszt: 7/7 sikeres.
+- V44 szétosztási és mozgatási regressziós teszt: 11/11 sikeres.
+- V41 Outlook/import regressziós teszt: 14/14 sikeres.
+- Minden top-level JavaScript fájl szintaxisellenőrzése sikeres.
+
+Külső ellenőrzés:
+- A tényleges e-mail-küldéshez a GitHub Pages URL-nek a Supabase Site URL és
+  Redirect URLs beállításaiban szerepelnie kell.
+- A levélküldést a csomagból, éles Supabase-kapcsolat nélkül nem lehet végponttól
+  végpontig automatikusan igazolni; feltöltés után admin- és sofőrfiókkal is próbáld ki.
+
