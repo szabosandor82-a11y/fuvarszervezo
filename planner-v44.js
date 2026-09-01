@@ -1,4 +1,4 @@
-/* Fuvarszervező V55
+/* Fuvarszervező V56
    Sáv-alapú szétosztás és lánc-optimalizált felrakási sorrend.
 
    Kemény szabályok:
@@ -23,7 +23,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '55';
+  const VERSION = '56';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   // Alapértelmezett indulási pontok. A törzsadat (SEED_DATA.vehicles) felülírja
   // őket, ha ott meg van adva a sofőr lakóhelye.
@@ -879,7 +879,7 @@
         if (Number.isFinite(metres)) fallback[from.index][to.index] = metres / 1000;
       }));
     } catch (error) {
-      console.warn('[V55] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
+      console.warn('[V56] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
     }
     return fallback;
   }
@@ -1052,10 +1052,10 @@
       await persistOnlineV49();
       if (typeof render === 'function') render();
       const conflictText = result.conflicts.length ? `\nFigyelem: ${result.conflicts.length} felrakóhelyen egymással ütköző fix sofőrjelölés maradt.` : '';
-      alert(`Fuvarok V55 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
+      alert(`Fuvarok V56 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
       return result;
     } catch (error) {
-      console.error('[V55] Szétosztási hiba', error);
+      console.error('[V56] Szétosztási hiba', error);
       alert(`A fuvarok szétosztása közben hiba történt: ${error?.message || error}`);
       return null;
     }
@@ -1071,10 +1071,10 @@
       if (changed.length) throw new Error('Az optimalizálás sofőrt változtatott.');
       await persistOnlineV49();
       if (typeof render === 'function') render();
-      alert('V55 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
+      alert('V56 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
       return true;
     } catch (error) {
-      console.error('[V55] Optimalizálási hiba', error);
+      console.error('[V56] Optimalizálási hiba', error);
       alert(`Az optimalizálás közben hiba történt: ${error?.message || error}`);
       return false;
     }
@@ -1151,8 +1151,11 @@
     // jelenik meg, és a vonal az első felrakótól indul.
     let events = (state.routePlans?.[selectedDate()]?.[vehicleId] || []).filter(event => event.type === 'pickup');
     if (!events.length && (state.orders || []).some(order => order.scheduleDate === selectedDate() && order.vehicleId === vehicleId)) {
-      const profiles = await buildProfiles((state.orders || []).filter(order => order.scheduleDate === selectedDate()));
-      events = (await buildVehicleRouteV49(vehicle, profiles)).filter(event => event.type === 'pickup');
+      // V56: a rajzolás TISZTA OLVASÁS. Korábban itt a lánc-optimalizáló futott,
+      // ami újraírta az order.sequence értékeket – ezért állt vissza a kézzel
+      // beállított sorrend minden oldalfrissítéskor. A tartalék terv mostantól
+      // a meglévő sorszámokból épül, és nem módosít semmit.
+      events = (await buildManualRouteV55(vehicle)).filter(event => event.type === 'pickup');
     }
     const points = [];
     let pickupIndex = 0;
@@ -1285,12 +1288,12 @@
     if (balanceButton) {
       balanceButton.onclick = event => { event.preventDefault(); return balanceActionV44(); };
       balanceButton.dataset.algorithmVersion = VERSION;
-      balanceButton.title = 'V55: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
+      balanceButton.title = 'V56: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
     }
     if (optimizeButton) {
       optimizeButton.onclick = event => { event.preventDefault(); return optimizeActionV44(); };
       optimizeButton.dataset.algorithmVersion = VERSION;
-      optimizeButton.title = 'V55: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
+      optimizeButton.title = 'V56: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
     }
     document.getElementById('clearAllMastersBtn')?.addEventListener('click', clearAllMasterDataV44);
     document.getElementById('loadBuiltInMastersBtn')?.addEventListener('click', loadBuiltInMasterDataV44);
@@ -1326,7 +1329,7 @@
   global.clearAllMasterDataV44 = clearAllMasterDataV44;
   global.loadBuiltInMasterDataV44 = loadBuiltInMasterDataV44;
 
-  global.V55Planner = {
+  global.V56Planner = {
     version: VERSION,
     canonicalAddress,
     locationKey,
@@ -1362,11 +1365,12 @@
     clearAllMasterDataV44,
     loadBuiltInMasterDataV44
   };
-  global.V54Planner = global.V55Planner;
-  global.V53Planner = global.V55Planner;
-  global.V50Planner = global.V55Planner;
-  global.V49Planner = global.V55Planner;
-  global.V44Planner = global.V55Planner;
+  global.V55Planner = global.V56Planner;
+  global.V54Planner = global.V56Planner;
+  global.V53Planner = global.V56Planner;
+  global.V50Planner = global.V56Planner;
+  global.V49Planner = global.V56Planner;
+  global.V44Planner = global.V56Planner;
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(bindV44, 0), { once: true });

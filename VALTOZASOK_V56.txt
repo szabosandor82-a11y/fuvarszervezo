@@ -1,0 +1,96 @@
+FUVARSZERVEZŐ V56 – KOMPAKT NÉZET ÉS SORRENDMEGŐRZÉS
+====================================================
+
+A V56 a V55-re épül. A szétosztás és az optimalizálás logikája változatlan.
+
+
+MÓDOSÍTOTT FÁJLOK
+-----------------
+planner-v37.js   kompakt felrakósorok a Nézet ablakban, térképfrissítés húzáskor
+planner-v44.js   a rajzolás nem írja felül a kézi sorrendet
+styles.css       a kompakt sorok stílusa
+index.html / manifest.webmanifest / sw.js   verziószám
+TEST_V56.js      ÚJ (a TEST_V55 folytatása), 28 teszt
+
+
+1. A KÉZI SORREND MEGMARAD FRISSÍTÉS UTÁN
+-----------------------------------------
+Hibajelenség: ha a csúszkával átrendezted a fuvarokat, majd frissítetted az
+oldalt, a sorrend visszaállt az eredetire.
+
+Ok: NEM a mentés volt hibás – a sorrend rendben elmentődött. A drawMapV49
+viszont, ha nem talált mentett útvonaltervet, lefuttatta a lánc-optimalizálót,
+az pedig nemcsak rajzol, hanem ÚJRAÍRJA az order.sequence értékeket. Vagyis a
+térkép kirajzolása mellékhatásként átrendezte a listát.
+
+Az útvonalterv több okból eltűnhet frissítéskor; a leggyakoribb, hogy a
+planner-v43 a törzsadat betöltésekor törli, ha bármi változott – és a V55 új
+törzsadatával ez az első betöltéskor biztosan lefut.
+
+Javítás: a rajzolás mostantól TISZTA OLVASÁS. Ha nincs mentett terv, a
+buildManualRouteV55 épít tartalékot a meglévő sorszámokból, és semmit nem ír.
+
+Reprodukció a javítás előtt:
+   kézi sorrend:            Gienger:1 Szatmári:2 Merkapt:3
+   egy rajzolás után:       Gienger:3 Szatmári:1 Merkapt:2
+Javítás után változatlan.
+
+
+2. KOMPAKT FELRAKÓSOROK A NÉZET ABLAKBAN
+----------------------------------------
+A Nézet (sofőrönkénti nagy ablak) buborékjai eddig hét sor magasak voltak
+(cím, felrakó, lerakó, rendelésszám, címkék és hat gomb). Egy képernyőn három-
+négy fuvar fért el.
+
+Az új sor két soros:
+
+   Merkapt [kp] — 1105 Budapest, Maglódi út 14/B
+   Le Jardin
+
+  - a felrakó neve és címe egy sorban, a cím halványabb szürkével
+  - alatta a lerakó, azonos betűmérettel
+  - a "kp" utótag külön jelölés, hogy a név ne duplázódjon
+  - szálanyagnál "szálas" jelölés és sárga bal szegély
+  - több projektnél: "Moxy VUC +2 projekt"
+  - "N tétel" gomb: lenyitja a felrakandó tételeket mennyiséggel
+  - "..." menü: rögzítés, teljes autó, szerkesztés, kész, szétbontás, törlés
+
+Egy képernyőn így tíz-tizenkét felrakó látszik.
+
+A FŐOLDALI LISTA VÁLTOZATLAN. A kompakt sor csak akkor aktív, ha
+options.focus igaz, tehát kizárólag a Nézet ablakban.
+
+A húzás szelektora (.route-block) megmaradt, így a rendezgetés ugyanúgy
+működik.
+
+
+3. A NÉZET TÉRKÉPE KÖVETI AZ ÁTRENDEZÉST
+----------------------------------------
+A Nézet ablaknak saját térképe van (drawFocusMap), amit az initMaps nem
+érint, ezért húzás után nem frissült.
+
+Javítás:
+  - a húzás végén a Nézetben a drawFocusMap fut, a főoldalon az initMaps
+  - mindkettő ELŐTT újraépül a kézi útvonalterv; a sorrend kritikus, mert
+    fordítva a rajzoló újraoptimalizálna
+  - a drawFocusMap tartalék útvonala is sorszám szerint rendez (eddig a
+    rendelések tárolási sorrendjét használta)
+
+
+TESZTEK
+-------
+TEST_V56.js   28/28
+TEST_V54.js   14/14 · TEST_V53.js 15/15 · TEST_V52.js 8/8 · TEST_V49.js 7/7
+TEST_V44/43/41/37/35/34/33 – mind sikeres
+
+Változatlanul elbukik, de az eredeti V52 csomagban is:
+   TEST_V44_2.js    egy fióknévre vonatkozó állítás
+   TEST_V41_MSG.js  0/7, MSG-parser teszt
+
+Futtatás: node TEST_V56.js
+
+
+ISMERT KORLÁT – VÁLTOZATLAN
+---------------------------
+A blokkképző cégnév alapján is összevon, így egy cég két telephelye egy
+blokkba kerülhet. Lásd TEST_V54.js "ISMERT KORLÁT" teszt.

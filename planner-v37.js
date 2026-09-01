@@ -332,6 +332,63 @@
 
   function groupIds(group) { return group.orders.map(order => order.id).join(','); }
 
+
+  /*
+    V56 – kompakt felrakósor a Nézet ablakhoz.
+
+    Két sor: felül a felrakó neve és címe, alatta azonos betűmérettel a lerakó.
+    A tételek külön gombbal nyithatók, a ritkábban használt műveletek a "..."
+    mögé kerülnek. Így egy képernyőn tízszer annyi felrakó fér el, és
+    kényelmesen rendezhető.
+  */
+  function projectSummaryV56(group) {
+    const names = [...new Set((group.orders || []).map(order => order.projectName).filter(Boolean))];
+    if (!names.length) return { main: 'Nincs projekt', extra: '' };
+    return { main: names[0], extra: names.length > 1 ? `+${names.length - 1} projekt` : '' };
+  }
+
+  function renderCompactRowV56(group, ctx) {
+    const { ids, orderNos, itemCount, longReasons, complete, resolved, pinned, fullLoad,
+      first, warnings, displayNumber, vehicleId, pickupOrderIds, regroupButton, options } = ctx;
+    const project = projectSummaryV56(group);
+    // A "kp" utótag a cégnév része; külön jelölésként mutatjuk, hogy a név
+    // ne duplázódjon ("Merkapt kp kp").
+    const rawName = String(group.pickupName || '').trim();
+    const central = /\bkp\b|kozpont/.test(nrm(rawName));
+    const displayName = rawName.replace(/\s*\bkp\.?\s*$/i, '').trim() || rawName;
+    const itemRows = (group.orders || []).flatMap(order => (order.items || []).map(item => ({ item, order })));
+    const items = itemRows.length
+      ? itemRows.map(({ item, order }) => `<div class="v56-item-row"><span>${escHtml(item.name || 'Tétel')}</span><span class="v56-item-qty">${escHtml(String(item.qty ?? ''))} ${escHtml(item.unit || '')}</span></div>`).join('')
+      : '<div class="v56-item-row v56-item-empty"><span>Nincs rögzített tétel.</span><span></span></div>';
+
+    return `<div class="route-block v56-row-block ${options.insidePickupGroup ? 'inside-pickup-group' : ''} ${pinned ? 'pinned-block' : ''} ${fullLoad ? 'full-load-block' : ''} ${resolved ? 'resolved-backlog-block' : ''}" data-order-ids="${escHtml(ids)}">
+      <article class="v56-row ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''} ${longReasons.length ? 'has-long' : ''}" data-id="${escHtml(first.id)}">
+        <span class="drag v56-drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : 'Húzás'}">☷</span>
+        <span class="v56-index">${escHtml(displayNumber)}</span>
+        <div class="v56-main">
+          <div class="v56-line-top">
+            <b>${escHtml(displayName)}</b>${central ? '<span class="v56-chip">kp</span>' : ''}${longReasons.length ? '<span class="v56-chip v56-chip-warn">szálas</span>' : ''}${pinned ? '<span class="v56-chip">rögzített</span>' : ''}${fullLoad ? '<span class="v56-chip">teljes autó</span>' : ''}
+            <span class="v56-addr">${group.pickupAddress ? '— ' + escHtml(group.pickupAddress) : ''}</span>
+          </div>
+          <div class="v56-line-drop">${escHtml(project.main)}${project.extra ? `<span class="v56-extra">${escHtml(project.extra)}</span>` : ''}</div>
+          ${warnings || ''}
+        </div>
+        <button type="button" class="v56-items-btn" onclick="event.stopPropagation();v56ToggleItems('${escHtml(ids)}',this)" title="Felrakandó tételek">${itemCount} tétel <span class="v56-caret">▾</span></button>
+        <button type="button" class="v56-more-btn" onclick="event.stopPropagation();v56ToggleMenu(this)" title="További műveletek" aria-label="További műveletek">⋯</button>
+        <div class="v56-menu" hidden>
+          <button type="button" onclick="event.stopPropagation();v56CloseMenus();v37TogglePin('${escHtml(ids)}','${escHtml(vehicleId)}')">${pinned ? 'Rögzítés feloldása' : 'Rögzítés a sorrendben'}</button>
+          <button type="button" onclick="event.stopPropagation();v56CloseMenus();v33ToggleFullLoad('${escHtml(ids)}')">${fullLoad ? 'Teljes autó kikapcsolása' : 'Teljes autó'}</button>
+          <button type="button" onclick="event.stopPropagation();v56CloseMenus();editOrder('${escHtml(first.id)}')">Szerkesztés</button>
+          <button type="button" onclick="event.stopPropagation();v56CloseMenus();v37ToggleGroupComplete('${escHtml(ids)}')">${complete ? 'Visszaállítás nyitottra' : 'Kész'}</button>
+          ${regroupButton ? `<button type="button" onclick="event.stopPropagation();v56CloseMenus();v37SetPickupGrouping('${escHtml(pickupOrderIds)}',false)">Felrakó szétbontása</button>` : ''}
+          <button type="button" class="v56-menu-danger" onclick="event.stopPropagation();v56CloseMenus();v33DeleteGroup('${escHtml(ids)}')">Törlés</button>
+        </div>
+      </article>
+      <div class="v56-items" data-items-for="${escHtml(ids)}" hidden>${items}</div>
+      ${fullLoad ? '<div class="v56-forced-drop">Kötelező azonnali lerakás</div>' : ''}
+    </div>`;
+  }
+
   function renderGroupBubble(group, index, vehicleId, options = {}) {
     const ids = groupIds(group);
     const orderNos = [...new Set(group.orders.map(order => order.orderNo).filter(Boolean))];
@@ -348,6 +405,10 @@
       ? `<button type="button" class="group-toggle-button" onclick="event.stopPropagation();v37SetPickupGrouping('${escHtml(pickupOrderIds)}',false)" title="Az azonos felrakó rendeléseinek újracsoportosítása">🔗</button>`
       : '';
     const displayNumber = options.displayLabel || String(index + 1);
+    if (options.focus) return renderCompactRowV56(group, {
+      ids, orderNos, itemCount, longReasons, complete, resolved, pinned, fullLoad, first,
+      warnings, displayNumber, vehicleId, pickupOrderIds, regroupButton, options
+    });
     return `<div class="route-block ${options.insidePickupGroup ? 'inside-pickup-group' : ''} ${pinned ? 'pinned-block' : ''} ${fullLoad ? 'full-load-block' : ''} ${resolved ? 'resolved-backlog-block' : ''}" data-group-key="${escHtml(group.key)}" data-pickup-move-key="${escHtml(pickupMoveKey(group))}" data-order-ids="${escHtml(ids)}" data-vehicle-id="${escHtml(vehicleId)}">
       <article class="bubble grouped-bubble ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''}" data-id="${escHtml(first.id)}">
         <span class="drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : options.insidePickupGroup ? 'Az egész felrakási blokk húzása' : 'Húzás'}">${resolved ? '✓' : '☷'}</span>
@@ -433,7 +494,9 @@
     let pickups = events.filter(event => event.type === 'pickup');
     if (!pickups.length) {
       const seen = new Set(); pickups = [];
-      for (const group of bubbleGroups(dayOrders(vehicleId))) {
+      // A tartalék is a kézi sorrendet kövesse, ne a rendelések tárolási sorrendjét.
+      const ordered = dayOrders(vehicleId).slice().sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
+      for (const group of bubbleGroups(ordered)) {
         if (group.orders.every(isResolvedBacklogOrder) || seen.has(group.pickupKey)) continue;
         seen.add(group.pickupKey);
         pickups.push({ name: group.pickupName, address: group.pickupAddress, point: await geo(group.pickupAddress) });
@@ -598,15 +661,18 @@
         // útvonalterv épül újra a kézi sequence értékekből, és csak utána
         // rajzolunk. Fordítva a rajzoló üres tervet találna, és
         // újraoptimalizálná az útvonalat, felülírva a te sorrendedet.
-        const buildManual = global.V55Planner?.buildManualRouteV55;
-        if (typeof buildManual === 'function') {
-          setTimeout(async () => {
+        const buildManual = global.V56Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
+        setTimeout(async () => {
+          if (typeof buildManual === 'function') {
             try {
               for (const vehicle of activeVehicles()) await buildManual(vehicle);
             } catch (error) { /* a rajzolás így is lefut */ }
-            if (typeof initMaps === 'function') initMaps();
-          }, 40);
-        }
+          }
+          // A Nézet ablaknak saját térképe van, amit az initMaps nem érint,
+          // ezért azt külön rajzoljuk újra.
+          if (focus) { try { await drawFocusMap(vehicleId); } catch (error) { /* nem blokkoló */ } }
+          else if (typeof initMaps === 'function') initMaps();
+        }, 40);
       }
     });
   }
@@ -785,6 +851,31 @@
   global.v37OpenDriverView = openDriverView;
   global.v37CloseDriverView = closeDriverView;
   global.v37SetPickupGrouping = v37SetPickupGrouping;
+  // V56 – kompakt sor viselkedése
+  global.v56CloseMenus = function (except) {
+    document.querySelectorAll('.v56-menu').forEach(menu => { if (menu !== except) menu.hidden = true; });
+  };
+  global.v56ToggleMenu = function (button) {
+    const menu = button?.parentElement?.querySelector('.v56-menu');
+    if (!menu) return;
+    const willOpen = menu.hidden;
+    global.v56CloseMenus(menu);
+    menu.hidden = !willOpen;
+  };
+  global.v56ToggleItems = function (ids, button) {
+    const panel = document.querySelector(`.v56-items[data-items-for="${(ids || '').replace(/"/g, '')}"]`);
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    const caret = button?.querySelector('.v56-caret');
+    if (caret) caret.textContent = panel.hidden ? '▾' : '▴';
+    button?.classList.toggle('open', !panel.hidden);
+  };
+  if (typeof document !== 'undefined') {
+    document.addEventListener('click', event => {
+      if (!event.target.closest?.('.v56-menu, .v56-more-btn')) global.v56CloseMenus();
+    });
+  }
+
   global.v37TogglePin = v37TogglePin;
   global.v37ToggleGroupComplete = v37ToggleGroupComplete;
   global.V37Planner = {
@@ -794,6 +885,10 @@
     pickupMoveKey,
     moveSupplierOrdersTogether,
     focusPickupUnits,
+    groupedBubbles,
+    drawFocusMap,
+    renderCompactRowV56,
+    projectSummaryV56,
     v37SetPickupGrouping,
     isBacklogOrder,
     isResolvedBacklogOrder,
