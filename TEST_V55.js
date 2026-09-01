@@ -270,5 +270,48 @@ function krprWith(target) {
       'Vác rajta van a térképi vonalon');
   });
 
+  await test('A kézi átrendezés a sequence sorrendjét adja, nem optimalizál újra', async () => {
+    const c = createContext();
+    const vehicle = { id: 'm', driverName: 'Márió', type: '3.5 T dobozos autó', active: true };
+    c.state.vehicles = [vehicle];
+    const A = '1158.Budapest, Késmárk utca 9', B = '1106 Budapest, Maglódi út 14/B', C = '1225 Budapest, Dűlő utca 31-35.';
+    c.state.geo[A] = [47.560, 19.130]; c.state.geo[B] = [47.483, 19.145]; c.state.geo[C] = [47.412, 19.005];
+    const mk = (no, name, addr, seq) => ({ id: 'o' + no, scheduleDate: '2026-09-01', vehicleId: 'm',
+      sequence: seq, orderNo: no, pickupName: name, pickupAddress: addr, projectName: 'Cosmo',
+      dropAddress: '1133 Budapest, Hegedűs Gyula utca 53.', items: [] });
+    // A felhasználó a Giengert húzta előre: nem a földrajzi optimum.
+    c.state.orders = [mk('1', 'Gienger', C, 1), mk('2', 'Szatmári', A, 2), mk('3', 'Merkapt', B, 3)];
+    const events = await c.V55Planner.buildManualRouteV55(vehicle);
+    assert.deepEqual(events.map(e => e.name), ['Gienger', 'Szatmári', 'Merkapt'],
+      'nem a kézi sorrendet követte: ' + events.map(e => e.name).join(' → '));
+    assert.deepEqual(c.state.routePlans['2026-09-01'].m.map(e => e.name), ['Gienger', 'Szatmári', 'Merkapt'],
+      'az útvonalterv nem a kézi sorrendet tárolja');
+    assert.ok(events.every(e => Array.isArray(e.point)), 'hiányzik koordináta');
+  });
+
+  await test('Azonos felrakóhely rendelései egy térképi pontba kerülnek', async () => {
+    const c = createContext();
+    const vehicle = { id: 'm', driverName: 'Márió', type: '3.5 T dobozos autó', active: true };
+    c.state.vehicles = [vehicle];
+    const A = '1106 Budapest, Maglódi út 14/B';
+    c.state.geo[A] = [47.483, 19.145];
+    const mk = (no, seq) => ({ id: 'o' + no, scheduleDate: '2026-09-01', vehicleId: 'm', sequence: seq,
+      orderNo: no, pickupName: 'Merkapt', pickupAddress: A, projectName: 'Cosmo', dropAddress: '', items: [] });
+    c.state.orders = [mk('1', 1), mk('2', 2), mk('3', 3)];
+    const events = await c.V55Planner.buildManualRouteV55(vehicle);
+    assert.equal(events.length, 1, 'nem egy megállóba vonta össze: ' + events.length);
+    assert.equal(events[0].orders.length, 3);
+  });
+
+  await test('A csúszka végén a program a kézi tervet építi, csak utána rajzol', async () => {
+    const v37 = fs.readFileSync(__dirname + '/planner-v37.js', 'utf8');
+    const start = v37.indexOf('onEnd: event => {');
+    const body = v37.slice(start, v37.indexOf('\n      }\n    });', start));
+    assert.ok(body.includes('buildManualRouteV55'), 'a csúszka nem építi újra a kézi útvonaltervet');
+    assert.ok(body.includes('initMaps'), 'a csúszka nem rajzolja újra a térképet');
+    assert.ok(body.indexOf('buildManualRouteV55') < body.lastIndexOf('initMaps'),
+      'a rajzolás megelőzi a tervépítést, ezért újraoptimalizálna');
+  });
+
   if (!process.exitCode) console.log(`\nV55 elfogadási teszt: ${passed}/${total} sikeres.`);
 })();

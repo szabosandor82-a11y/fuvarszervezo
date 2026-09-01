@@ -962,6 +962,57 @@
     return events;
   }
 
+  /*
+    Kézi átrendezés követése a térképen.
+
+    Ha a csúszkával áthelyezel egy állomást, az NEM optimalizálás: a te
+    sorrended az érvényes. Ezért a térkép a rendelések aktuális sequence
+    értékéből épül, és nem futtatjuk újra a lánc-optimalizálót.
+  */
+  async function buildManualRouteV55(vehicle) {
+    if (!vehicle) return [];
+    const orders = (typeof dayOrders === 'function' ? dayOrders(vehicle.id) : [])
+      .slice()
+      .filter(order => !(global.V37Planner?.isResolvedBacklogOrder?.(order)))
+      .sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
+    const events = [];
+    const byStop = new Map();
+    for (const order of orders) {
+      const address = order.pickupAddress || '';
+      const key = `${nrm(order.pickupName || '')}|${canonicalAddress(address)}`;
+      let event = byStop.get(key);
+      if (!event) {
+        const point = state.geo?.[canonicalAddress(address)] || state.geo?.[address]
+          || (typeof geo === 'function' ? await geo(address) : null);
+        event = {
+          type: 'pickup',
+          name: order.pickupName || 'Felrakó',
+          address,
+          point: finitePoint(point) ? point : null,
+          orders: []
+        };
+        byStop.set(key, event);
+        events.push(event);
+      }
+      event.orders.push(order.id);
+    }
+    state.routePlans = state.routePlans || {};
+    state.routePlans[selectedDate()] = state.routePlans[selectedDate()] || {};
+    state.routePlans[selectedDate()][vehicle.id] = events;
+    return events;
+  }
+
+  // A csúszkás átrendezés után hívandó: az érintett sofőrök térképe azonnal
+  // követi a kézi sorrendet.
+  async function refreshMapsAfterManualMoveV55(vehicleIds = null) {
+    const vehicles = (typeof activeVehicles === 'function' ? activeVehicles() : [])
+      .filter(vehicle => !vehicleIds || vehicleIds.includes(vehicle.id));
+    for (const vehicle of vehicles) {
+      await buildManualRouteV55(vehicle);
+      await drawMapV49(vehicle.id);
+    }
+  }
+
   async function buildRoutePlansV44(profiles = null) {
     const vehicles = typeof activeVehicles === 'function' ? activeVehicles() : [];
     const before = new Map((state.orders || []).filter(order => order.scheduleDate === selectedDate()).map(order => [order.id, order.vehicleId]));
@@ -1303,6 +1354,8 @@
     orderDropStopsV49,
     scrollToEventBubbleV49,
     drawMapV49,
+    buildManualRouteV55,
+    refreshMapsAfterManualMoveV55,
     balanceActionV44,
     optimizeActionV44,
     cloneBuiltInMasterData,

@@ -228,3 +228,36 @@ nem az fut.
   - "A térkép a felrakókat rajzolja, sorszámmal, a lakhely nélkül" –
     valódi futtatás Leaflet-csonkkal: két felrakó, két jelölő, a vonal az
     első felrakótól indul, és Vác nincs rajta
+
+
+11. CSÚSZKÁS ÁTRENDEZÉS KÖVETÉSE A TÉRKÉPEN
+-------------------------------------------
+Kérés: ha a főoldalon a csúszkával áthelyezel egy állomást, a térkép
+kövesse le automatikusan.
+
+Állapot a javítás előtt: az initSortables is többször felül van írva; élesben
+a planner-v37.js createSortable onEnd ága fut. Az újrarendezés után frissítette
+a sequence értékeket, kiürítette az útvonaltervet és újrarajzolta a LISTÁT,
+de a térképhez nem nyúlt.
+
+Ráadásul, ha a térkép mégis újrarajzolódott volna, a drawMapV49 üres
+útvonaltervet talál, és a buildVehicleRouteV49-cel ÚJRAOPTIMALIZÁL – vagyis
+felülírta volna a kézzel beállított sorrendet.
+
+Javítás:
+  - új buildManualRouteV55(vehicle): az útvonaltervet a rendelések aktuális
+    sequence értékéből építi, optimalizálás nélkül. Az azonos felrakóhely
+    rendelései egy térképi pontba kerülnek.
+  - új refreshMapsAfterManualMoveV55(vehicleIds)
+  - a planner-v37 onEnd ága a húzás után előbb MINDEN aktív sofőrre újraépíti
+    a kézi tervet, és csak utána hívja az initMaps-et. A sorrend kritikus:
+    fordítva a rajzoló újraoptimalizálna.
+
+Ez a főoldali listára és a sofőrnézetre (focus) is érvényes.
+
+Új tesztek (TEST_V55.js):
+  - "A kézi átrendezés a sequence sorrendjét adja, nem optimalizál újra" –
+    a felhasználó a földrajzilag távoli Giengert húzza előre, és a terv
+    Gienger → Szatmári → Merkapt marad
+  - "Azonos felrakóhely rendelései egy térképi pontba kerülnek"
+  - "A csúszka végén a program a kézi tervet építi, csak utána rajzol"

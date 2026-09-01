@@ -594,6 +594,19 @@
         state.routePlans = state.routePlans || {}; state.routePlans[selectedDate()] = {};
         save();
         if (!focus && typeof renderRoutes === 'function') setTimeout(renderRoutes, 0);
+        // A térkép kövesse a kézi átrendezést. FONTOS a sorrend: előbb az
+        // útvonalterv épül újra a kézi sequence értékekből, és csak utána
+        // rajzolunk. Fordítva a rajzoló üres tervet találna, és
+        // újraoptimalizálná az útvonalat, felülírva a te sorrendedet.
+        const buildManual = global.V55Planner?.buildManualRouteV55;
+        if (typeof buildManual === 'function') {
+          setTimeout(async () => {
+            try {
+              for (const vehicle of activeVehicles()) await buildManual(vehicle);
+            } catch (error) { /* a rajzolás így is lefut */ }
+            if (typeof initMaps === 'function') initMaps();
+          }, 40);
+        }
       }
     });
   }
