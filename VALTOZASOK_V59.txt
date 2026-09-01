@@ -1,0 +1,277 @@
+FUVARSZERVEZO V59 - A HIANYZO MENNYISEG MEZOJE
+==============================================
+
+MODOSITOTT FAJLOK
+-----------------
+styles.css     szelesebb mennyiseg-oszlop, jol lathato beviteli mezo
+app.js         a mennyiseg sajat cellat kapott mertekegyseggel
+planner-v44.js / index.html / manifest / sw.js   verziószam
+TEST_V59.js    52 teszt
+
+MEGJEGYZES: A V59 a V58 kozvetlen folytatasa.
+
+
+1. A HIANYZO MENNYISEG MEZOJE
+-----------------------------
+Hiba: a "Hianyzik" gombra kattintva a mennyiseg beviteli mezoje tul kicsi,
+alig lehet beleirni.
+
+Ok: korabbi stiluszabalyok !important-tal 20 pixeles betut es 48 pixeles
+magassagot adtak a mezonek, de a tetelracs mennyiseg-oszlopa csak 92 pixel
+szeles volt. A nagy betu igy nem fert ki a keskeny oszlopba.
+
+Javitas:
+  - a mennyiseg oszlopa 92 -> 132 pixel, a datume 148 -> 168 pixel
+  - a mezo 44 pixel magas, 19 pixeles felkover, kozepre igazitott szammal
+  - kiemelt keret (arany) es sarga hatter, hogy azonnal lathato legyen
+  - fokuszban vastagabb keret es kontur
+  - mobilon 48 pixel magas, teljes szelessegben
+
+Uj: a mezo ala kerult a mertekegyseg es a rendelt mennyiseg, hogy
+egyertelmu legyen, mit kell beirni:
+
+   [    2    ]
+   szal . rendelt: 6
+
+
+TESZTEK
+-------
+TEST_V59.js   52/52
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Ket uj teszt vedi ezt a javitast: az egyik a CSS-bol ellenorzi az oszlop
+szelesseget es a mezo magassagat/betumeretet, a masik a generalt HTML-ben
+a mertekegyseg-feliratot. Igy egy kesobbi stilusmodositas nem tudja
+eszrevetlenul visszaszukiteni.
+
+Futtatas: node TEST_V59.js
+
+
+========================================================================
+A KORABBI VERZIOK VALTOZASAI
+========================================================================
+
+FUVARSZERVEZO V58 - NAPVALASZTO ES TETELSOROK
+=============================================
+
+MODOSITOTT FAJLOK
+-----------------
+styles.css     szelesebb napvalaszto az oldalsavban, tetelsor stilusok
+app.js         a tetelsor alapallapota, "Hianyzik" nyitas/visszavonas
+planner-v44.js / index.html / manifest / sw.js   verziószam
+TEST_V58.js    50 teszt
+
+
+1. OLDALSAVI NAPVALASZTO
+------------------------
+A ket nyil 34-34 pixelt foglalt, a datumnak alig maradt hely, es 11 pixeles
+betuvel jelent meg - ezert nem lehetett rendesen elolvasni.
+
+Javitas: a nyilak 26 pixelre keskenyedtek, a datum betumerete 13 pixel lett,
+kozepre igazitva, tabularis szamokkal. A mobil vezerlosavban a nyilak
+42-rol 34-re csokkentek.
+
+
+2. TETELSOROK - AZ ALAPALLAPOT A LETISZTULT NEZET
+-------------------------------------------------
+Korabban minden nyitott tetel mellett ott volt a mennyiseg- es a
+datummezo, ezert a nezet zsufolt volt, es vegig kellett pipalni a sorokat
+ahhoz, hogy hasznalhato legyen.
+
+Uj logika - a pipa jelentese megvaltozott:
+
+   PIPA        = a tetelt HIANTALANUL megkapta
+   alapallapot = tiszta sor, csak egy halvany "Hianyzik" gomb
+   HIANYZIK    = a gombra kattintva nyilik a mennyiseg- es datummezo
+
+Harom allapot:
+
+   [ ]  Karima PN16     K1 . 2 db              [Hianyzik]        -
+   [x]  Idom 20x3/4     K2 . 5 db . atveve          -            -
+   [ ]  KPE cso D63     K3 . 6 szal              [  2  ]   [2026-09-09][Megsem]
+
+Az atvett sor kiszurkul, athuzott nevvel, es nincs benne szerkesztheto mezo.
+A hianyjelzes a "Megsem" gombbal visszavonhato.
+
+Ha egy tetel mar athelyezesre kerult, a mezoi maguktol latszanak, es a
+"Vissza" gomb all a "Megsem" helyen - az visszavonja az athelyezest.
+
+A hianyjelzes allapota (shortageOpen) a tetelen tarolodik, tehat ujranyitas
+utan is nyitva marad, amig le nem zarod.
+
+
+TESZTEK
+-------
+TEST_V58.js   50/50
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Valtozatlanul elbukik, de az eredeti V52 csomagban is:
+   TEST_V44_2.js, TEST_V41_MSG.js
+
+Futtatas: node TEST_V58.js
+
+
+========================================================================
+A KORABBI VERZIO VALTOZASAI (V57)
+========================================================================
+
+MÓDOSÍTOTT FÁJLOK
+-----------------
+app.js            központi integritási réteg, új hátralék nézet
+auth-v44-2.js     sofőri oldal egysoros listája
+index.html        a hátralék tábla helyett lista
+styles.css        az új nézetek stílusa
+planner-v44.js / manifest / sw.js   verziószám
+TEST_V57.js       41 teszt
+
+
+1. KÖZPONTI INTEGRITÁSI RÉTEG
+-----------------------------
+Bejelentett hiba: ha egy tételnél hátralékot rögzítesz, majd a rendelést
+törlöd, a hátralék ott marad a Hátralék fülön.
+
+Az audit ötféle árva hivatkozást talált, nem egyet:
+
+   művelet                              ami ott maradt
+   -----------------------------------  ----------------------------------
+   eredeti fuvar törlése                a hátralék a Hátralék fülön
+   a hátralék célfuvarának törlése      a hátralék egy nemlétező fuvarra mutat
+   tétel törlése a célfuvarból          a hátralék egy nemlétező tételre mutat
+   bármely fuvar törlése                az útvonalterv megőrizte a hivatkozást
+   forrás törlése áthelyezés után       a movedFromOrderId a semmibe mutatott
+
+Közös ok: öt-hat helyen törlődik fuvar, és mindegyik csak a saját listáját
+takarítja.
+
+Megoldás: új reconcileState() függvény, amely MINDEN mentés előtt lefut, és
+egy helyen rendezi az összefüggéseket. Ha új kapcsolat kerül a modellbe,
+ide kell felvenni, nem hat helyre.
+
+Két különböző takarítás:
+  - a származtatott hivatkozás (útvonalterv, movedFromOrderId, elintézett
+    hátralék) némán javul
+  - a hátralék NEM tűnik el csendben. Ha a forrásfuvart törölték:
+      * ha a származtatott fuvar még érintetlen (nincs átvett tétel, nincs
+        lezárva), az is törlődik – a hátralék tárgytalan
+      * ha a sofőr már dolgozott rajta, a fuvar MEGMARAD, a hátralék pedig
+        "árva" jelölést kap, és a Hátralék fülön külön látszik, mert ott
+        adat veszne el
+
+Mind a hat forgatókönyv teszttel védve.
+
+
+2. SOFŐRI OLDAL – EGYSOROS LISTA
+--------------------------------
+   005714 — Hungarokomplex — Sofitel
+   [Tétel / hátralék (2/5)]  [Szállítólevél]  [Fuvar átadása]
+
+A tételablak ugyanaz, mint az admin oldalon. A fuvarátadás változatlan.
+
+A címek, megjegyzések, átvevő és a mentett fotók a sor végén lévő nyíllal
+nyithatók, hogy a lista áttekinthető maradjon. A specifikáció szerint a
+felrakó címe nem került az alapsorba – ha a sofőrnek ott kell látnia,
+egy sorral visszatehető.
+
+
+3. ÚJ HÁTRALÉK NÉZET
+--------------------
+A régi nyolc oszlopos tábla tételsoros volt: ha egy fuvarból négy tétel
+csúszott, négy különálló sor lett, és nem látszott, hogy összetartoznak.
+
+Az új nézet arra a két kérdésre válaszol, ami a döntéshez kell: mi csúszott
+meg, és melyik napon mi jön.
+
+  - legfelül MEGCSÚSZOTT szekció pirossal: lejárt dátum, dátum nélküli,
+    vagy árva tétel
+  - alatta napokra bontva, azon belül beszállítónként csoportosítva
+  - soronként "Megérkezett" gomb: kipipálja a tételt a célfuvarban, lezárja
+    a hátralékot és átteszi az elintézettek közé – navigálás nélkül
+  - a dátum továbbra is helyben szerkeszthető
+  - "↗" gomb a fuvarra ugráshoz
+  - a már átvett tételek automatikusan kikerülnek a listából
+
+Amit NEM építettem be, mert kérdés maradt: a külön "várható / visszaigazolt"
+állapot. Ehhez tudni kell, hogy a dátumot te írod-e be a beszállító
+visszajelzése alapján, vagy marad az áthelyezéskori. Jelenleg egy dátum van,
+és a lejárat automatikusan számítódik.
+
+
+4. HATRALEK UTEMEZESE EGY LEPESBEN
+----------------------------------
+A tetelablak minden soraban van egy datummezo. A sofor a beszallitotol
+kapott informacio alapjan beirja, es a tetel AZONNAL atkerul arra a napra:
+
+  - letrejon (vagy kiegeszul) az aznapi fuvar ugyanazzal a rendelesszammal,
+    beszallitoval es projekttel
+  - a tetel bekerul a Hatralek fulre
+  - a hianyzo mennyiseg megy at; ha nincs megadva, a teljes tetel
+  - a megkapott resz az eredeti napon marad, kipipalva
+  - ha az egesz atment, a tetel kikerul az eredeti naprol
+
+Nem kell kulon Athelyezes gombot nyomni - az a gomb megszunt. A fejlecben
+maradt egy "Mindet erre a napra", ha egyszerre akarod az osszes nyitott
+tetelt utemezni.
+
+Pelda: 2 db Karimabol 1 erkezett meg, az Idom egyaltalan nem.
+   09-01:  Karima 1 db [atveve]
+   09-04:  Karima 1 db      (a sofor ezt a napot irta be)
+   09-09:  Idom 5 db        (a sofor ezt a napot irta be)
+
+Vedelmek: az eredeti nappal azonos datumot nem fogadja el, mar atvett
+tetelnel nem indit athelyezest, es a hianyzo mennyiseg nem lehet nulla vagy
+a rendeltnel tobb.
+
+MEGJEGYZES: az athelyezes megerosites nelkul fut, ahogy kerted. Ha a
+gyakorlatban egy elgepelt datum gondot okoz, egy sorral betehet egy
+"Biztos?" kerdes.
+
+
+5. UTOLAGOS JAVITAS - ATUTEMEZES ES VISSZAVONAS
+-----------------------------------------------
+Mivel a datum beirasa azonnal mozgat, kell hozza javitasi lehetoseg. Mindket
+feluleten (admin es sofor) ugyanabban a tetelablakban:
+
+  - az athelyezett tetel datuma atirhato -> atkerul a masik napra, es a
+    Hatralek fulon is frissul a datum
+  - a "Vissza" gomb visszateszi a tetelt az eredeti napra es torli a
+    hatralekot; ha ott mar van azonos tetel, a mennyiseg osszeadodik
+  - ugyanez a ket muvelet a Hatralek fulon is elerheto
+
+Az athelyezesbol szuletett fuvar automatikusan megszunik, ha kiurul
+(atutemezes vagy visszavonas utan), tehat nem maradnak ures napok.
+
+Teljes kor probaja:
+   1) sofor 09-04-re utemez   -> 09-01 ures, 09-04 Karima, hatralek 1
+   2) megis 09-11             -> 09-04 megszunik, 09-11 Karima
+   3) visszavonas             -> minden vissza 09-01-re, hatralek 0
+
+
+6. TETELABLAK - NEGY OSZLOP
+---------------------------
+Semmit nem kell kulon megnyitni:
+
+   [pipa] Tetel                    Hianyzik   Hatralek napja
+   ---------------------------------------------------------
+   [ ]    Karima PN16 DN50             1      2026-09-04 [Vissza]
+          K1 . 2 db . athelyezve 09-04
+   [ ]    Menetesszar M10x3000       mind     2026-09-09 [Vissza]
+   [x]    Idom 20x3/4                  -           -
+          K2 . 5 db . atveve
+
+A fejlecben egy fo datum + "Mindet erre a napra" gomb. Ez CSAK azokra
+vonatkozik, amiknek meg nincs sajat datuma, hogy egy veletlen kattintas ne
+borítsa fel a mar beallitott napokat.
+
+Az atvett tetel kiszurkul, es nincs se mennyiseg, se datum mezoje.
+Telefonon a rács egy oszlopba tordelodik.
+
+
+TESZTEK
+-------
+TEST_V57.js   46/46
+TEST_V54/53/52/49/44/43/41/37/35/34/33 – mind sikeres
+
+Változatlanul elbukik, de az eredeti V52 csomagban is:
+   TEST_V44_2.js, TEST_V41_MSG.js
+
+Futtatás: node TEST_V57.js

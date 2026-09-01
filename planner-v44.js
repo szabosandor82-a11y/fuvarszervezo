@@ -1,4 +1,4 @@
-/* Fuvarszervező V58
+/* Fuvarszervező V59
    Sáv-alapú szétosztás és lánc-optimalizált felrakási sorrend.
 
    Kemény szabályok:
@@ -23,7 +23,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '58';
+  const VERSION = '59';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   // Alapértelmezett indulási pontok. A törzsadat (SEED_DATA.vehicles) felülírja
   // őket, ha ott meg van adva a sofőr lakóhelye.
@@ -879,7 +879,7 @@
         if (Number.isFinite(metres)) fallback[from.index][to.index] = metres / 1000;
       }));
     } catch (error) {
-      console.warn('[V58] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
+      console.warn('[V59] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
     }
     return fallback;
   }
@@ -1052,10 +1052,10 @@
       await persistOnlineV49();
       if (typeof render === 'function') render();
       const conflictText = result.conflicts.length ? `\nFigyelem: ${result.conflicts.length} felrakóhelyen egymással ütköző fix sofőrjelölés maradt.` : '';
-      alert(`Fuvarok V58 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
+      alert(`Fuvarok V59 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
       return result;
     } catch (error) {
-      console.error('[V58] Szétosztási hiba', error);
+      console.error('[V59] Szétosztási hiba', error);
       alert(`A fuvarok szétosztása közben hiba történt: ${error?.message || error}`);
       return null;
     }
@@ -1071,10 +1071,10 @@
       if (changed.length) throw new Error('Az optimalizálás sofőrt változtatott.');
       await persistOnlineV49();
       if (typeof render === 'function') render();
-      alert('V58 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
+      alert('V59 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
       return true;
     } catch (error) {
-      console.error('[V58] Optimalizálási hiba', error);
+      console.error('[V59] Optimalizálási hiba', error);
       alert(`Az optimalizálás közben hiba történt: ${error?.message || error}`);
       return false;
     }
@@ -1288,12 +1288,12 @@
     if (balanceButton) {
       balanceButton.onclick = event => { event.preventDefault(); return balanceActionV44(); };
       balanceButton.dataset.algorithmVersion = VERSION;
-      balanceButton.title = 'V58: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
+      balanceButton.title = 'V59: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
     }
     if (optimizeButton) {
       optimizeButton.onclick = event => { event.preventDefault(); return optimizeActionV44(); };
       optimizeButton.dataset.algorithmVersion = VERSION;
-      optimizeButton.title = 'V58: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
+      optimizeButton.title = 'V59: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
     }
     document.getElementById('clearAllMastersBtn')?.addEventListener('click', clearAllMasterDataV44);
     document.getElementById('loadBuiltInMastersBtn')?.addEventListener('click', loadBuiltInMasterDataV44);
@@ -1329,7 +1329,7 @@
   global.clearAllMasterDataV44 = clearAllMasterDataV44;
   global.loadBuiltInMasterDataV44 = loadBuiltInMasterDataV44;
 
-  global.V58Planner = {
+  global.V59Planner = {
     version: VERSION,
     canonicalAddress,
     locationKey,
@@ -1365,14 +1365,15 @@
     clearAllMasterDataV44,
     loadBuiltInMasterDataV44
   };
-  global.V57Planner = global.V58Planner;
-  global.V56Planner = global.V58Planner;
-  global.V55Planner = global.V58Planner;
-  global.V54Planner = global.V58Planner;
-  global.V53Planner = global.V58Planner;
-  global.V50Planner = global.V58Planner;
-  global.V49Planner = global.V58Planner;
-  global.V44Planner = global.V58Planner;
+  global.V58Planner = global.V59Planner;
+  global.V57Planner = global.V59Planner;
+  global.V56Planner = global.V59Planner;
+  global.V55Planner = global.V59Planner;
+  global.V54Planner = global.V59Planner;
+  global.V53Planner = global.V59Planner;
+  global.V50Planner = global.V59Planner;
+  global.V49Planner = global.V59Planner;
+  global.V44Planner = global.V59Planner;
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(bindV44, 0), { once: true });

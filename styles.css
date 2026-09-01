@@ -332,3 +332,25 @@ dialog{background:#fffefd;box-shadow:0 28px 76px #6278872e}dialog::backdrop{back
 .item-shortage-btn:hover{background:#f3f0e8;border-style:solid;color:#8d2b2b;border-color:#e0a4a4}
 .item-grid.shortage{background:#fdf6f3}
 .item-grid.shortage .item-name{color:#8d2b2b}
+
+/* V60 – a hiányzó mennyiség mezője legyen jól látható.
+   Korábbi szabályok !important-tal 20px betűt és 48px magasságot adtak neki,
+   de a rács oszlopa csak 92px volt, ezért a szám nem fért ki. */
+.item-grid-head,.item-grid{grid-template-columns:26px minmax(0,1fr) 132px 168px}
+.item-grid>.missing-qty-input,.item-qty-cell .missing-qty-input{
+  width:100%!important;min-width:0!important;height:44px!important;
+  font-size:19px!important;font-weight:700!important;text-align:center;
+  padding:6px 8px!important;margin-top:0!important;
+  border:1.5px solid #c9a86a!important;border-radius:8px!important;
+  background:#fffaf0!important;color:#5b4a2a!important}
+.item-grid>.missing-qty-input:focus,.item-qty-cell .missing-qty-input:focus{
+  border-color:#a5813a!important;outline:2px solid #efd7a6;outline-offset:1px}
+.item-grid>.missing-qty-input::placeholder{font-size:13px;font-weight:500;color:#a08a63}
+.item-qty-cell{display:flex;flex-direction:column;gap:3px}
+.item-qty-unit{font-size:11px;color:#6b675d;text-align:center}
+@media(max-width:640px){
+  .item-grid{grid-template-columns:24px 1fr;gap:8px}
+  .item-grid>.item-qty-cell,.item-grid>.item-date-cell,.item-grid>.item-dash,
+  .item-grid>.missing-qty-input{grid-column:2}
+  .item-grid>.missing-qty-input,.item-qty-cell .missing-qty-input{height:48px!important;font-size:20px!important}
+}

@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V58Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V59Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -553,8 +553,10 @@ function openItems(id){
     const rec=backlogRecordForItem(o.id,it._id);
     const shortage=!!rec||it.shortageOpen===true||(it.missingQty!==''&&it.missingQty!=null);
     const open=!it.received&&shortage;
+    /* V60: a mennyiségmező kap saját cellát, mellette a mértékegység és a
+       rendelt darabszám, hogy egyértelmű legyen, mit kell beírni. */
     const qtyCell=open
-      ? `<input class="missing-qty-input" type="number" min="0" step="any" placeholder="mind" aria-label="Nem kapott mennyiség" value="${esc(it.missingQty||'')}" oninput="updateMissingQty('${o.id}',${i},this.value)">`
+      ? `<div class="item-qty-cell"><input class="missing-qty-input" type="number" min="0" step="any" placeholder="mind" aria-label="Nem kapott mennyiség" value="${esc(it.missingQty||'')}" oninput="updateMissingQty('${o.id}',${i},this.value)"><span class="item-qty-unit">${esc(it.unit||'')} · rendelt: ${esc(it.qty)}</span></div>`
       : (it.received?'<span class="item-dash">—</span>':`<button type="button" class="item-shortage-btn" onclick="openShortage('${o.id}','${esc(it._id)}')">Hiányzik</button>`);
     const dateCell=open
       ? `<div class="item-date-cell"><input type="date" class="item-move-date-input" value="${esc(it.moveTargetDate||rec?.movedToDate||'')}" aria-label="Hátralék napja" onchange="${rec?`rescheduleMovedItem('${o.id}','${esc(it._id)}',this.value)`:`setItemMoveDate('${o.id}','${esc(it._id)}',this.value)`}">${rec?`<button type="button" class="item-undo" title="Áthelyezés visszavonása" onclick="undoBacklogMove('${o.id}','${esc(it._id)}')">Vissza</button>`:`<button type="button" class="item-undo" title="Mégsem hiányzik" onclick="closeShortage('${o.id}','${esc(it._id)}')">Mégsem</button>`}</div>`
