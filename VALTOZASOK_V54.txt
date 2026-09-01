@@ -1,0 +1,124 @@
+FUVARSZERVEZŐ V54 – TÖRZSADAT ÉS VERZIÓJELZÉS
+=============================================
+
+A V54 a V53 szétosztó- és útvonallogikájára épül. Új benne a betöltött
+törzsadat, a telephely-szintű sávbesorolás és a verziószám egységesítése.
+A belépés, a jogosultságok, a Supabase-séma, az import, a hátralékkezelés
+és a fotófeltöltés változatlan.
+
+MÓDOSÍTOTT FÁJLOK
+-----------------
+data.js               a teljes törzsadat a 2026-08-05-i táblázatból
+planner-v44.js        lakhelyek, telephely-alapú sáv, súlypont-védőkorlát,
+                      római számos kerület, verziófelirat
+index.html            V54 felirat, data-app-version horgony, ?v=54.0
+manifest.webmanifest  Fuvarszervező V54 / Fuvar V54
+sw.js                 gyorsítótár neve v54
+TEST_V44/V49/V52/V53  a régi értékeket rögzítő állítások frissítve
+TEST_V54.js           ÚJ: az új szabályok elfogadási tesztje
+
+
+1. TÖRZSADAT
+------------
+Forrás: torzsadatok_2026-08-05.xlsx
+
+   Projektek     60   (ebből 24-nek van címe)
+   Beszállítók  529 telephely, ebből 191 hitelesített
+                    61 cég, 36 megjelölt központi telephellyel
+   Átvevők      116
+   Autók          3
+
+FONTOS SZERKEZETI FELISMERÉS: a táblázat 192 sora nem 192 cég, hanem
+61 cég 192 telephelye. A Szatmárinak például 45 telephelye van országszerte.
+A "Központi telephely: Igen" jelölés a fő telephelyet mutatja – ez az, amit
+a fuvarlevelekben a "kp" utótag jelent.
+
+A régi data.js 346 beszállítója megmarad, hogy a korábbi fuvarok
+hivatkozásai ne szakadjanak el. Amelyik cégnek az új táblázatban is van
+telephelye, annak a régi sorai inaktívvá váltak (46 sor): onnantól a
+hitelesített telephely az érvényes.
+
+
+2. SOFŐRÖK
+----------
+   Márió    Vác        3.5 T dobozos autó
+   Patrik   Kispest    3.5 T dobozos autó
+   Martin   Felcsút    3.5 T plató autó
+
+Patrik lakhelye a V53-ban Pesterzsébet volt, a törzsadat szerint Kispest.
+Az indulási pontokat a motor a SEED_DATA.vehicles listából olvassa, tehát
+a táblázat frissítésével a kód módosítása nélkül átállíthatók.
+
+
+3. SÁV A TELEPHELY CÍMÉBŐL
+--------------------------
+A sávbesorolás korábban a rendelésen szereplő szabad szöveges címből és
+névre égetett listákból dolgozott. A V54 a hitelesített telephely címét
+használja: ha a rendelés beszállítója azonosítható, a törzsadatban tárolt
+cím dönt.
+
+A "kp" utótagú felrakónév a cég központi telephelyére mutat.
+
+Új: a római számmal írt kerület felismerése. A törzsadatban hat cím ilyen
+formátumú ("Budapest XXII. Kerület, Nagytétényi út 49."), és ezeket a V53
+nem tudta besorolni.
+
+
+4. LERAKÓ-SÚLYPONT VÉDŐKORLÁT
+-----------------------------
+A felrakási sorrend a lerakók súlypontja felé zár. A 60 projektből 36-nak
+nincs címe, és épp a legnagyobb forgalmúaknak (Kincsem K6, Le Jardin II,
+Moxy VUC, Metrobeat II, Waterfront City V, Sofitel II).
+
+Ha a nap rendeléseinek kevesebb mint fele geokódolható lerakóra megy, a
+súlypont félrevinné a sorrendet, ezért a motor nem használja, és a
+lakhely felőli sorrendre esik vissza. Ahogy a projektcímek pótlódnak, a
+lánc-optimalizálás magától bekapcsol.
+
+A projekt címe a rendelésről vagy – ha ott nincs – a törzsadatból jön.
+
+
+5. VERZIÓJELZÉS
+---------------
+A V53-ban a fejléc még V52-t írt, mert a felirat négy helyen volt beégetve.
+A V54-ben a böngészőfül, az asztali fejléc és a mobilnézet a motor VERSION
+konstansából kapja a számot (data-app-version horgony). Egy helyen kell
+átírni, és minden felirat követi.
+
+A manifest.webmanifest neve is frissült, tehát a telefonra kitett ikon
+felirata is helyes lesz.
+
+
+ISMERT KORLÁT – EZ MÉG NINCS MEGOLDVA
+-------------------------------------
+A blokkképző a V52-ből örökölt "azonos beszállító egy sofőrhöz" szabály
+szerint CÉGNÉV alapján is összevonja a rendeléseket, nem csak cím szerint.
+
+Amíg egy cégnek egy telephelye volt a rendszerben, ez helyes volt. Most
+viszont kiderült, hogy a Szatmárinak 45, a Fogarasinak 23, a Giengernek 20
+telephelye van. Ha egy napon két különböző Szatmári-telephelyről is van
+felrakás, azok egy blokkba kerülnek, és mindkettő az első telephely sávja
+szerint kap sofőrt.
+
+Ez a viselkedés a V54-ben SZÁNDÉKOSAN VÁLTOZATLAN, mert a módosítás nem
+volt a feladat része. A TEST_V54.js "ISMERT KORLÁT" nevű tesztje rögzíti.
+
+A javításhoz el kell dönteni: a felrakóhely legyen az egyetlen egység
+(akkor a cégnév szerinti összevonás megszűnik), vagy maradjon a cégszintű
+összevonás azzal, hogy egy cégnek egy napon csak egy telephelyéről
+veszünk fel árut.
+
+
+TESZTEK
+-------
+TEST_V54.js   14/14   új szabályok
+TEST_V53.js   15/15   sáv, szálanyag, lánc-optimalizálás
+TEST_V52.js    8/8    kiadás, belépés, munkanap
+TEST_V49.js    7/7    szétosztás és optimalizálás
+TEST_V44.js   11/11   szétosztási és mozgatási regresszió
+TEST_V43/41/37/35/34/33 – mind sikeres
+
+TEST_V44_2.js egy fióknévre vonatkozó állítása elbukik, de ez a hiba az
+eredeti V52 csomagban is megvan, és nem érinti a szétosztást.
+
+Futtatás: node TEST_V54.js

@@ -1,4 +1,4 @@
-/* Fuvarszervező V53
+/* Fuvarszervező V54
    Sáv-alapú szétosztás és lánc-optimalizált felrakási sorrend.
 
    Kemény szabályok:
@@ -23,13 +23,32 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '53';
+  const VERSION = '54';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
+  // Alapértelmezett indulási pontok. A törzsadat (SEED_DATA.vehicles) felülírja
+  // őket, ha ott meg van adva a sofőr lakóhelye.
   const HOMES = {
-    mario: { address: 'Vác, Magyarország', point: [47.7759, 19.1360] },
-    martin: { address: 'Felcsút, Magyarország', point: [47.4550, 18.5860] },
-    patrik: { address: '1201 Budapest, Pesterzsébet', point: [47.4300, 19.1100] }
+    mario: { address: 'Vác', point: [47.7759, 19.1360] },
+    martin: { address: 'Felcsút', point: [47.4550, 18.5860] },
+    patrik: { address: '1191 Budapest, Kispest', point: [47.4569, 19.1400] }
   };
+
+  function applySeedHomesV54() {
+    const seed = (global.SEED_DATA?.vehicles) || [];
+    for (const entry of seed) {
+      const key = nrm(entry?.driverName || '');
+      let slot = null;
+      if (/mario/.test(key)) slot = 'mario';
+      else if (/patrik/.test(key)) slot = 'patrik';
+      else if (/martin/.test(key)) slot = 'martin';
+      if (!slot) continue;
+      if (Array.isArray(entry.homePoint) && finitePoint(entry.homePoint)) {
+        HOMES[slot] = { address: entry.homeAddress || HOMES[slot].address, point: entry.homePoint.slice() };
+      } else if (entry.homeAddress) {
+        HOMES[slot] = { ...HOMES[slot], address: entry.homeAddress };
+      }
+    }
+  }
 
   // 5-6 méteres szálanyag felismerése. A 4 méteres tétel V53-ban már nem szálanyag.
   const V53_LONG_LEN = /(?:^|[^0-9])([56](?:[.,]\d+)?)\s*(?:m|fm|meter|méter|folyómét\w*)(?:es|eres)?(?![a-z0-9])/i;
@@ -201,12 +220,32 @@
     return '';
   }
 
+  const ROMAN_V54 = { i:1, ii:2, iii:3, iv:4, v:5, vi:6, vii:7, viii:8, ix:9, x:10, xi:11, xii:12,
+    xiii:13, xiv:14, xv:15, xvi:16, xvii:17, xviii:18, xix:19, xx:20, xxi:21, xxii:22, xxiii:23 };
+
+  // A törzsadatban a kerület hol irányítószámmal, hol római számmal szerepel
+  // ("Budapest XXII. Kerület, Nagytétényi út 49."), ezért mindkettőt olvassuk.
   function budapestDistrict(address = '') {
-    const match = String(address).match(/\b(1\d{3})\b/);
-    if (!match) return null;
-    const code = match[1];
-    if (code.startsWith('10')) return +code[2] || null;
-    return +code.slice(1, 3) || null;
+    const raw = String(address || '');
+    const match = raw.match(/\b(1\d{3})\b/);
+    if (match) {
+      const code = match[1];
+      const value = code.startsWith('10') ? +code[2] : +code.slice(1, 3);
+      if (value >= 1 && value <= 23) return value;
+    }
+    const text = nrm(raw);
+    if (!/budapest|\bbp\b/.test(text)) return null;
+    const roman = text.match(/\b([ivx]{1,6})\s*ker/);
+    if (roman) {
+      const value = ROMAN_V54[roman[1]];
+      if (value) return value;
+    }
+    const arabic = text.match(/\b(\d{1,2})\s*ker/);
+    if (arabic) {
+      const value = +arabic[1];
+      if (value >= 1 && value <= 23) return value;
+    }
+    return null;
   }
 
   // Márió sávja: észak/kelet Pest. Patrik sávja: közép/dél Pest és Buda.
@@ -216,17 +255,51 @@
   const PATRIK_TOWNS = /\b(dunaharaszti|szigetszentmiklos|tokol|szigethalom|halasztelek|budaors|torokbalint|erd|biatorbagy|diosd|sooskut|budakeszi|gyal|vecses|ullo|dunavarsany|delegyhaza)\b/;
   const MARTIN_TOWNS = /\b(felcsut|bicske|alcsut|alcsutdoboz|csakvar|vertesacsa|etyek|tatabanya|martonvasar|szar|tabajd|vertesboglar)\b/;
 
+  // A beszállító hitelesített telephelyének címe erősebb, mint a rendelésen
+  // szereplő szabad szöveg: egy cégnek több telephelye is lehet, és a sáv a
+  // fizikai címtől függ, nem a cégnévtől.
+  function masterAddressV54(order) {
+    if (typeof state === 'undefined') return '';
+    const list = state.suppliers || [];
+    if (order?.supplierId) {
+      const byId = list.find(item => item.id === order.supplierId);
+      if (byId?.address) return byId.address;
+    }
+    const wanted = canonicalAddress(order?.pickupAddress || '');
+    if (wanted) {
+      const exact = list.find(item => item.active !== false && canonicalAddress(item.address || '') === wanted);
+      if (exact?.address) return exact.address;
+    }
+    const name = nrm(order?.pickupName || '');
+    if (!name) return '';
+    const central = /\bkp\b|kozpont/.test(name);
+    const base = name.replace(/\bkp\b/g, '').replace(/kozpont\w*/g, '').trim();
+    const matches = list.filter(item => {
+      if (item.active === false) return false;
+      const itemName = nrm(item.name || '');
+      return itemName === base || itemName.startsWith(base + ' ') || base.startsWith(itemName + ' ');
+    });
+    if (!matches.length) return '';
+    if (central) {
+      const hq = matches.find(item => item.isCentral);
+      if (hq?.address) return hq.address;
+    }
+    return matches.length === 1 ? (matches[0].address || '') : '';
+  }
+
   function pickupZone(block, profiles) {
     if (block.zone) return block.zone;
     const explicit = explicitZone(block);
     if (explicit) return (block.zone = explicit);
     const first = block.orders[0] || {};
     if (centralOrder(first)) return (block.zone = 'central');
-    const text = nrm(`${first.pickupName || ''} ${first.pickupAddress || ''}`);
+    const masterAddress = masterAddressV54(first);
+    const address = masterAddress || first.pickupAddress || '';
+    const text = nrm(`${first.pickupName || ''} ${address}`);
 
     if (MARTIN_TOWNS.test(text)) return (block.zone = 'martin-corridor');
 
-    const district = budapestDistrict(first.pickupAddress || '');
+    const district = budapestDistrict(address);
     if (district) {
       if (MARIO_DISTRICTS.has(district)) return (block.zone = 'mario-band');
       if (PATRIK_DISTRICTS.has(district)) return (block.zone = 'patrik-band');
@@ -267,6 +340,7 @@
   }
 
   async function vehicleHomeV44(vehicle) {
+    applySeedHomesV54();
     const key = driverKey(vehicle);
     if (HOMES[key]) return HOMES[key].point.slice();
     if (typeof global.vehicleHome === 'function' && global.vehicleHome !== vehicleHomeV44) {
@@ -618,16 +692,33 @@
   // A nap egy lánc: lakhely -> felrakók -> építkezések. A felrakási sorrendet
   // ezért nem önmagában optimalizáljuk: az utolsó felrakónak a lerakókhoz
   // közel kell lennie, hogy a kirakás onnan folytatódhasson.
+  // A projektek egy részének nincs címe a törzsadatban. Ha a nap rendeléseinek
+  // kevesebb mint fele geokódolható, a súlypont félrevinné a sorrendet, ezért
+  // ilyenkor nem használjuk: a motor a lakhely felőli sorrendre esik vissza.
+  const DROP_COVERAGE_MIN_V54 = 0.5;
+
+  function projectAddressV54(order) {
+    if (order?.dropAddress) return order.dropAddress;
+    if (typeof state === 'undefined') return '';
+    const name = nrm(order?.projectName || '');
+    if (!name) return '';
+    const project = (state.projects || []).find(item => nrm(item.name || '') === name)
+      || (state.projects || []).find(item => nrm(item.name || '').startsWith(name));
+    return project?.address || '';
+  }
+
   function dropCentroidV53(vehicleId) {
     const points = [];
     const orders = (state.orders || []).filter(order => order.scheduleDate === selectedDate()
       && (!vehicleId || order.vehicleId === vehicleId));
+    if (!orders.length) return null;
     for (const order of orders) {
-      const point = state.geo?.[canonicalAddress(order.dropAddress || '')]
-        || state.geo?.[order.dropAddress || ''];
+      const address = projectAddressV54(order);
+      const point = state.geo?.[canonicalAddress(address)] || state.geo?.[address];
       if (finitePoint(point)) points.push(point);
     }
     if (!points.length) return null;
+    if (points.length / orders.length < DROP_COVERAGE_MIN_V54) return null;
     const lat = points.reduce((sum, p) => sum + +p[0], 0) / points.length;
     const lon = points.reduce((sum, p) => sum + +p[1], 0) / points.length;
     return [lat, lon];
@@ -743,7 +834,7 @@
         if (Number.isFinite(metres)) fallback[from.index][to.index] = metres / 1000;
       }));
     } catch (error) {
-      console.warn('[V53] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
+      console.warn('[V54] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
     }
     return fallback;
   }
@@ -865,10 +956,10 @@
       await persistOnlineV49();
       if (typeof render === 'function') render();
       const conflictText = result.conflicts.length ? `\nFigyelem: ${result.conflicts.length} felrakóhelyen egymással ütköző fix sofőrjelölés maradt.` : '';
-      alert(`Fuvarok V53 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
+      alert(`Fuvarok V54 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
       return result;
     } catch (error) {
-      console.error('[V53] Szétosztási hiba', error);
+      console.error('[V54] Szétosztási hiba', error);
       alert(`A fuvarok szétosztása közben hiba történt: ${error?.message || error}`);
       return null;
     }
@@ -884,10 +975,10 @@
       if (changed.length) throw new Error('Az optimalizálás sofőrt változtatott.');
       await persistOnlineV49();
       if (typeof render === 'function') render();
-      alert('V53 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
+      alert('V54 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
       return true;
     } catch (error) {
-      console.error('[V53] Optimalizálási hiba', error);
+      console.error('[V54] Optimalizálási hiba', error);
       alert(`Az optimalizálás közben hiba történt: ${error?.message || error}`);
       return false;
     }
@@ -1002,18 +1093,28 @@
     }
   }
 
+  // A verziófelirat egyetlen forrása a VERSION konstans: a böngészőfül, az
+  // asztali fejléc és a mobilnézet innen kapja a számot, így nem csúszhat el.
+  function applyVersionLabelV54() {
+    if (typeof document === 'undefined') return;
+    const label = `Fuvarszervező V${VERSION}`;
+    if (document.title) document.title = label;
+    document.querySelectorAll('[data-app-version]').forEach(node => { node.textContent = label; });
+  }
+
   function bindV44() {
+    applyVersionLabelV54();
     const balanceButton = document.getElementById('balanceBtn');
     const optimizeButton = document.getElementById('optimizeBtn');
     if (balanceButton) {
       balanceButton.onclick = event => { event.preventDefault(); return balanceActionV44(); };
       balanceButton.dataset.algorithmVersion = VERSION;
-      balanceButton.title = 'V53: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
+      balanceButton.title = 'V54: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
     }
     if (optimizeButton) {
       optimizeButton.onclick = event => { event.preventDefault(); return optimizeActionV44(); };
       optimizeButton.dataset.algorithmVersion = VERSION;
-      optimizeButton.title = 'V53: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
+      optimizeButton.title = 'V54: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
     }
     document.getElementById('clearAllMastersBtn')?.addEventListener('click', clearAllMasterDataV44);
     document.getElementById('loadBuiltInMastersBtn')?.addEventListener('click', loadBuiltInMasterDataV44);
@@ -1028,7 +1129,9 @@
       territoryRule: 'Márió=észak/kelet Pest; Patrik=közép/dél Pest és Buda; Martin=szálanyag és nyugati folyosó',
       longMaterialRule: '5-6 méteres szálanyag kizárólag Martinhoz, kiegyenlítés nem mozdítja',
       fixedDriverRule: 'névre rögzített fuvar csak kézzel mozgatható',
-      homeRule: 'Márió=Vác; Patrik=Pesterzsébet; Martin=Felcsút',
+      homeRule: 'Márió=Vác; Patrik=Kispest; Martin=Felcsút (törzsadatból felülírható)',
+      masterDataRule: 'a sáv a hitelesített telephelycímből, nem a cégnévből',
+      dropCoverageRule: 'a lerakó-súlypont csak 50% feletti geokódolt lefedettségnél számít',
       balanceRule: 'felrakószám a fő mérőszám; 2 felrakó eltérés felett a sáv is átléphető',
       duplicateSupplierRule: 'egy felrakóhely egy sofőr',
       routeRule: 'lakhely -> felrakók -> lerakók súlypontja; lerakó nem külön megálló',
@@ -1046,7 +1149,7 @@
   global.clearAllMasterDataV44 = clearAllMasterDataV44;
   global.loadBuiltInMasterDataV44 = loadBuiltInMasterDataV44;
 
-  global.V53Planner = {
+  global.V54Planner = {
     version: VERSION,
     canonicalAddress,
     locationKey,
@@ -1059,6 +1162,10 @@
     distributeOrderSetV44,
     chainOrderV53,
     dropCentroidV53,
+    projectAddressV54,
+    masterAddressV54,
+    applySeedHomesV54,
+    applyVersionLabelV54,
     v53IsLongOrder,
     buildRoutePlansV44,
     buildVehicleRouteV49,
@@ -1072,9 +1179,10 @@
     clearAllMasterDataV44,
     loadBuiltInMasterDataV44
   };
-  global.V50Planner = global.V53Planner;
-  global.V49Planner = global.V53Planner;
-  global.V44Planner = global.V53Planner;
+  global.V53Planner = global.V54Planner;
+  global.V50Planner = global.V54Planner;
+  global.V49Planner = global.V54Planner;
+  global.V44Planner = global.V54Planner;
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(bindV44, 0), { once: true });

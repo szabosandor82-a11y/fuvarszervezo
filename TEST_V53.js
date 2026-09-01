@@ -8,7 +8,7 @@ const GEO = {
   '2310 Szigetszentmiklós, Kereskedő utca 2.': [47.3434, 19.0437],
   'Vác, Magyarország': [47.7759, 19.136],
   'Felcsút, Magyarország': [47.455, 18.586],
-  '1201 Budapest, Pesterzsébet': [47.43, 19.11],
+  '1191 Budapest, Kispest': [47.4569, 19.14],
   '1158 Budapest, Késmárk utca 9.': [47.560, 19.130],   // Szatmári – Márió sávja (XV)
   '1106 Budapest, Maglódi út 14/B': [47.483, 19.145],   // Merkapt – Márió sávja (X)
   '1037 Budapest, Orbán Balázs út 10.': [47.567, 19.040], // Néber – Márió sávja (III)
@@ -67,15 +67,15 @@ function whose(c, orderNo) {
     catch (e) { console.error('HIBA', name, e.message); process.exitCode = 1; }
   }
 
-  await test('A szétosztómotor verziója V53', async () => {
+  await test('A szétosztómotor verziója V54', async () => {
     const src = fs.readFileSync(__dirname + '/planner-v44.js', 'utf8');
-    assert.match(src, /const VERSION = '53'/);
+    assert.match(src, /const VERSION = '54'/);
   });
 
-  await test('Patrik indulási pontja Pesterzsébet, nem a központi raktár', async () => {
+  await test('Patrik indulási pontja Kispest, nem a központi raktár', async () => {
     const c = createContext(); threeDrivers(c);
     assert.deepEqual(await c.V53Planner.vehicleHomeV44(c.state.vehicles[0]), [47.7759, 19.136]);
-    assert.deepEqual(await c.V53Planner.vehicleHomeV44(c.state.vehicles[1]), [47.43, 19.11]);
+    assert.deepEqual(await c.V53Planner.vehicleHomeV44(c.state.vehicles[1]), [47.4569, 19.14]);
     assert.deepEqual(await c.V53Planner.vehicleHomeV44(c.state.vehicles[2]), [47.455, 18.586]);
   });
 

@@ -42,13 +42,13 @@ function ok(name, fn) {
 
 let passed = 0;
 
-passed += ok('A szétosztómotor kiadási verziója V53', () => {
-  assert.match(index, /Fuvarszervező V52/);
+passed += ok('A szétosztómotor kiadási verziója V54', () => {
+  assert.match(index, /Fuvarszervező V54/);
   assert.match(app, /APP_VERSION='V52'/);
-  assert.match(planner, /const VERSION = '53'/);
-  assert.equal(manifest.name, 'Fuvarszervező V52');
-  assert.equal(manifest.short_name, 'Fuvar V52');
-  assert.match(sw, /fuvarszervezo-v52-online-20260828-1/);
+  assert.match(planner, /const VERSION = '54'/);
+  assert.equal(manifest.name, 'Fuvarszervező V54');
+  assert.equal(manifest.short_name, 'Fuvar V54');
+  assert.match(sw, /fuvarszervezo-v54-online-20260828-1/);
   assert.ok(!index.includes('?v=51.0'));
   assert.match(index, /\?v=52\.0/);
 });

@@ -112,10 +112,10 @@ function order(id,name,address,extra={}){return{id,scheduleDate:'2026-08-06',veh
     assert.ok(Math.abs(a.sequence-b.sequence)===1);
   });
 
-  await test('A sofőrök indulási pontja fixen Vác, Pesterzsébet és Felcsút',async()=>{
+  await test('A sofőrök indulási pontja fixen Vác, Kispest és Felcsút',async()=>{
     const c=createContext();c.state.vehicles=[vehicle('m','Márió'),vehicle('p','Patrik'),vehicle('t','Martin')];
     assert.deepEqual(await c.V44Planner.vehicleHomeV44(c.state.vehicles[0]),[47.7759,19.136]);
-    assert.deepEqual(await c.V44Planner.vehicleHomeV44(c.state.vehicles[1]),[47.43,19.11]);
+    assert.deepEqual(await c.V44Planner.vehicleHomeV44(c.state.vehicles[1]),[47.4569,19.14]);
     assert.deepEqual(await c.V44Planner.vehicleHomeV44(c.state.vehicles[2]),[47.455,18.586]);
   });
 
