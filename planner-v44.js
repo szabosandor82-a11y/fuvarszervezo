@@ -1096,14 +1096,14 @@
     const map = maps[vehicleId];
     if (!map) return;
     const vehicle = (state.vehicles || []).find(item => item.id === vehicleId);
-    const home = await vehicleHomeV44(vehicle || {});
+    // A lakhely CSAK rejtett viszonyítási pont a sorrendhez. A térképen nem
+    // jelenik meg, és a vonal az első felrakótól indul.
     let events = (state.routePlans?.[selectedDate()]?.[vehicleId] || []).filter(event => event.type === 'pickup');
     if (!events.length && (state.orders || []).some(order => order.scheduleDate === selectedDate() && order.vehicleId === vehicleId)) {
       const profiles = await buildProfiles((state.orders || []).filter(order => order.scheduleDate === selectedDate()));
       events = (await buildVehicleRouteV49(vehicle, profiles)).filter(event => event.type === 'pickup');
     }
     const points = [];
-    if (finitePoint(home)) points.push(home);
     let pickupIndex = 0;
     for (const event of events) {
       if (!finitePoint(event.point)) continue;
@@ -1111,16 +1111,15 @@
       const isPickup = event.type === 'pickup';
       if (!isPickup) continue;
       const number = ++pickupIndex;
-      const prefix = 'F';
+      const prefix = '';
       const icon = global.L.divIcon({
         className: 'v49-map-marker v49-pickup-marker',
         html: `<span>${prefix}${number}</span>`, iconSize: [32, 32], iconAnchor: [16, 16]
       });
       const marker = global.L.marker(event.point, { icon, title: `Felrakó: ${event.name || ''}` }).addTo(map);
-      marker.bindPopup(`<b>${prefix}${number}. Felrakó</b><br>${escapeHtmlV49(event.name)}<br>${escapeHtmlV49(event.address || '')}`);
+      marker.bindPopup(`<b>${number}. Felrakó</b><br>${escapeHtmlV49(event.name)}<br>${escapeHtmlV49(event.address || '')}`);
       marker.on('click', () => scrollToEventBubbleV49(vehicleId, event.orders || []));
     }
-    if (finitePoint(home)) points.push(home);
     if (points.length === 1) map.setView(points[0], 13);
     if (points.length > 1) {
       let coords = points, route = null;
@@ -1207,12 +1206,28 @@
   function applyVersionLabelV54() {
     if (typeof document === 'undefined') return;
     const label = `Fuvarszervező V${VERSION}`;
-    if (document.title) document.title = label;
+    document.title = label;
     document.querySelectorAll('[data-app-version]').forEach(node => { node.textContent = label; });
+    const brand = document.querySelector('#brandHome h1');
+    if (brand && brand.textContent !== label) brand.textContent = label;
+  }
+
+  // Biztosíték: a belépés, a kijelentkezés és a nézetváltás után más modul is
+  // átírhatja a fejlécet. Az első percben visszaállítjuk, ha elcsúszna.
+  function guardVersionLabelV55() {
+    if (typeof document === 'undefined') return;
+    const label = `Fuvarszervező V${VERSION}`;
+    let ticks = 0;
+    const timer = setInterval(() => {
+      const brand = document.querySelector('#brandHome h1');
+      if (document.title !== label || (brand && brand.textContent !== label)) applyVersionLabelV54();
+      if (++ticks > 60) clearInterval(timer);
+    }, 1000);
   }
 
   function bindV44() {
     applyVersionLabelV54();
+    guardVersionLabelV55();
     ensureExportButtonV55();
     const balanceButton = document.getElementById('balanceBtn');
     const optimizeButton = document.getElementById('optimizeBtn');

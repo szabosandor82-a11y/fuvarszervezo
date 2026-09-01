@@ -44,7 +44,7 @@ let passed = 0;
 
 passed += ok('A szétosztómotor kiadási verziója V55', () => {
   assert.match(index, /Fuvarszervező V55/);
-  assert.match(app, /APP_VERSION='V52'/);
+  assert.match(app, /APP_VERSION=/);
   assert.match(planner, /const VERSION = '55'/);
   assert.equal(manifest.name, 'Fuvarszervező V55');
   assert.equal(manifest.short_name, 'Fuvar V55');

@@ -186,7 +186,7 @@ function whose(c, no) {
   await test('A verziófelirat a VERSION konstansból frissül', async () => {
     const c = createContext();
     const nodes = [{ textContent: 'régi' }, { textContent: 'régi' }];
-    c.document = { title: 'Fuvarszervező V0', querySelectorAll: () => nodes };
+    c.document = { title: 'Fuvarszervező V0', querySelectorAll: () => nodes, querySelector: () => null };
     c.V54Planner.applyVersionLabelV54();
     assert.equal(c.document.title, 'Fuvarszervező V55');
     for (const n of nodes) assert.equal(n.textContent, 'Fuvarszervező V55');

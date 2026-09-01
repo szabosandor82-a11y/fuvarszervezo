@@ -163,3 +163,68 @@ nem érinti a szétosztást:
    TEST_V41_MSG.js  0/7, MSG-parser teszt
 
 Futtatás: node TEST_V55.js
+
+
+9. VERZIÓFELIRAT – JAVÍTÁS A KIADÁS UTÁN
+----------------------------------------
+Hibajelenség: Ctrl+Shift+R után egy pillanatra V55 látszott, majd a fül
+visszaugrott V52-re.
+
+Ok: az auth-v44-2.js a belépés és a kijelentkezés után saját setAppTitle()
+hívással újraírta a fül címét és a fejlécet, beégetett "Fuvarszervező V52"
+szöveggel. Mivel ez a fájl töltődik be utoljára, mindig felülírta a motor
+által beállított helyes feliratot. Az app.js-ben is volt egy
+APP_VERSION='V52' konstans.
+
+Javítás:
+  - auth-v44-2.js: új appVersionLabel() a motor VERSION konstansából olvas;
+    a setAppTitle() paraméter nélkül is hívható, és a data-app-version
+    horgonyokat is frissíti
+  - app.js: az APP_VERSION a motorból számítódik
+  - online-v44-2.js, online-config.js: fejléckommentekből kivéve a verzió
+  - planner-v44.js: guardVersionLabelV55() az első percben másodpercenként
+    ellenőrzi és visszaállítja a feliratot, ha más modul elrontaná
+
+Szándékosan VÁLTOZATLAN: online-v44-2.js SESSION_KEY =
+'fuvarszervezo_online_session_v52'. Ez tárolókulcs, nem felirat;
+átnevezése minden bejelentkezett felhasználót kiléptetne.
+
+Új tesztek (TEST_V55.js):
+  - "Semmilyen fájl nem ír beégetett verziószámot a fejlécbe"
+  - "A belépés utáni címfrissítés is a motor verzióját használja"
+
+
+10. TÉRKÉP – JAVÍTÁS A KIADÁS UTÁN
+----------------------------------
+Hibajelenség: a térkép ugyanúgy nézett ki, mint a korábbi verzióban.
+
+Ok: a drawMap az app.js-ben ÖTSZÖR van újradefiniálva (70., 210., 663.,
+758. és 1212. sor), majd a planner-v33.js és a planner-v44.js globálisan
+felül is írja. Élesben a planner-v44.js drawMapV49 függvénye fut.
+
+A 8. pontban leírt átírás az app.js ELSŐ, halott változatát érintette,
+ezért nem volt hatása. A hozzá írt teszt szintén a halott kódot vizsgálta,
+ezért hamisan zöld volt.
+
+Valós állapot: a drawMapV49 már korábban is csak a felrakókat rajzolta,
+sorszámozott jelölővel. Ami hiányzott:
+  - a vonal a lakhelyről indult és oda tért vissza (points.push(home)
+    a lista elején és végén)
+  - a jelölő "F1", "F2" feliratot kapott
+
+Javítás a drawMapV49-ben:
+  - a lakhely teljesen kikerült a térképi pontok közül; csak rejtett
+    viszonyítási pont marad a sorrend számításához
+  - a vonal az ELSŐ FELRAKÓTÓL indul
+  - a jelölő számozása 1, 2, 3
+
+Az app.js-beli átírás bent maradt, mert ártalmatlan és konzisztens, de
+nem az fut.
+
+Új tesztek (TEST_V55.js):
+  - "A ténylegesen futó térképrajzoló a drawMapV49" – ellenőrzi, hogy a
+    planner-v44 veszi át a drawMap-et, és a függvényben nincs
+    points.push(home) sem dropAddress
+  - "A térkép a felrakókat rajzolja, sorszámmal, a lakhely nélkül" –
+    valódi futtatás Leaflet-csonkkal: két felrakó, két jelölő, a vonal az
+    első felrakótól indul, és Vác nincs rajta

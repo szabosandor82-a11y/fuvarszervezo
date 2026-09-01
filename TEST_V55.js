@@ -4,7 +4,23 @@ const assert = require('assert');
 
 function norm(s = '') { return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[_.,;:()[\]{}\/\\-]+/g, ' ').replace(/\s+/g, ' ').trim() }
 
-function createContext() {
+function makeL(added) {
+  return {
+    divIcon: opts => opts,
+    marker: (point, opts) => {
+      added.push({ point, title: opts?.title || '' });
+      const self = { addTo: () => self, bindPopup: () => self, on: () => self };
+      return self;
+    },
+    polyline: coords => {
+      added.polyline = coords;
+      const self = { addTo: () => self, getBounds: () => ({}) };
+      return self;
+    }
+  };
+}
+
+function createContext(hook) {
   const ctx = { console, Math, Date, Set, Map, Array, Object, String, Number, Boolean, RegExp, JSON, Promise, Error, Infinity, NaN, Intl };
   ctx.globalThis = ctx; ctx.norm = norm; ctx.document = undefined; ctx.window = ctx;
   ctx.setTimeout = fn => { try { fn() } catch (e) {} return 0 }; ctx.clearTimeout = () => {};
@@ -19,6 +35,7 @@ function createContext() {
   ctx.vehicleHome = async () => null;
   ctx.orderGeoProfile = async o => ({ pickup: ctx.state.geo[o.pickupAddress] || null, drop: ctx.state.geo[o.dropAddress] || null });
   ctx.save = () => {}; ctx.alert = () => {}; ctx.render = () => {};
+  if (typeof hook === 'function') hook(ctx);
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(__dirname + '/data.js', 'utf8'), ctx, { filename: 'data.js' });
   ctx.window = undefined;
@@ -162,6 +179,32 @@ function krprWith(target) {
     assert.equal(c.V55Planner.v53IsLongOrder({ items: [{ name: 'Menetes szál M10x6000mm' }] }), true);
   });
 
+  await test('Semmilyen fájl nem ír beégetett verziószámot a fejlécbe', async () => {
+    const files = ['app.js', 'auth-v44-2.js', 'online-v44-2.js', 'online-config.js',
+      'planner-v41.js', 'planner-v43.js', 'planner-v44.js', 'index.html', 'manifest.webmanifest'];
+    const bad = [];
+    for (const file of files) {
+      const text = fs.readFileSync(__dirname + '/' + file, 'utf8');
+      // A tárolókulcsokban maradhat régi verzió (kiléptetés elkerülése végett),
+      // de felhasználónak megjelenő feliratban nem.
+      const lines = text.split('\n');
+      lines.forEach((line, i) => {
+        if (/SESSION_KEY|localStorage|sessionStorage/.test(line)) return;
+        if (/Fuvarszervező\s*V5[0-4]\b/.test(line)) bad.push(`${file}:${i + 1}`);
+        if (/APP_VERSION\s*=\s*['"]V5[0-4]['"]/.test(line)) bad.push(`${file}:${i + 1} APP_VERSION`);
+        if (/setAppTitle\(\s*['"]/.test(line)) bad.push(`${file}:${i + 1} beégetett setAppTitle`);
+      });
+    }
+    assert.equal(bad.length, 0, 'beégetett verziófelirat: ' + bad.join(' ; '));
+  });
+
+  await test('A belépés utáni címfrissítés is a motor verzióját használja', async () => {
+    const auth = fs.readFileSync(__dirname + '/auth-v44-2.js', 'utf8');
+    assert.ok(auth.includes('function appVersionLabel()'), 'hiányzik az appVersionLabel');
+    assert.ok(auth.includes('V55Planner?.version'), 'nem a motorból olvassa a verziót');
+    assert.ok(auth.includes('data-app-version'), 'a belépés után nem frissíti a fejléc horgonyát');
+  });
+
   await test('A törzsadat exportálható data.js formátumban', async () => {
     const c = createContext();
     const result = c.V55Planner.exportMasterDataV55();
@@ -173,14 +216,58 @@ function krprWith(target) {
     assert.equal(json.vehicles.length, 3);
   });
 
-  await test('A térkép a felrakókat rajzolja, nem a lerakókat', async () => {
-    const app = fs.readFileSync(__dirname + '/app.js', 'utf8');
-    const start = app.indexOf('async function drawMap(id){');
-    const body = app.slice(start, app.indexOf('async function vehicleHome', start));
-    assert.ok(body.includes('o.pickupAddress'), 'a drawMap nem a felrakó címét használja');
-    assert.ok(!body.includes('o.dropAddress'), 'a drawMap még mindig a lerakót rajzolja');
-    assert.ok(!body.includes('state.settings.baseAddress'), 'a vonal még a raktárból indul');
-    assert.ok(body.includes('pickup-pin'), 'hiányzik a sorszámozott jelölő');
+  await test('A ténylegesen futó térképrajzoló a drawMapV49', async () => {
+    // Az app.js ötször újradefiniálja a drawMap-et, a planner-v33 és a
+    // planner-v44 pedig globálisan felül is írja. Élesben a drawMapV49 fut,
+    // ezért a tesztnek AZT kell vizsgálnia, nem az app.js-beli változatot.
+    const planner = fs.readFileSync(__dirname + '/planner-v44.js', 'utf8');
+    assert.ok(planner.includes('global.drawMap = drawMapV49'),
+      'a planner-v44 nem veszi át a drawMap-et');
+    const start = planner.indexOf('async function drawMapV49(');
+    assert.ok(start > 0, 'nincs drawMapV49');
+    const body = planner.slice(start, planner.indexOf('\n  }', planner.indexOf('routeStats', start)));
+
+    assert.ok(!/points\.push\(home\)/.test(body),
+      'a vonal még mindig a lakhelyből indul vagy oda tér vissza');
+    assert.ok(!/const home = await vehicleHomeV44/.test(body),
+      'a lakhely még mindig bekerül a térképi pontok közé');
+    assert.ok(/event\.type === 'pickup'/.test(body), 'nem a felrakókat szűri');
+    assert.ok(!/dropAddress/.test(body), 'a lerakó címét is rajzolja');
+  });
+
+  await test('A térkép a felrakókat rajzolja, sorszámmal, a lakhely nélkül', async () => {
+    const added = [];
+    const fakeMap = { setView: () => {}, fitBounds: () => {} };
+    const node = () => ({ style: {}, dataset: {}, classList: { add(){}, remove(){}, toggle(){}, contains: () => false },
+      textContent: '', innerHTML: '', title: '', value: '', appendChild(){}, removeChild(){}, remove(){},
+      setAttribute(){}, removeAttribute(){}, getAttribute: () => null, addEventListener(){}, removeEventListener(){},
+      click(){}, querySelector: () => null, querySelectorAll: () => [], closest: () => null, insertBefore(){} });
+    const c = createContext(ctx => {
+      ctx.maps = { m: fakeMap };
+      ctx.L = makeL(added);
+      ctx.roadRoute = undefined;
+      ctx.document = { title: '', body: node(), head: node(), documentElement: node(),
+        getElementById: node, querySelector: node, querySelectorAll: () => [],
+        createElement: node, createTextNode: node, addEventListener(){}, removeEventListener(){},
+        readyState: 'complete' };
+      ctx.setInterval = () => 0; ctx.clearInterval = () => {};
+    });
+    c.state.vehicles = [{ id: 'm', driverName: 'Márió', type: '3.5 T dobozos autó', active: true }];
+    const A = '1158.Budapest, Késmárk utca 9', B = '1106 Budapest, Maglódi út 14/B';
+    c.state.geo[A] = [47.560, 19.130]; c.state.geo[B] = [47.483, 19.145];
+    c.state.routePlans['2026-09-01'] = { m: [
+      { type: 'pickup', name: 'Szatmári', address: A, point: c.state.geo[A], orders: [] },
+      { type: 'pickup', name: 'Merkapt', address: B, point: c.state.geo[B], orders: [] }
+    ] };
+    await c.V55Planner.drawMapV49('m');
+    assert.equal(added.length, 2, 'nem két jelölő került ki: ' + added.length);
+    assert.deepEqual(added[0].point, c.state.geo[A], 'az első jelölő nem a Szatmári');
+    const line = added.polyline || [];
+    assert.equal(line.length, 2, 'a vonalnak csak a két felrakót kell összekötnie: ' + line.length);
+    assert.deepEqual(line[0], c.state.geo[A], 'a vonal nem az első felrakótól indul');
+    const vac = [47.7759, 19.136];
+    assert.ok(!line.some(p => Math.abs(p[0] - vac[0]) < 0.01 && Math.abs(p[1] - vac[1]) < 0.01),
+      'Vác rajta van a térképi vonalon');
   });
 
   if (!process.exitCode) console.log(`\nV55 elfogadási teszt: ${passed}/${total} sikeres.`);

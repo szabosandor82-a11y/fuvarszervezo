@@ -1,4 +1,4 @@
-/* Fuvarszervező V52 – online többfelhasználós mobil felület.
+/* Fuvarszervező – online többfelhasználós mobil felület.
    A hitelesítés, a fuvarok, átadások és szállítólevél-fotók Supabase-ben tárolódnak. */
 (function (global) {
   'use strict';
@@ -80,10 +80,20 @@
   }
   function orderDriverKey(order) { return global.V44Online?.driverKeyFromOrder(order) || ''; }
 
+  // A verziószám egyetlen forrása a szétosztómotor VERSION konstansa.
+  // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
+  // visszaugrott a régi verzióra.
+  function appVersionLabel() {
+    const version = global.V55Planner?.version || global.V54Planner?.version
+      || global.V53Planner?.version || global.V50Planner?.version || '';
+    return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
+  }
   function setAppTitle(text) {
-    document.title = text;
+    const label = text || appVersionLabel();
+    document.title = label;
     const h1 = document.querySelector('#brandHome h1');
-    if (h1) h1.textContent = text;
+    if (h1) h1.textContent = label;
+    document.querySelectorAll('[data-app-version]').forEach(node => { node.textContent = label; });
   }
   function authMessage(text, isError = true) {
     const message = byId('authMessage');
@@ -141,7 +151,7 @@
     byId('accountBar')?.classList.add('hidden');
     if (byId('authPassword')) byId('authPassword').value = '';
     authMessage(message, true);
-    setAppTitle('Fuvarszervező');
+    setAppTitle();
     if (!global.V44Online?.configured()) authMessage('Az online adatbázis még nincs beállítva. Töltsd ki az online-config.js fájlt a Supabase adataival.', true);
   }
 
@@ -155,7 +165,7 @@
     document.querySelector('nav')?.classList.remove('auth-app-hidden');
     byId('accountBar')?.classList.remove('hidden');
     if (byId('accountIdentity')) byId('accountIdentity').textContent = `${currentProfile?.display_name || currentSession?.user?.email} · ADMIN`;
-    setAppTitle('Fuvarszervező V52');
+    setAppTitle(appVersionLabel());
     if (typeof render === 'function') render();
     await renderAdminOnlinePage();
   }
@@ -168,7 +178,7 @@
     document.querySelector('main')?.classList.add('auth-app-hidden');
     document.querySelector('nav')?.classList.add('auth-app-hidden');
     byId('driverPortal')?.classList.remove('hidden');
-    setAppTitle('Fuvarszervező V52');
+    setAppTitle(appVersionLabel());
     selectedDriverDate = allowedDates().includes(selectedDriverDate) ? selectedDriverDate : allowedDates()[0];
     await renderDriverPortal();
   }
@@ -533,7 +543,7 @@
       await applySession();
       startPolling();
     } catch (error) {
-      console.warn('[V52] Munkamenet visszaállítási hiba', error);
+      console.warn('[Fuvarszervező] Munkamenet visszaállítási hiba', error);
       await global.V44Online.signOut().catch(() => {});
       showLogin('A munkamenet lejárt. Jelentkezz be újra.');
     }
