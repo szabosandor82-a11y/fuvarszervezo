@@ -78,8 +78,8 @@ function whose(c, no) {
     catch (e) { console.error('HIBA', name, e.message); process.exitCode = 1; }
   }
 
-  await test('A motor verziója V57', async () => {
-    assert.match(fs.readFileSync(__dirname + '/planner-v44.js', 'utf8'), /const VERSION = '57'/);
+  await test('A motor verziója V58', async () => {
+    assert.match(fs.readFileSync(__dirname + '/planner-v44.js', 'utf8'), /const VERSION = '58'/);
   });
 
   await test('A törzsadat betöltődik: projektek, telephelyek, átvevők, autók', async () => {
@@ -188,8 +188,8 @@ function whose(c, no) {
     const nodes = [{ textContent: 'régi' }, { textContent: 'régi' }];
     c.document = { title: 'Fuvarszervező V0', querySelectorAll: () => nodes, querySelector: () => null };
     c.V54Planner.applyVersionLabelV54();
-    assert.equal(c.document.title, 'Fuvarszervező V57');
-    for (const n of nodes) assert.equal(n.textContent, 'Fuvarszervező V57');
+    assert.equal(c.document.title, 'Fuvarszervező V58');
+    for (const n of nodes) assert.equal(n.textContent, 'Fuvarszervező V58');
   });
 
   await test('A felületen sehol nem maradt régi verziószám', async () => {

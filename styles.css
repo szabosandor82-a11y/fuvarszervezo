@@ -160,9 +160,12 @@ button.danger-outline:hover{background:#fff0f1}
   nav{overflow-y:auto;overscroll-behavior:contain;padding-bottom:22px}
   nav>.planner-nav-controls{display:grid;gap:7px;margin-top:12px;padding:13px 8px 4px;border-top:1px solid #cfdee7}
   .planner-control-title{color:#7890a3;font-size:9px;font-weight:900;letter-spacing:.12em;margin:0 2px 3px}
-  .planner-nav-date{display:grid;grid-template-columns:34px minmax(0,1fr) 34px;gap:5px}
-  .planner-nav-date button{padding:6px 0;border-radius:8px;background:#d7e5ef;color:#44647d;font-size:21px}
-  .planner-nav-date input{min-width:0;padding:7px 6px;border-radius:8px;border-color:#d4e0e7;background:#fff;color:#465e72;font-size:11px}
+  /* V58: a nyilak keskenyebbek, hogy a dátum kiférjen és olvasható legyen. */
+  .planner-nav-date{display:grid;grid-template-columns:26px minmax(0,1fr) 26px;gap:4px;align-items:stretch}
+  .planner-nav-date button{padding:4px 0;border-radius:8px;background:#d7e5ef;color:#44647d;font-size:17px;line-height:1}
+  .planner-nav-date input{min-width:0;width:100%;padding:7px 4px;border-radius:8px;border-color:#d4e0e7;
+    background:#fff;color:#465e72;font-size:13px;text-align:center;font-variant-numeric:tabular-nums}
+  .planner-nav-date input::-webkit-calendar-picker-indicator{margin-left:2px;padding:0;opacity:.6}
   .planner-nav-controls>button,.planner-nav-controls>.restore-label{width:100%;margin:0;padding:9px 10px;border-radius:9px;background:#f6fafc;border:1px solid #d6e2e9;color:#506b82;text-align:left;font-size:11px;font-weight:800}
   .planner-nav-controls>button:hover,.planner-nav-controls>.restore-label:hover{background:#edf5f8;color:#3e5d75}
   .planner-nav-controls>.planner-balance{background:#b9d5ec;border-color:#aacbe5;color:#315879}
@@ -182,7 +185,7 @@ button.danger-outline:hover{background:#fff0f1}
 @media(max-width:1023px){
   #plannerMobileControlHost>.planner-nav-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-bottom:12px;padding:10px;background:#fffefd;border:1px solid var(--border);border-radius:14px}
   #plannerMobileControlHost .planner-control-title,#plannerMobileControlHost .planner-nav-date,#plannerMobileControlHost .planner-control-divider{grid-column:1/-1}
-  #plannerMobileControlHost .planner-nav-date{display:grid;grid-template-columns:42px minmax(0,1fr) 42px;gap:6px}
+  #plannerMobileControlHost .planner-nav-date{display:grid;grid-template-columns:34px minmax(0,1fr) 34px;gap:6px}
   #plannerMobileControlHost .planner-nav-controls>button,#plannerMobileControlHost .planner-nav-controls>.restore-label{margin:0;padding:9px 8px;font-size:11px;text-align:center;border-radius:9px;background:#edf4f8;color:#527493;border:1px solid #dce8ee}
   #plannerMobileControlHost .planner-nav-controls>.planner-balance{background:#b9d5ec;color:#315879}
   #plannerMobileControlHost .planner-nav-controls>.planner-optimize{background:#bfe0d1;color:#356a55}
@@ -322,3 +325,10 @@ dialog{background:#fffefd;box-shadow:0 28px 76px #6278872e}dialog::backdrop{back
 .bl-undo{flex:none;height:28px;padding:0 9px;font-size:12px;border:.5px solid #e0a4a4;
   background:#fbeaea;color:#8d2b2b;border-radius:6px;cursor:pointer}
 .bl-undo:hover{background:#f6dada}
+
+/* V58 – a tételsor alapból letisztult, a hiány külön nyílik */
+.item-shortage-btn{width:100%;font-size:12px;padding:5px 6px;border:.5px dashed #cfcbbf;
+  background:#fbfaf6;color:#6b675d;border-radius:6px;cursor:pointer}
+.item-shortage-btn:hover{background:#f3f0e8;border-style:solid;color:#8d2b2b;border-color:#e0a4a4}
+.item-grid.shortage{background:#fdf6f3}
+.item-grid.shortage .item-name{color:#8d2b2b}

@@ -69,7 +69,7 @@ function whose(c, orderNo) {
 
   await test('A szétosztómotor verziója V55', async () => {
     const src = fs.readFileSync(__dirname + '/planner-v44.js', 'utf8');
-    assert.match(src, /const VERSION = '57'/);
+    assert.match(src, /const VERSION = '58'/);
   });
 
   await test('Patrik indulási pontja Kispest, nem a központi raktár', async () => {

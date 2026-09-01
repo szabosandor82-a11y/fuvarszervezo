@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V57Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V58Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -545,15 +545,22 @@ function openItems(id){
   $('#itemsTitle').textContent=`${o.orderNo} · tételek`;
   $('#itemMovePanel').innerHTML=`<div class="move-controls"><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Alapértelmezett áthelyezési év"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div><button id="applyMoveDateAll" class="move-items-btn" type="button" title="Minden kipipálatlan tétel áthelyezése a fenti napra">Mindet erre a napra</button></div>`;
   $('#itemsBody').innerHTML=`<div class="item-grid-head"><span></span><span>Tétel</span><span>Hiányzik</span><span>Hátralék napja</span></div>`+(o.items||[]).map((it,i)=>{
+    /* V58: az alapállapot a letisztult sor. A pipa azt jelenti, hogy a tételt
+       HIÁNYTALANUL megkapta – nem kell minden sort végigpipálni ahhoz, hogy
+       használható legyen a nézet. A hiányt külön kell jelezni: a "Hiányzik"
+       gombbal nyílnak meg a mennyiség- és dátummezők. Ha egy tétel már
+       áthelyezésre került, a mezők maguktól látszanak. */
     const rec=backlogRecordForItem(o.id,it._id);
-    const dateCell=it.received
-      ? '<span class="item-dash">—</span>'
-      : `<div class="item-date-cell"><input type="date" class="item-move-date-input" value="${esc(it.moveTargetDate||rec?.movedToDate||'')}" aria-label="Hátralék napja" onchange="${rec?`rescheduleMovedItem('${o.id}','${esc(it._id)}',this.value)`:`setItemMoveDate('${o.id}','${esc(it._id)}',this.value)`}">${rec?`<button type="button" class="item-undo" title="Áthelyezés visszavonása" onclick="undoBacklogMove('${o.id}','${esc(it._id)}')">Vissza</button>`:''}</div>`;
-    const qtyCell=it.received
-      ? '<span class="item-dash">—</span>'
-      : `<input class="missing-qty-input" type="number" min="0" step="any" placeholder="mind" aria-label="Nem kapott mennyiség" value="${esc(it.missingQty||'')}" oninput="updateMissingQty('${o.id}',${i},this.value)">`;
-    return `<div class="item-row item-grid ${it.received?'done':''}">
-      <input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${o.id}',${i},this.checked)" aria-label="Átvéve">
+    const shortage=!!rec||it.shortageOpen===true||(it.missingQty!==''&&it.missingQty!=null);
+    const open=!it.received&&shortage;
+    const qtyCell=open
+      ? `<input class="missing-qty-input" type="number" min="0" step="any" placeholder="mind" aria-label="Nem kapott mennyiség" value="${esc(it.missingQty||'')}" oninput="updateMissingQty('${o.id}',${i},this.value)">`
+      : (it.received?'<span class="item-dash">—</span>':`<button type="button" class="item-shortage-btn" onclick="openShortage('${o.id}','${esc(it._id)}')">Hiányzik</button>`);
+    const dateCell=open
+      ? `<div class="item-date-cell"><input type="date" class="item-move-date-input" value="${esc(it.moveTargetDate||rec?.movedToDate||'')}" aria-label="Hátralék napja" onchange="${rec?`rescheduleMovedItem('${o.id}','${esc(it._id)}',this.value)`:`setItemMoveDate('${o.id}','${esc(it._id)}',this.value)`}">${rec?`<button type="button" class="item-undo" title="Áthelyezés visszavonása" onclick="undoBacklogMove('${o.id}','${esc(it._id)}')">Vissza</button>`:`<button type="button" class="item-undo" title="Mégsem hiányzik" onclick="closeShortage('${o.id}','${esc(it._id)}')">Mégsem</button>`}</div>`
+      : '<span class="item-dash">—</span>';
+    return `<div class="item-row item-grid ${it.received?'done':''} ${open?'shortage':''}">
+      <input type="checkbox" ${it.received?'checked':''} title="Hiánytalanul megkapta" onchange="toggleItem('${o.id}',${i},this.checked)" aria-label="Hiánytalanul megkapta">
       <div class="item-main">
         <b class="item-name">${esc(it.name)}</b>
         <div class="item-sub">${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)}${it.longMaterial?' · hosszú szál':''}${rec?` · <span class="item-moved">áthelyezve ${esc(rec.movedToDate)}</span>`:''}</div>
@@ -575,6 +582,20 @@ window.openItems=openItems;
      - a "Vissza" gomb visszateszi az eredeti napra és törli a hátralékot
    A Hátralék fülön ugyanez a két művelet elérhető.
 */
+/* V58 – a hiány jelzésének nyitása és visszavonása egy tételen. */
+window.openShortage = (orderId, itemId) => {
+  const o = state.orders.find(x => x.id === orderId); if (!o) return;
+  const it = (o.items || []).find(x => String(x._id) === String(itemId)); if (!it) return;
+  it.shortageOpen = true; it.received = false;
+  save(false); openItems(orderId);
+};
+window.closeShortage = (orderId, itemId) => {
+  const o = state.orders.find(x => x.id === orderId); if (!o) return;
+  const it = (o.items || []).find(x => String(x._id) === String(itemId)); if (!it) return;
+  it.shortageOpen = false; it.missingQty = ''; it.moveTargetDate = '';
+  save(false); openItems(orderId);
+};
+
 function backlogRecordForItem(orderId, itemId) {
   return (state.backlog || []).find(b => b.targetOrderId === orderId && String(b.itemId) === String(itemId)) || null;
 }

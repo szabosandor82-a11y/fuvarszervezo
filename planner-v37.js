@@ -705,7 +705,7 @@
         // útvonalterv épül újra a kézi sequence értékekből, és csak utána
         // rajzolunk. Fordítva a rajzoló üres tervet találna, és
         // újraoptimalizálná az útvonalat, felülírva a te sorrendedet.
-        const buildManual = global.V57Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
+        const buildManual = global.V58Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
         setTimeout(async () => {
           if (typeof buildManual === 'function') {
             try {
