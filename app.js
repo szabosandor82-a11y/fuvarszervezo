@@ -53,10 +53,51 @@ function itemNoteValue(it={}){return String(it.itemNote??it.itemRemark??it.tetel
 function bubbles(list){if(!list.length)return'<div class="notice">Nincs fuvar.</div>';return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')} · ${esc(o.pickupAddress||'')}</p><p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs megadva')}</p>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('')}
 window.renameDriver=(id,name)=>{const v=state.vehicles.find(x=>x.id===id);if(v){v.driverName=name.trim()||v.driverName;save()}};
 function initSortables(){activeVehicles().forEach(v=>{const el=$('#route-'+v.id);if(!el)return;new Sortable(el,{group:'vehicles',animation:180,handle:'.drag',onEnd:e=>{const o=state.orders.find(x=>x.id===e.item.dataset.id);if(o)o.vehicleId=e.to.id.replace('route-','');activeVehicles().forEach(x=>{$$('#route-'+x.id+' .bubble').forEach((n,i)=>{const r=state.orders.find(o=>o.id===n.dataset.id);if(r)r.sequence=i+1})});save()}})})}
-async function geo(addr){if(!addr)return null;if(state.geo[addr])return state.geo[addr];try{const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=hu&q='+encodeURIComponent(addr));const j=await r.json();if(j[0]){state.geo[addr]=[+j[0].lat,+j[0].lon];save(false);await new Promise(r=>setTimeout(r,1050));return state.geo[addr]}}catch{}return null}
+function seedPoint(addr){
+  if(!addr)return null;
+  const want=norm(addr);
+  const seed=window.SEED_DATA||{};
+  for(const list of [seed.suppliers||[],seed.projects||[]]){
+    for(const row of list){ if(row.point&&row.address&&norm(row.address)===want) return row.point.slice(); }
+  }
+  return null;
+}
+async function geo(addr){if(!addr)return null;if(state.geo[addr])return state.geo[addr];
+  const seeded=seedPoint(addr);
+  if(seeded){state.geo[addr]=seeded;return seeded;}try{const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=hu&q='+encodeURIComponent(addr));const j=await r.json();if(j[0]){state.geo[addr]=[+j[0].lat,+j[0].lon];save(false);await new Promise(r=>setTimeout(r,1050));return state.geo[addr]}}catch{}return null}
 function initMaps(){activeVehicles().forEach(v=>{if(maps[v.id])maps[v.id].remove();maps[v.id]=L.map('map-'+v.id).setView([47.45,19.04],9);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(maps[v.id]);drawMap(v.id)})}
 async function roadRoute(pts){if(pts.length<2)return null;try{const c=pts.map(p=>`${p[1]},${p[0]}`).join(';');const r=await fetch(`https://router.project-osrm.org/route/v1/driving/${c}?overview=full&geometries=geojson`);const j=await r.json();return j.routes?.[0]||null}catch{return null}}
-async function drawMap(id){const map=maps[id],pts=[];const base=await geo(state.settings.baseAddress);if(base)pts.push(base);for(const o of dayOrders(id).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999))){const p=await geo(o.dropAddress);if(p){pts.push(p);L.marker(p).addTo(map).bindPopup(`<b>${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</b><br>${esc(o.dropAddress||'')}${o.recipientName?`<br>Átvevő: ${esc(o.recipientName)}`:''}${o.note?`<br>Megjegyzés: ${esc(o.note)}`:''}${itemNoteSummary(o).replaceAll('<p class="item-note-preview">','<br>').replaceAll('</p>','')}`)}}if(pts.length){const rr=await roadRoute(pts);const coords=rr?rr.geometry.coordinates.map(c=>[c[1],c[0]]):pts;const line=L.polyline(coords,{weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[20,20]})}}
+async function drawMap(id){
+  /* V55: a térkép a FELRAKÓKAT mutatja, abban a sorrendben, ahogy az
+     optimalizálás kiszámolta. A lakhely csak rejtett viszonyítási pont a
+     sorrendhez, nem kerül a térképre, és a vonal az első felrakótól indul.
+     Korábban a lerakókat rajzolta a felrakók sorrendjében, ezért nem stimmelt. */
+  const map=maps[id];if(!map)return;
+  const pts=[],seen=new Set();
+  const list=dayOrders(id).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999));
+  for(const o of list){
+    const addr=o.pickupAddress||'';
+    if(!addr)continue;
+    const key=norm(addr);
+    if(seen.has(key))continue;
+    const p=await geo(addr);
+    if(!p)continue;
+    seen.add(key);
+    pts.push(p);
+    const n=pts.length;
+    const icon=L.divIcon({className:'pickup-pin',html:`<span>${n}</span>`,iconSize:[26,26],iconAnchor:[13,13]});
+    L.marker(p,{icon}).addTo(map).bindPopup(
+      `<b>${n}. ${esc(o.pickupName||'Felrakó')}</b><br>${esc(addr)}`+
+      (o.pickupNote?`<br>${esc(o.pickupNote)}`:'')+
+      `<br><small>${esc(o.orderNo||'')} · ${esc(o.projectName||'')}</small>`);
+  }
+  if(!pts.length)return;
+  if(pts.length===1){map.setView(pts[0],13);return}
+  const rr=await roadRoute(pts);
+  const coords=rr?rr.geometry.coordinates.map(c=>[c[1],c[0]]):pts;
+  const line=L.polyline(coords,{weight:4}).addTo(map);
+  map.fitBounds(line.getBounds(),{padding:[24,24]});
+}
 async function vehicleHome(v){const known={vac:'Vác',kispest:'1191 Budapest, Kispest',felcsut:'Felcsút'};return await geo(known[norm(v.homeCity)]||v.homeCity||state.settings.baseAddress)||await geo(state.settings.baseAddress)}
 function dist(a,b){if(!a||!b)return 999;const R=6371,r=Math.PI/180,d1=(b[0]-a[0])*r,d2=(b[1]-a[1])*r,x=Math.sin(d1/2)**2+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(d2/2)**2;return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
 async function balance(){const active=activeVehicles();if(!active.length)return alert('Nincs aktív jármű.');const orders=state.orders.filter(o=>o.scheduleDate===selectedDate()),longCars=active.filter(canCarryLong);for(const o of orders){if(o.longMaterialReason){const target=longCars.find(v=>norm(v.driverName).includes('martin'))||longCars[0];if(target)o.vehicleId=target.id}}

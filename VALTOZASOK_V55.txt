@@ -1,0 +1,165 @@
+FUVARSZERVEZŐ V55 – IMPORT, TÉRKÉP, TÖRZSADAT
+=============================================
+
+A V55 a V54-re épül. A szétosztás és az útvonaltervezés logikája változatlan,
+kivéve a PRPR-t. Új benne a hasábos bizonylatok helyes olvasása, a javított
+térkép, az előre geokódolt törzsadat és a törzsadat-export.
+
+
+MÓDOSÍTOTT FÁJLOK
+-----------------
+planner-v41.js   hasábos raktárközi olvasás, beszállító-illesztés
+planner-v44.js   PRPR kiosztás, szálanyag-regex, export gomb, verziófelirat
+app.js           térkép: felrakók sorszámozva, előre geokódolt címek
+data.js          19 elcsúszott sor inaktiválva, koordináták beépítve
+styles.css       a sorszámozott térképjelölő stílusa
+index.html       V55 felirat, ?v=55.0
+manifest.webmanifest / sw.js   verziószám
+TEST_V52/V53/V54  verzióállítások frissítve
+TEST_V55.js      ÚJ: elfogadási teszt a valós bizonylatokkal
+testdata/        ÚJ: a két valós bizonylat szövege teszthez
+
+
+1. HASÁBOS RAKTÁRKÖZI BIZONYLATOK
+---------------------------------
+A Forrás és a Cél raktár a bizonylaton egymás mellett, két oszlopban áll.
+A program soronként olvasta, ezért összekeverte őket:
+
+  KRPR – a bal hasábban álló "Stand 98 Kft. Új Központi Raktár" szó szerint
+         egyezik egy törzsadatbeli projektnévvel, ezért 108 pontot kapott, és
+         MINDEN raktárközinél megnyerte a lerakó helyét. Nyolc különböző cél
+         raktárral tesztelve nyolcszor "Központi raktár" került a lerakóba.
+
+  PRPR – a forrás és a cél felcserélődött. A valós bizonylaton a Le Jardin
+         lett a lerakó és a Cosmo a felrakó, pontosan fordítva.
+
+Javítás: a vágás a "Cél raktár" felirat vízszintes pozíciója mentén történik.
+A PDF-olvasó mostantól megőrzi az elemek x koordinátáját (pdf.rows), és
+elsősorban azt használjuk; ha nem áll rendelkezésre, a szóközös elrendezésre
+esünk vissza. A lerakó KIZÁRÓLAG a cél hasábból jöhet – nem esünk vissza a
+teljes dokumentumra, mert épp az okozta a hibát.
+
+KRPR-nél a lerakó soha nem lehet a központi raktár, hiszen az a felrakó.
+Ha a cél nem azonosítható, a tétel ellenőrzendő lesz, nem kap rossz értéket.
+
+PRPR-nél a szerepek "warehouse" helyett "project" jelölést kapnak, így a
+projektazonosító és az alapértelmezett átvevő is bekerül.
+
+
+2. CÉLRAKTÁR-NÉV ILLESZTÉSE
+---------------------------
+A SERPA sorszámmal írja ("Moxy_Bérlemény_2026098"), a törzsadat többes
+számmal és előtaggal ("Budapest_Moxy_bérlemények"). A záró azonosítót
+levágjuk, a többes számot egyeztetjük, és a címmel rendelkező változat
+élvez elsőbbséget a TERV párjával szemben.
+
+Így a "Le Jardin" a Budapest_LeJardin_II_felépítmény sorra mutat
+(1134 Budapest, Rozsnyai 14-18.), nem a cím nélküli TERV változatra.
+
+
+3. BESZÁLLÍTÓ-ILLESZTÉS
+-----------------------
+Korábban a törzsadatbeli név MINDEN érdemi szavának szerepelnie kellett a
+levélben. A levelekben viszont rövidítve szerepel a cég, ezért tízből négy
+elbukott:
+
+  Gienger kp   ->  Gienger Hungária Kft      nem találta
+  Lambda kp    ->  Lambda Systeme Kft.       nem találta
+  Fogarasi kp  ->  FOGARASI ÉP-GÉPÉSZ Kft.   nem találta
+  Ezerker kp   ->  EZER-KER Kereskedelmi     nem találta
+
+Mostantól a vezető szó egyezése is elég, ha az legalább öt karakter.
+A "kp" utótag a cég központi telephelyére mutat (isCentral).
+
+Ha csak a vezető szó egyezik és két KÜLÖNBÖZŐ cég is szóba jön, a program
+nem találgat: ellenőrzendőnek jelöli az előnézetben.
+
+
+4. TÖRZSADAT
+------------
+19 sor inaktívvá vált. Ezekben a NÉV mezőben cím állt, a CÍM mezőben pedig
+egy másik cím – például:
+
+   name: 1117 Budapest, Hengermalom út 47/A
+   cím : 6000 Kecskemét, Csillag utca 3
+
+Ezek okozták, hogy a felrakó nevébe cím került, ráadásul rossz címmel.
+
+Az aktív telephelyek száma 483-ról 464-re csökkent. A sorok nem tűntek el,
+csak inaktívak, hogy a korábbi fuvarok hivatkozásai megmaradjanak.
+
+Előre geokódolás: 434 telephely és mind a 24 címmel bíró projekt kapott
+koordinátát a data.js-ben. A térkép így azonnal rajzol. A maradék 95 távoli
+vidéki címre marad a hálózati lekérdezés.
+
+
+5. TÉRKÉP
+---------
+Korábban a LERAKÓKAT rajzolta, a FELRAKÓK sorrendjében, és a vonalat mindig
+a szigetszentmiklósi raktárból indította. Ez egy olyan útvonalat mutatott,
+ami sehol nem létezett.
+
+Mostantól:
+  - csak a felrakók látszanak, felrakási sorszámmal (1, 2, 3)
+  - a vonal az ELSŐ FELRAKÓTÓL indul
+  - a lakhely rejtett viszonyítási pont marad a sorrendhez, nem kerül ki
+  - a raktár csak akkor jelenik meg, ha aznap tényleg felrakóhely
+
+Példa: Márió Vácról indul, felrakói Szatmári, Merkapt, Ezerker – a térkép
+első pontja a Szatmári.
+
+
+6. PRPR KIOSZTÁS
+----------------
+Projektről projektre szállításnál a felrakó ÉS a lerakó is ismert cím,
+ezért nem a sáv dönt, hanem a teljes lánc hossza sofőrönként. Ha a legjobb
+és a második közti különbség 5 km alatt marad, a kisebb terhelésű sofőr
+kapja.
+
+A valós bizonylaton (Le Jardin -> Cosmo) ez Patrikot adja: Kispestről
+12,6 km, míg Vácról 29,1. A puszta sávbesorolás Márióhoz vitte volna.
+
+A szálanyag-szabály ezt is felülírja: 5-6 méteres anyag Martiné.
+
+
+7. SZÁLANYAG-FELISMERÉS
+-----------------------
+Az "M10x6000mm" alak eddig kimaradt, mert a szám előtt betű állt.
+A 3000 mm-es menetesszár helyesen NEM szálanyag.
+
+
+8. TÖRZSADAT-EXPORT
+-------------------
+Új gomb: "Törzsadat mentése fájlba". A jelenlegi törzsadatot data.js
+formátumban tölti le, a kézi javításokkal együtt, és a fejlécben felsorolja
+a kézzel szerkesztett rekordokat.
+
+A generálás zárt környezetben történik, ezért az online szerkesztések csak
+így jutnak el a következő verzióba. A beolvasó viszont már most is védi a
+kézi javítást: a seed csak üres mezőt tölt ki, és nem nyúl a manualOverride
+vagy manualEditedAt jelöléssel ellátott rekordhoz.
+
+
+ISMERT KORLÁT – VÁLTOZATLAN
+---------------------------
+A blokkképző továbbra is CÉGNÉV alapján is összevon. Ha egy napon két
+különböző Szatmári-telephelyről van felrakás, egy blokkba kerülnek, és az
+első telephely sávja szerint kapnak sofőrt. A TEST_V54.js "ISMERT KORLÁT"
+tesztje rögzíti. A javításhoz dönteni kell: a fizikai telephely legyen az
+egyetlen egység, vagy maradjon a cégszintű összevonás.
+
+
+TESZTEK
+-------
+TEST_V55.js   13/13   hasábos bizonylatok, beszállítók, térkép, export, PRPR
+TEST_V54.js   14/14   törzsadat, telephely-sávok, védőkorlát
+TEST_V53.js   15/15   sáv, szálanyag, lánc-optimalizálás
+TEST_V52.js    8/8    kiadás, belépés, munkanap
+TEST_V49/44/43/41/37/35/34/33 – mind sikeres
+
+Két teszt elbukik, de MINDKETTŐ az eredeti V52 csomagban is elbukik, és
+nem érinti a szétosztást:
+   TEST_V44_2.js    egy fióknévre vonatkozó állítás
+   TEST_V41_MSG.js  0/7, MSG-parser teszt
+
+Futtatás: node TEST_V55.js

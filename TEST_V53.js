@@ -67,9 +67,9 @@ function whose(c, orderNo) {
     catch (e) { console.error('HIBA', name, e.message); process.exitCode = 1; }
   }
 
-  await test('A szétosztómotor verziója V54', async () => {
+  await test('A szétosztómotor verziója V55', async () => {
     const src = fs.readFileSync(__dirname + '/planner-v44.js', 'utf8');
-    assert.match(src, /const VERSION = '54'/);
+    assert.match(src, /const VERSION = '55'/);
   });
 
   await test('Patrik indulási pontja Kispest, nem a központi raktár', async () => {

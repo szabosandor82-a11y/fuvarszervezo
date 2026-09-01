@@ -1,4 +1,4 @@
-/* Fuvarszervező V54
+/* Fuvarszervező V55
    Sáv-alapú szétosztás és lánc-optimalizált felrakási sorrend.
 
    Kemény szabályok:
@@ -23,7 +23,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '54';
+  const VERSION = '55';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   // Alapértelmezett indulási pontok. A törzsadat (SEED_DATA.vehicles) felülírja
   // őket, ha ott meg van adva a sofőr lakóhelye.
@@ -52,7 +52,7 @@
 
   // 5-6 méteres szálanyag felismerése. A 4 méteres tétel V53-ban már nem szálanyag.
   const V53_LONG_LEN = /(?:^|[^0-9])([56](?:[.,]\d+)?)\s*(?:m|fm|meter|méter|folyómét\w*)(?:es|eres)?(?![a-z0-9])/i;
-  const V53_LONG_MM = /\b(5000|5500|6000)\s*(?:mm)?\b/i;
+  const V53_LONG_MM = /(?:^|[^0-9])(5000|5500|6000)\s*(?:mm)?(?![0-9])/i;
   const V53_LONG_WORD = /(sz[aá]las|hossz[uú]\s*anyag)/i;
   const V53_LONG_OBJECT = /(cs[oő]|r[uú]d|profil|s[ií]n|l[eé]gcsatorna|spir[aá]l|ac[eé]l|kpe|pvc|r[eé]z|menetes\s*sz[aá]l|z[aá]rtszelv[eé]ny|k[aá]beltálca|v[aá]zsín)/i;
 
@@ -287,6 +287,44 @@
     return matches.length === 1 ? (matches[0].address || '') : '';
   }
 
+  /*
+    Projektről projektre szállítás (PRPR).
+    Itt a felrakó ÉS a lerakó is ismert cím, ezért nem a sáv dönt, hanem az,
+    kinek illik bele a napjába a kettő együtt. Ha a legjobb és a második
+    közti különbség a küszöb alatt marad, az igazságosság dönt.
+  */
+  const PRPR_TIE_KM_V55 = 5;
+
+  function isProjectTransferBlock(block) {
+    return (block.orders || []).some(order => String(order.orderType || '') === 'PRPR');
+  }
+
+  function transferChainCost(driverKeyName, block, profiles) {
+    const home = HOMES[driverKeyName]?.point;
+    const pickupPoint = blockPoint(block, profiles);
+    if (!finitePoint(home) || !finitePoint(pickupPoint)) return null;
+    const first = block.orders[0] || {};
+    const dropAddress = first.dropAddress || '';
+    const dropPoint = state.geo?.[canonicalAddress(dropAddress)] || state.geo?.[dropAddress] || null;
+    const toPickup = km(home, pickupPoint);
+    if (!finitePoint(dropPoint)) return toPickup;
+    return toPickup + km(pickupPoint, dropPoint);
+  }
+
+  function transferDriver(block, drivers, assignedBlocks, profiles) {
+    const scored = drivers.map(vehicle => {
+      const key = driverKey(vehicle);
+      const cost = transferChainCost(key, block, profiles);
+      return { vehicle, cost: cost === null ? Infinity : cost, load: burden(assignedBlocks[vehicle.id]) };
+    }).filter(item => Number.isFinite(item.cost)).sort((a, b) => a.cost - b.cost);
+    if (!scored.length) return null;
+    const best = scored[0];
+    const tied = scored.filter(item => item.cost - best.cost <= PRPR_TIE_KM_V55);
+    if (tied.length === 1) return { vehicle: best.vehicle, reason: `PRPR lánc: ${best.cost.toFixed(0)} km` };
+    tied.sort((a, b) => a.load - b.load || a.cost - b.cost);
+    return { vehicle: tied[0].vehicle, reason: `PRPR lánc holtverseny (${PRPR_TIE_KM_V55} km-en belül), terhelés dönt` };
+  }
+
   function pickupZone(block, profiles) {
     if (block.zone) return block.zone;
     const explicit = explicitZone(block);
@@ -419,7 +457,7 @@
 
   function assignmentReason(block, vehicle, reason) {
     const key = driverKey(vehicle);
-    const zoneLabels = { pest: 'Pest', buda: 'Buda', central: 'Központ', neutral: 'Semleges', 'martin-corridor': 'Martin-folyosó' };
+    const zoneLabels = { 'mario-band': 'észak/kelet Pest', 'patrik-band': 'közép/dél Pest és Buda', 'martin-corridor': 'nyugati folyosó', central: 'központi raktár', neutral: 'semleges' };
     const text = `${reason} · terület: ${zoneLabels[block.zone] || block.zone} · sofőr: ${vehicle.driverName}`;
     block.assignmentReason = text;
     for (const order of block.orders) {
@@ -608,6 +646,13 @@
       if (hasLongMaterial(block) && martin) {
         assignWholeBlock(block, martin, assignedBlocks, assignedOrders, '5-6 méteres szálanyag, kötött');
         continue;
+      }
+      if (isProjectTransferBlock(block) && block.movable) {
+        const choice = transferDriver(block, drivers, assignedBlocks, profiles);
+        if (choice?.vehicle) {
+          assignWholeBlock(block, choice.vehicle, assignedBlocks, assignedOrders, choice.reason);
+          continue;
+        }
       }
       if (block.zone === 'mario-band' && mario) {
         assignWholeBlock(block, mario, assignedBlocks, assignedOrders, 'észak/kelet pesti sáv');
@@ -834,7 +879,7 @@
         if (Number.isFinite(metres)) fallback[from.index][to.index] = metres / 1000;
       }));
     } catch (error) {
-      console.warn('[V54] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
+      console.warn('[V55] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
     }
     return fallback;
   }
@@ -956,10 +1001,10 @@
       await persistOnlineV49();
       if (typeof render === 'function') render();
       const conflictText = result.conflicts.length ? `\nFigyelem: ${result.conflicts.length} felrakóhelyen egymással ütköző fix sofőrjelölés maradt.` : '';
-      alert(`Fuvarok V54 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
+      alert(`Fuvarok V55 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
       return result;
     } catch (error) {
-      console.error('[V54] Szétosztási hiba', error);
+      console.error('[V55] Szétosztási hiba', error);
       alert(`A fuvarok szétosztása közben hiba történt: ${error?.message || error}`);
       return null;
     }
@@ -975,10 +1020,10 @@
       if (changed.length) throw new Error('Az optimalizálás sofőrt változtatott.');
       await persistOnlineV49();
       if (typeof render === 'function') render();
-      alert('V54 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
+      alert('V55 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
       return true;
     } catch (error) {
-      console.error('[V54] Optimalizálási hiba', error);
+      console.error('[V55] Optimalizálási hiba', error);
       alert(`Az optimalizálás közben hiba történt: ${error?.message || error}`);
       return false;
     }
@@ -1095,6 +1140,70 @@
 
   // A verziófelirat egyetlen forrása a VERSION konstans: a böngészőfül, az
   // asztali fejléc és a mobilnézet innen kapja a számot, így nem csúszhat el.
+  /*
+    Törzsadat mentése fájlba.
+    A generálás zárt környezetben történik, ezért az online szerkesztéseid
+    csak úgy jutnak el a következő verzióba, ha exportálod őket. A kimenet
+    pontosan a data.js formátuma, tehát közvetlenül felhasználható.
+  */
+  function exportMasterDataV55() {
+    if (typeof state === 'undefined') return null;
+    const strip = row => {
+      const copy = { ...row };
+      delete copy.id; delete copy.defaultRecipientId;
+      return copy;
+    };
+    const payload = {
+      projects: (state.projects || []).map(strip),
+      suppliers: (state.suppliers || []).map(strip),
+      recipients: (state.recipients || []).map(strip),
+      vehicles: (global.SEED_DATA?.vehicles || []).slice()
+    };
+    const edited = [...(state.projects || []), ...(state.suppliers || [])]
+      .filter(row => row.manualOverride || row.manualEditedAt)
+      .map(row => `${row.name} → ${row.address || '(nincs cím)'}`);
+    const header = `/* Fuvarszervező törzsadat export · ${new Date().toISOString().slice(0, 10)}\n`
+      + `   projektek: ${payload.projects.length}, telephelyek: ${payload.suppliers.length}, `
+      + `átvevők: ${payload.recipients.length}\n`
+      + (edited.length ? `   kézzel szerkesztett (${edited.length}):\n${edited.map(line => '     - ' + line).join('\n')}\n` : '   kézzel szerkesztett: nincs\n')
+      + `*/\n`;
+    const text = header + 'window.SEED_DATA = ' + JSON.stringify(payload) + ';\n';
+    if (typeof document !== 'undefined' && typeof Blob !== 'undefined' && global.URL?.createObjectURL) {
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/javascript;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `data-${new Date().toISOString().slice(0, 10)}.js`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
+    return { text, editedCount: edited.length };
+  }
+
+  function ensureExportButtonV55() {
+    if (typeof document === 'undefined') return;
+    if (document.getElementById('v55ExportMaster')) return;
+    const host = document.getElementById('masterTools')
+      || document.getElementById('mastersView')
+      || document.querySelector('[data-view="masters"]')
+      || document.getElementById('settingsView');
+    if (!host) return;
+    const button = document.createElement('button');
+    button.id = 'v55ExportMaster';
+    button.type = 'button';
+    button.className = 'ghost';
+    button.textContent = 'Törzsadat mentése fájlba';
+    button.title = 'A jelenlegi törzsadat letöltése data.js formátumban, a kézi javításokkal együtt';
+    button.addEventListener('click', () => {
+      const result = exportMasterDataV55();
+      if (result && typeof alert === 'function') {
+        alert(`Törzsadat exportálva.\nKézzel szerkesztett rekord: ${result.editedCount}`);
+      }
+    });
+    host.insertBefore(button, host.firstChild);
+  }
+
   function applyVersionLabelV54() {
     if (typeof document === 'undefined') return;
     const label = `Fuvarszervező V${VERSION}`;
@@ -1104,17 +1213,18 @@
 
   function bindV44() {
     applyVersionLabelV54();
+    ensureExportButtonV55();
     const balanceButton = document.getElementById('balanceBtn');
     const optimizeButton = document.getElementById('optimizeBtn');
     if (balanceButton) {
       balanceButton.onclick = event => { event.preventDefault(); return balanceActionV44(); };
       balanceButton.dataset.algorithmVersion = VERSION;
-      balanceButton.title = 'V54: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
+      balanceButton.title = 'V55: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
     }
     if (optimizeButton) {
       optimizeButton.onclick = event => { event.preventDefault(); return optimizeActionV44(); };
       optimizeButton.dataset.algorithmVersion = VERSION;
-      optimizeButton.title = 'V54: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
+      optimizeButton.title = 'V55: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
     }
     document.getElementById('clearAllMastersBtn')?.addEventListener('click', clearAllMasterDataV44);
     document.getElementById('loadBuiltInMastersBtn')?.addEventListener('click', loadBuiltInMasterDataV44);
@@ -1131,6 +1241,7 @@
       fixedDriverRule: 'névre rögzített fuvar csak kézzel mozgatható',
       homeRule: 'Márió=Vác; Patrik=Kispest; Martin=Felcsút (törzsadatból felülírható)',
       masterDataRule: 'a sáv a hitelesített telephelycímből, nem a cégnévből',
+      transferRule: 'PRPR: fel- és lerakó együtt dönt, 5 km-en belül a terhelés',
       dropCoverageRule: 'a lerakó-súlypont csak 50% feletti geokódolt lefedettségnél számít',
       balanceRule: 'felrakószám a fő mérőszám; 2 felrakó eltérés felett a sáv is átléphető',
       duplicateSupplierRule: 'egy felrakóhely egy sofőr',
@@ -1149,7 +1260,7 @@
   global.clearAllMasterDataV44 = clearAllMasterDataV44;
   global.loadBuiltInMasterDataV44 = loadBuiltInMasterDataV44;
 
-  global.V54Planner = {
+  global.V55Planner = {
     version: VERSION,
     canonicalAddress,
     locationKey,
@@ -1166,7 +1277,11 @@
     masterAddressV54,
     applySeedHomesV54,
     applyVersionLabelV54,
+    exportMasterDataV55,
     v53IsLongOrder,
+    transferChainCost,
+    transferDriver,
+    isProjectTransferBlock,
     buildRoutePlansV44,
     buildVehicleRouteV49,
     stablePrecedenceOrderV49,
@@ -1179,10 +1294,11 @@
     clearAllMasterDataV44,
     loadBuiltInMasterDataV44
   };
-  global.V53Planner = global.V54Planner;
-  global.V50Planner = global.V54Planner;
-  global.V49Planner = global.V54Planner;
-  global.V44Planner = global.V54Planner;
+  global.V54Planner = global.V55Planner;
+  global.V53Planner = global.V55Planner;
+  global.V50Planner = global.V55Planner;
+  global.V49Planner = global.V55Planner;
+  global.V44Planner = global.V55Planner;
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(bindV44, 0), { once: true });

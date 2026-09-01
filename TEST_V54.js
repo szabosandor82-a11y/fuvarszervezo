@@ -78,8 +78,8 @@ function whose(c, no) {
     catch (e) { console.error('HIBA', name, e.message); process.exitCode = 1; }
   }
 
-  await test('A motor verziója V54', async () => {
-    assert.match(fs.readFileSync(__dirname + '/planner-v44.js', 'utf8'), /const VERSION = '54'/);
+  await test('A motor verziója V55', async () => {
+    assert.match(fs.readFileSync(__dirname + '/planner-v44.js', 'utf8'), /const VERSION = '55'/);
   });
 
   await test('A törzsadat betöltődik: projektek, telephelyek, átvevők, autók', async () => {
@@ -188,15 +188,15 @@ function whose(c, no) {
     const nodes = [{ textContent: 'régi' }, { textContent: 'régi' }];
     c.document = { title: 'Fuvarszervező V0', querySelectorAll: () => nodes };
     c.V54Planner.applyVersionLabelV54();
-    assert.equal(c.document.title, 'Fuvarszervező V54');
-    for (const n of nodes) assert.equal(n.textContent, 'Fuvarszervező V54');
+    assert.equal(c.document.title, 'Fuvarszervező V55');
+    for (const n of nodes) assert.equal(n.textContent, 'Fuvarszervező V55');
   });
 
   await test('A felületen sehol nem maradt régi verziószám', async () => {
     for (const f of ['index.html', 'manifest.webmanifest']) {
       const text = fs.readFileSync(__dirname + '/' + f, 'utf8');
-      assert.ok(!/V5[0-3]\b/.test(text), f + ' régi verziószámot tartalmaz');
-      assert.ok(!/v=5[0-3]\.0/.test(text), f + ' régi gyorsítótár-verziót tartalmaz');
+      assert.ok(!/V5[0-4]\b/.test(text), f + ' régi verziószámot tartalmaz');
+      assert.ok(!/v=5[0-4]\.0/.test(text), f + ' régi gyorsítótár-verziót tartalmaz');
     }
   });
 

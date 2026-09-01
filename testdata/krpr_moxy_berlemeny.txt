@@ -1,0 +1,45 @@
+                                                 Raktárközi
+                                                                                                                              2026-KRPR/000836
+                                                 1/1   példány
+
+
+  Forrás raktár:                                                                Cél raktár:
+              Stand 98 Kft.                                                                 Moxy_Bérlemény_2026098
+              Új Központi Raktár
+
+              1239 Budapest Láva u 7.
+
+  Tel, fax:                                                                     Tel, fax:
+  Email:          info@stand98.hu                                               Email:
+  Adószám:                 12390360-2-43
+                                                                                         001ÁLT    Általános
+
+
+ Dátum                  Alapbizonylat                                      Nettó tömeg                         Bruttó tömeg                          Térfogat
+ 2026.09.01.           2026-ATUT/000716                                                     [kg]                              [kg]                               [m3]
+ Rendelés:            2026-BR0/000884                                               26.09.01.
+
+ Kód                                             Megnevezés                                                        Mennyisé
+Rh.: KRR2SZ0RH02 Raklapállván                    > Rh.: 001ÁLT Általános
+y2_Talajszint0_RaklapHely02
+ FEID164                 2633 Hegt. Karima PN16 DN 50/60.3                                                               4 db
+
+Rh.: KRP09SZ0PH03 Kézipolc09_                    > Rh.: 001ÁLT Általános
+Talajszint0_Polchely03
+ 71206D04                Ke Kelit KELOX-ULTRAX Toldó idom belső menettel, 20x3/4"                                       20 db
+
+Rh.: KRP10SZ2PH16.2                              > Rh.: 001ÁLT Általános
+Kézipolc10_Szint2_Polchely16.2
+ ppcs-063050-nb AquaPlus belső menetes PP-R tokos csatlakozó D 63 mm / 2" csövekhez,                                     1 db
+
+Rh.: KRP15SZ5PH08                                > Rh.: 001ÁLT Általános
+Kézipolc15_Szint5_Polchely08
+ MEZ30S                  MEZ-keret sarokelem (sarokvas) 30 mm                                                           40 db
+
+ Összesen:                                                                                                                                              65 db
+
+
+
+
+Copyright (C) PROGEN Kft. - sERPa v4.1.176.139                                  1                                                    levai.edina - 2026. 09. 01. 9:15:40
+

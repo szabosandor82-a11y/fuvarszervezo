@@ -211,3 +211,9 @@ dialog{background:#fffefd;box-shadow:0 28px 76px #6278872e}dialog::backdrop{back
 .v49-map-marker span{display:grid;place-items:center;width:32px;height:32px;border:2px solid #fff;border-radius:50%;background:#86afca;color:#fff;box-shadow:0 4px 12px #526d8040;font-size:11px;font-weight:950;cursor:pointer}
 .v49-pickup-marker span{background:#86afca}
 .map-route-highlight{position:relative;z-index:5;outline:3px solid #d5b979!important;outline-offset:3px;box-shadow:0 0 0 7px #f1dfb45c,0 10px 24px #6d654326!important;transition:box-shadow .2s ease,outline-color .2s ease}
+
+/* V55 – felrakási sorszám a térképen */
+.pickup-pin{background:none;border:none}
+.pickup-pin span{display:flex;align-items:center;justify-content:center;width:26px;height:26px;
+  border-radius:50%;background:#647f96;color:#fff;font:600 13px/1 system-ui,sans-serif;
+  border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fuvarszervezo-v54-online-20260828-1';
+const CACHE_NAME = 'fuvarszervezo-v55-online-20260828-1';
 const APP_ASSETS = [
   './', './index.html', './styles.css?v=52.0', './app.js?v=52.0', './data.js?v=52.0',
   './planner-v32.js?v=52.0', './planner-v33.js?v=52.0', './planner-v34.js?v=52.0',

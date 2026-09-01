@@ -142,7 +142,152 @@
     return items;
   }
 
-  function extractTransferWarehouses(text = '') {
+  /*
+    Hasábos raktárközi bizonylat szétvágása.
+
+    A Forrás és a Cél raktár egymás mellett, két oszlopban áll. A soronkénti
+    olvasás összekeveri őket: a KRPR-nél a forrás nyerte a lerakó helyét, a
+    PRPR-nél a két vég felcserélődött. Ezért a vágás a "Cél raktár" felirat
+    vízszintes pozíciója mentén történik.
+
+    Elsődlegesen a PDF elemeinek x koordinátáját használjuk (pdf.rows), mert
+    az pontos. Ha az nem áll rendelkezésre (pl. szövegből dolgozunk), a
+    szóközökkel kiszedett elrendezésre esünk vissza.
+  */
+  function isCentralWarehouseName(name = '') {
+    const value = nrm(name);
+    if (!value) return false;
+    return /kozponti\s*raktar|uj\s*kozponti|stand\s*98/.test(value);
+  }
+
+  const TRANSFER_STOP_RE = /^\s*(d[aá]tum|k[oó]d|megnevez[eé]s|[oö]sszesen|copyright|alapbizonylat)/i;
+
+  function transferColumnsFromRows(rows = []) {
+    let cut = null;
+    for (const row of rows) {
+      for (const part of row.parts || []) {
+        if (/c[eé]l\s*rakt[aá]r/i.test(part.str)) { cut = part.x - 2; break; }
+      }
+      if (cut !== null) break;
+    }
+    if (cut === null) return null;
+    const left = [], right = [];
+    let started = false;
+    for (const row of rows) {
+      const joined = (row.parts || []).map(part => part.str).join(' ');
+      if (!started) {
+        if (!/c[eé]l\s*rakt[aá]r|forr[aá]s\s*rakt[aá]r/i.test(joined)) continue;
+        started = true;
+      } else if (TRANSFER_STOP_RE.test(joined)) break;
+      const l = [], r = [];
+      for (const part of row.parts || []) (part.x >= cut ? r : l).push(part.str);
+      if (l.length) left.push(l.join(' '));
+      if (r.length) right.push(r.join(' '));
+    }
+    return {
+      source: left.join('\n').replace(/forr[aá]s\s*rakt[aá]r\s*:?/gi, ' '),
+      target: right.join('\n').replace(/c[eé]l\s*rakt[aá]r\s*:?/gi, ' ')
+    };
+  }
+
+  function transferColumnsFromText(text = '') {
+    const raw = String(text || '').split(/\r?\n/);
+    let headerIndex = -1, cut = -1;
+    for (let i = 0; i < raw.length; i++) {
+      const match = raw[i].match(/c[eé]l\s*rakt[aá]r/i);
+      if (match) { headerIndex = i; cut = match.index; break; }
+    }
+    if (headerIndex < 0 || cut <= 0) return null;
+    const left = [], right = [];
+    for (let i = headerIndex; i < raw.length; i++) {
+      if (i > headerIndex && TRANSFER_STOP_RE.test(raw[i])) break;
+      left.push(raw[i].slice(0, cut));
+      right.push(raw[i].slice(cut));
+    }
+    return {
+      source: left.join('\n').replace(/forr[aá]s\s*rakt[aá]r\s*:?/gi, ' '),
+      target: right.join('\n').replace(/c[eé]l\s*rakt[aá]r\s*:?/gi, ' ')
+    };
+  }
+
+  function transferColumns(text = '', rows = []) {
+    return transferColumnsFromRows(rows) || transferColumnsFromText(text);
+  }
+
+  // Egy hasáb szövegéből kizárólag az abban a hasábban említett projektet
+  // vagy raktárat fogadjuk el. Nem esünk vissza a teljes dokumentumra,
+  // mert épp az okozta a forrás és cél összekeverését.
+  // A SERPA a cél raktárat sorszámmal írja ("Moxy_Bérlemény_2026098"), a
+  // törzsadatban viszont többes szám és Budapest_ előtag áll. A záró
+  // azonosítót levágjuk, és a többes számú alakot is egyeztetjük.
+  function transferNameKeys(value = '') {
+    const base = nrm(value)
+      .replace(/\b\d{5,}\b/g, ' ')
+      .replace(/\bpr\s*\d{4}\b/g, ' ')
+      .replace(/\bbudapest\b/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+    const singular = base.replace(/(\w+?)(ek|ok|ak|k)\b/g, '$1');
+    return [...new Set([base, singular].filter(Boolean))];
+  }
+
+  function transferNameMatch(columnText, projectName) {
+    const columnKeys = transferNameKeys(columnText);
+    const nameKeys = transferNameKeys(projectName);
+    let best = 0;
+    for (const name of nameKeys) {
+      if (!name) continue;
+      for (const column of columnKeys) {
+        if (column.includes(name)) best = Math.max(best, name.length * 3);
+        const tokens = name.split(' ').filter(token => token.length >= 4);
+        if (tokens.length && tokens.every(token => column.includes(token.replace(/(ek|ok|ak|k)$/, '')))) {
+          best = Math.max(best, tokens.join('').length * 2);
+        }
+      }
+    }
+    return best;
+  }
+
+  function warehouseFromColumn(columnText = '') {
+    if (!columnText.trim()) return null;
+    const projects = typeof state !== 'undefined' ? state.projects || [] : [];
+    // Előbb a pontozott projektnév-egyeztetés fut, mert a findWarehouse laza
+    // illesztése korábban a Moxy bérleményt Moxy Hotelnek olvasta.
+    const scored = projects
+      .map(project => ({ project, score: transferNameMatch(columnText, project.name) }))
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score
+        || Number(Boolean(b.project.address)) - Number(Boolean(a.project.address))
+        || nrm(a.project.name).length - nrm(b.project.name).length);
+    if (scored.length) {
+      const top = scored[0].score;
+      const tied = scored.filter(item => item.score === top);
+      const winner = tied.find(item => String(item.project.address || '').trim()) || tied[0];
+      return { id: winner.project.id || '', name: winner.project.name, address: winner.project.address || '', kind: 'project' };
+    }
+    const direct = findWarehouse(columnText);
+    if (direct) return direct;
+    const columnNorm = nrm(columnText);
+    const hits = projects
+      .filter(project => project.name && columnNorm.includes(nrm(project.name)))
+      .sort((a, b) => nrm(b.name).length - nrm(a.name).length);
+    if (hits.length) {
+      const winner = hits.find(item => String(item.address || '').trim()) || hits[0];
+      return { id: winner.id || '', name: winner.name, address: winner.address || '', kind: 'project' };
+    }
+    const loose = bestProject(columnText, columnText);
+    return loose?.id ? { id: loose.id, name: loose.name, address: loose.address || '', kind: 'project' } : null;
+  }
+
+  function extractTransferWarehouses(text = '', rows = []) {
+    const columns = transferColumns(text, rows);
+    if (columns) {
+      const source = warehouseFromColumn(columns.source);
+      const target = warehouseFromColumn(columns.target);
+      if (source || target) {
+        return { source, target: target && source && target.id && target.id === source.id ? null : target, columns };
+      }
+    }
+    // Tartalék: a régi, soralapú olvasás.
     const lines = linesOf(text);
     let sourceText = '', targetText = '';
     for (let i = 0; i < lines.length; i++) {
@@ -154,11 +299,7 @@
       if (/^forr[aá]s\s*rakt[aá]r\s*:?$/i.test(line)) sourceText = lines[i + 1] || '';
       if (/^c[eé]l\s*rakt[aá]r\s*:?$/i.test(line)) targetText = lines[i + 1] || '';
     }
-    const known = [];
-    for (const project of (typeof state !== 'undefined' ? state.projects || [] : [])) if (nrm(text).includes(nrm(project.name))) known.push({ id: project.id || '', name: project.name, address: project.address || '', kind: 'project' });
-    const source = findWarehouse(sourceText) || known[0] || null;
-    const target = findWarehouse(targetText) || known.find(item => !source || item.id !== source.id) || known[1] || null;
-    return { source, target };
+    return { source: findWarehouse(sourceText) || null, target: findWarehouse(targetText) || null, columns: null };
   }
 
   function duplicateOrderNumbers(numbers = []) {
@@ -244,14 +385,31 @@
       return { id: '', name: '', address: '', pickupNote: '', detectedName: special.name || '', reason: 'felismert beszállító nincs a törzsadatokban', autoMaster: false, unmatchedMaster: true };
     }
     const sourceNorm = nrm(sourceText);
+    // A levelekben rövidítve szerepel a cég ("Gienger kp", "Lambda kp"), a
+    // törzsadatban teljes néven ("Gienger Hungária Kft"). Ezért a vezető szó
+    // egyezése is elég, ha az elég egyedi, és a "kp" a központi telephelyre mutat.
+    const wantsCentral = /\bkp\b|kozpont/.test(sourceNorm);
+    const leadWordOf = value => (significantTokens(value)[0] || '');
     const candidates = suppliers.map(supplier => {
       const nameNorm = nrm(supplier.name || '');
       const nameTokens = significantTokens(supplier.name);
       const exactName = !!nameNorm && sourceNorm.includes(nameNorm);
       const allDistinctiveTokens = nameTokens.length > 0 && nameTokens.every(token => sourceNorm.includes(token)) && nameTokens.some(token => token.length >= 5);
-      return { supplier, score: supplierScore(supplier, sourceNorm), strict: exactName || allDistinctiveTokens };
+      const lead = leadWordOf(supplier.name);
+      const leadHit = lead.length >= 5 && (sourceNorm.includes(lead) || sourceNorm.replace(/\s+/g, '').includes(lead.replace(/\s+/g, '')));
+      let score = supplierScore(supplier, sourceNorm);
+      if (leadHit) score += 12;
+      if (wantsCentral && supplier.isCentral) score += 25;
+      return { supplier, score, strict: exactName || allDistinctiveTokens || leadHit, leadHit };
     }).filter(candidate => candidate.strict).sort((a, b) => b.score - a.score || Number(Boolean(b.supplier.isCentral)) - Number(Boolean(a.supplier.isCentral)));
     if (!candidates.length) return null;
+    // Ha csak a vezető szó egyezik és két KÜLÖNBÖZŐ cég is szóba jön, nem
+    // találgatunk: ellenőrzendőnek jelöljük.
+    const topScore = candidates[0].score;
+    const tiedCompanies = new Set(candidates.filter(item => item.score === topScore).map(item => leadWordOf(item.supplier.name)));
+    if (tiedCompanies.size > 1) {
+      return { id: '', name: '', address: '', pickupNote: '', detectedName: sourceText.slice(0, 60), reason: 'több beszállító is illeszkedik, ellenőrizd', autoMaster: false, unmatchedMaster: true };
+    }
     const winner = candidates[0].supplier;
     return { id: winner.id || '', name: winner.name || '', address: winner.address || '', pickupNote: winner.pickupNote || winner.note || '', phone: winner.phone || '', email: winner.email || '', reason: `biztos törzsadat-egyezés (${candidates[0].score})`, autoMaster: false };
   }
@@ -515,7 +673,7 @@
     if (typeof global.V40PdfTextExtractor === 'function') return await global.V40PdfTextExtractor(data);
     const pdfjs = getPdfLib();
     const doc = await pdfjs.getDocument({ data }).promise;
-    const allLines = [];
+    const allLines = [], allRows = [];
     for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
       const page = await doc.getPage(pageNo);
       const content = await page.getTextContent();
@@ -529,9 +687,15 @@
         row.parts.push({ x, str });
       }
       rows.sort((a, b) => b.y - a.y);
-      for (const row of rows) allLines.push(row.parts.sort((a, b) => a.x - b.x).map(part => part.str).join(' ').replace(/\s+/g, ' ').trim());
+      for (const row of rows) {
+        const parts = row.parts.sort((a, b) => a.x - b.x);
+        allRows.push({ page: pageNo, y: row.y, parts: parts.map(part => ({ x: part.x, str: part.str })) });
+        allLines.push(parts.map(part => part.str).join(' ').replace(/\s+/g, ' ').trim());
+      }
     }
-    return { lines: allLines, text: allLines.join('\n') };
+    // A hasábos bizonylatoknál (Raktárközi) az x koordináta dönti el, hogy egy
+    // szöveg a Forrás vagy a Cél raktár oszlopába tartozik, ezért megőrizzük.
+    return { lines: allLines, text: allLines.join('\n'), rows: allRows };
   }
 
   function recipientFromProject(project) {
@@ -540,7 +704,7 @@
     return recipient ? { recipientId: recipient.id, recipientName: recipient.name || '', recipientPhone: recipient.phone || '', recipientEmail: recipient.email || '' } : {};
   }
 
-  function buildExtractedEntry({ category, sourceName, subject, body, pdfName = '', pdfText = '', pdfLines = [], attachmentNames = [], forcedRefs = [] }) {
+  function buildExtractedEntry({ category, sourceName, subject, body, pdfName = '', pdfText = '', pdfLines = [], pdfRows = [], attachmentNames = [], forcedRefs = [] }) {
     const combined = [subject, body, pdfName, pdfText, ...attachmentNames].filter(Boolean).join('\n');
     const refs = forcedRefs.length ? forcedRefs : extractOrderRefs(pdfText, pdfName, subject, sourceName, body);
     const returnMode = isReturnText(subject, body, pdfName, pdfText);
@@ -555,17 +719,28 @@
 
     if (orderType === 'KRPR') {
       pickup = { ...CENTRAL_WAREHOUSE, reason: 'KRPR: felrakó mindig a szigetszentmiklósi központi raktár' };
-      project = projectFromPdfMaster(pdfText || combined, pdfLines, hint, 'KRPR') || bestProject(combined, hint);
-      project = projectMasterByIdentity(project);
+      // A lerakó KIZÁRÓLAG a Cél raktár hasábjából jöhet. A bal hasábban álló
+      // "Stand 98 Kft. Új Központi Raktár" korábban minden KRPR-nél megnyerte
+      // a lerakó helyét, mert szó szerint egyezett egy projektnévvel.
+      const transfer = extractTransferWarehouses(pdfText || body || combined, pdfRows);
+      let target = transfer.target;
+      if (!target && hint) target = warehouseFromColumn(hint);
+      if (target && isCentralWarehouseName(target.name)) target = null;
+      project = projectMasterByIdentity(target)
+        || (hint ? bestProject(hint, hint) : null);
+      if (project && isCentralWarehouseName(project.name)) project = null;
       drop = project;
+      if (!drop) reasons.push('KRPR: a cél raktár nem azonosítható, ellenőrizd');
+      else reasons.push('KRPR: lerakó a Cél raktár hasábból');
       pickupRole = 'warehouse'; dropRole = 'project';
     } else if (orderType === 'PRPR') {
-      const transfer = extractTransferWarehouses(pdfText || body || combined);
-      pickup = transfer.source;
-      drop = transfer.target;
-      if (pickup?.kind === 'project') pickup = projectMasterByIdentity(pickup);
-      if (drop?.kind === 'project' || (drop && (state.projects || []).some(item => nrm(item.name) === nrm(drop.name)))) drop = projectMasterByIdentity(drop);
-      pickupRole = 'warehouse'; dropRole = 'warehouse';
+      // Projektről projektre: a felrakó a Forrás, a lerakó a Cél hasáb.
+      const transfer = extractTransferWarehouses(pdfText || body || combined, pdfRows);
+      pickup = projectMasterByIdentity(transfer.source) || transfer.source;
+      drop = projectMasterByIdentity(transfer.target) || transfer.target;
+      if (pickup && isCentralWarehouseName(pickup.name) && !drop) { drop = pickup; pickup = null; }
+      reasons.push('PRPR: felrakó a Forrás, lerakó a Cél raktár hasábból');
+      pickupRole = 'project'; dropRole = 'project';
     } else if (returnMode) {
       const returnHint = inferReturnProjectHint(subject, body);
       project = projectMasterByIdentity(bestProject(`${subject}\n${stripSignature(body)}`, returnHint) || bestProject(combined, returnHint));
@@ -610,7 +785,7 @@
     const messageOrderNos = unique(allRefs.map(ref => ref.no));
     return splitPdfDocumentByOrders(pdf).map(part => ({
       ...buildExtractedEntry({
-        category, sourceName, subject, body, pdfName: part.name, pdfText: part.text, pdfLines: part.lines, attachmentNames, forcedRefs: part.forcedRefs || []
+        category, sourceName, subject, body, pdfName: part.name, pdfText: part.text, pdfLines: part.lines, pdfRows: part.rows || pdf.rows || [], attachmentNames, forcedRefs: part.forcedRefs || []
       }),
       messageOrderNos
     }));
@@ -1108,6 +1283,11 @@ ${entry.subject || ''}`) || project;
     extractExplicitPickup,
     parseBodyItems,
     extractTransferWarehouses,
+    transferColumns,
+    warehouseFromColumn,
+    transferNameKeys,
+    transferNameMatch,
+    isCentralWarehouseName,
     duplicateOrderNumbers,
     inferProjectHint,
     supplierSpecial,
