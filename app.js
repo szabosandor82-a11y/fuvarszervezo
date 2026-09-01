@@ -57,7 +57,7 @@ function reconcileState(reason = '') {
   const orderIds = new Set(st.orders.map(o => o.id));
   const itemIds = new Set();
   for (const o of st.orders) for (const it of o.items || []) if (it._id) itemIds.add(String(it._id));
-  const report = { orphanBacklog: 0, clearedBacklog: 0, routeRefs: 0, movedFrom: 0, resolved: 0, derivedOrders: 0 };
+  const report = { orphanBacklog: 0, clearedBacklog: 0, routeRefs: 0, movedFrom: 0, resolved: 0, derivedOrders: 0, emptyDerived: 0 };
 
   // 0. ha a FORRÁS fuvart törlik, az abból származtatott jövőbeli fuvar is
   //    tárgytalan – feltéve, hogy még érintetlen. Ha a sofőr már dolgozott
@@ -73,6 +73,15 @@ function reconcileState(reason = '') {
     orderIds.delete(o.id);
     for (const it of o.items || []) itemIds.delete(String(it._id));
     report.derivedOrders = (report.derivedOrders || 0) + 1;
+  }
+
+  // 0/b. az áthelyezésből született fuvar, ha kiürült (átütemezték vagy
+  //      visszavonták a tételeit), feleslegessé válik
+  for (const o of st.orders.slice()) {
+    if (!o.movedFromOrderId || (o.items || []).length || o.completed) continue;
+    st.orders = st.orders.filter(x => x.id !== o.id);
+    orderIds.delete(o.id);
+    report.emptyDerived = (report.emptyDerived || 0) + 1;
   }
 
   // 1. hátralék: ha a CÉL fuvar megszűnt, a hátralék tárgytalan -> törlés.
@@ -121,7 +130,7 @@ function reconcileState(reason = '') {
     }
   }
 
-  const touched = report.orphanBacklog + report.clearedBacklog + report.routeRefs + report.movedFrom + report.resolved + report.derivedOrders;
+  const touched = report.orphanBacklog + report.clearedBacklog + report.routeRefs + report.movedFrom + report.resolved + report.derivedOrders + report.emptyDerived;
   if (touched) console.info('[V57 integritás]', reason || 'mentés', report);
   return report;
 }
@@ -514,7 +523,8 @@ function validMoveTargetFromInputs(prefix='move'){
   return !isNaN(dt)&&localISO(dt)===target?target:'';
 }
 function bindV21MoveDateParts(){
-  const y=$('#moveYear'),m=$('#moveMonth'),d=$('#moveDay'),btn=$('#moveItemsBtn');
+  const y=$('#moveYear'),m=$('#moveMonth'),d=$('#moveDay');
+  const btn=$('#applyMoveDateAll');
   if(!y||!m||!d||!btn)return;
   // Az Áthelyezés akkor is elérhető, ha a fejléc üres, de a tételek mellett
   // van saját dátum – a hátralék tételenként ütemezhető.
@@ -522,36 +532,164 @@ function bindV21MoveDateParts(){
     const o=state.orders.find(x=>x.id===currentItemsOrderId);
     return !!o&&(o.items||[]).some(it=>!it.received&&(it.moveTargetDate||'').trim());
   };
-  const update=()=>{btn.disabled=!validMoveTargetFromInputs('move')&&!anyItemDate()};
+  const update=()=>{btn.disabled=!validMoveTargetFromInputs('move')};
   [[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next])=>{
     el.addEventListener('input',()=>{el.value=el.value.replace(/\D/g,'').slice(0,max);if(el.value.length===max&&next){next.focus();next.select()}update()});
     el.addEventListener('change',update);
   });
-  btn.onclick=moveUncheckedItemsFromDialog;
-  const applyAll=$('#applyMoveDateAll');
-  if(applyAll)applyAll.onclick=applyMoveDateToAllItems;
+  btn.onclick=applyMoveDateToAllItems;
   update();
 }
 function openItems(id){
   const o=state.orders.find(x=>x.id===id);if(!o)return;currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);
   $('#itemsTitle').textContent=`${o.orderNo} · tételek`;
-  $('#itemMovePanel').innerHTML=`<div class="move-controls"><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Alapértelmezett áthelyezési év"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div><button id="applyMoveDateAll" class="move-items-btn" type="button" title="A fenti dátum beírása minden kipipálatlan tétel mellé">Mindre</button><button id="moveItemsBtn" class="move-items-btn" type="button" disabled>Áthelyezés</button></div>`;
-  $('#itemsBody').innerHTML=(o.items||[]).map((it,i)=>`<div class="item-row ${it.received?'done':''}"><input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${id}',${i},this.checked)"><div><b class="item-name">${esc(it.name)}</b><br>${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)} ${it.longMaterial?'· hosszú szál':''}<div class="missing-qty-wrap ${it.received?'hidden':''}"><input class="missing-qty-input" type="number" min="0" step="any" aria-label="Nem kapott mennyiség" value="${esc(it.missingQty||'')}" oninput="updateMissingQty('${id}',${i},this.value)"><label class="item-move-date">Hátralék napja<input type="date" class="item-move-date-input" value="${esc(it.moveTargetDate||'')}" aria-label="Ennek a tételnek a hátralék dátuma" onchange="setItemMoveDate('${id}','${esc(it._id||'')}',this.value)"></label></div><label class="item-note-edit">Tétel megjegyzés<textarea placeholder="Nincs megjegyzés" oninput="updateItemNote('${id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label></div></div>`).join('')||'<div class="notice">Nincs tétel.</div>';
+  $('#itemMovePanel').innerHTML=`<div class="move-controls"><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Alapértelmezett áthelyezési év"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div><button id="applyMoveDateAll" class="move-items-btn" type="button" title="Minden kipipálatlan tétel áthelyezése a fenti napra">Mindet erre a napra</button></div>`;
+  $('#itemsBody').innerHTML=`<div class="item-grid-head"><span></span><span>Tétel</span><span>Hiányzik</span><span>Hátralék napja</span></div>`+(o.items||[]).map((it,i)=>{
+    const rec=backlogRecordForItem(o.id,it._id);
+    const dateCell=it.received
+      ? '<span class="item-dash">—</span>'
+      : `<div class="item-date-cell"><input type="date" class="item-move-date-input" value="${esc(it.moveTargetDate||rec?.movedToDate||'')}" aria-label="Hátralék napja" onchange="${rec?`rescheduleMovedItem('${o.id}','${esc(it._id)}',this.value)`:`setItemMoveDate('${o.id}','${esc(it._id)}',this.value)`}">${rec?`<button type="button" class="item-undo" title="Áthelyezés visszavonása" onclick="undoBacklogMove('${o.id}','${esc(it._id)}')">Vissza</button>`:''}</div>`;
+    const qtyCell=it.received
+      ? '<span class="item-dash">—</span>'
+      : `<input class="missing-qty-input" type="number" min="0" step="any" placeholder="mind" aria-label="Nem kapott mennyiség" value="${esc(it.missingQty||'')}" oninput="updateMissingQty('${o.id}',${i},this.value)">`;
+    return `<div class="item-row item-grid ${it.received?'done':''}">
+      <input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${o.id}',${i},this.checked)" aria-label="Átvéve">
+      <div class="item-main">
+        <b class="item-name">${esc(it.name)}</b>
+        <div class="item-sub">${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)}${it.longMaterial?' · hosszú szál':''}${rec?` · <span class="item-moved">áthelyezve ${esc(rec.movedToDate)}</span>`:''}</div>
+        <label class="item-note-edit"><textarea placeholder="Tétel megjegyzés" oninput="updateItemNote('${o.id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label>
+      </div>
+      ${qtyCell}
+      ${dateCell}
+    </div>`;
+  }).join('')||'<div class="notice">Nincs tétel.</div>';
   bindV21MoveDateParts();if(!$('#itemsDialog').open)$('#itemsDialog').showModal()
 }
 window.openItems=openItems;
 
+/* V57 – az automatikus áthelyezés VISSZAVONHATÓ és ÁTÜTEMEZHETŐ.
+
+   A dátum beírása azonnal mozgat, ezért kell hozzá javítási lehetőség.
+   Mindkét felületen (admin és sofőr) ugyanabban a tételablakban:
+     - az áthelyezett tétel dátuma átírható -> átkerül a másik napra
+     - a "Vissza" gomb visszateszi az eredeti napra és törli a hátralékot
+   A Hátralék fülön ugyanez a két művelet elérhető.
+*/
+function backlogRecordForItem(orderId, itemId) {
+  return (state.backlog || []).find(b => b.targetOrderId === orderId && String(b.itemId) === String(itemId)) || null;
+}
+window.backlogRecordForItem = backlogRecordForItem;
+
+/* Áthelyezett tétel átütemezése másik napra. */
+function rescheduleMovedItem(orderId, itemId, newDate) {
+  const target = (newDate || '').trim(); if (!target) return;
+  const rec = backlogRecordForItem(orderId, itemId); if (!rec) return;
+  const current = state.orders.find(o => o.id === orderId); if (!current) return;
+  if (target === current.scheduleDate) return;
+  const source = state.orders.find(o => o.id === rec.sourceOrderId);
+  if (source && target === source.scheduleDate) return alert('Az új dátum nem lehet az eredeti nappal azonos. Használd a Vissza gombot.');
+  const it = (current.items || []).find(x => String(x._id) === String(itemId)); if (!it) return;
+  let dest = state.orders.find(o => o.scheduleDate === target && o.orderNo === current.orderNo
+    && o.vehicleId === current.vehicleId && o.projectName === current.projectName
+    && o.pickupName === current.pickupName && o.id !== current.id);
+  if (!dest) { dest = { ...current, id: uid(), scheduleDate: target, items: [], completed: false, completedAt: '', sequence: 999, movedFromOrderId: rec.sourceOrderId }; state.orders.push(dest); }
+  current.items = (current.items || []).filter(x => String(x._id) !== String(itemId));
+  dest.items.push({ ...it, moveTargetDate: '' });
+  rec.targetOrderId = dest.id;
+  rec.movedToDate = target;
+  rec.rescheduledAt = new Date().toISOString();
+  save();
+  if (document.getElementById('itemsDialog')?.open) {
+    if (state.orders.some(o => o.id === orderId)) openItems(orderId); else openItems(dest.id);
+  }
+  alert(`${it.name} átütemezve erre a napra: ${target}.`);
+}
+window.rescheduleMovedItem = rescheduleMovedItem;
+
+/* Téves áthelyezés visszavonása: a mennyiség visszakerül az eredeti napra. */
+function undoBacklogMove(orderId, itemId) {
+  const rec = backlogRecordForItem(orderId, itemId);
+  if (!rec) return alert('Ehhez a tételhez nincs áthelyezési bejegyzés.');
+  const current = state.orders.find(o => o.id === orderId);
+  const source = state.orders.find(o => o.id === rec.sourceOrderId);
+  if (!source) return alert('Az eredeti fuvar már nincs meg, ezért nem lehet visszavonni.');
+  const it = (current?.items || []).find(x => String(x._id) === String(itemId));
+  if (!it) return alert('A tétel már nincs meg ebben a fuvarban.');
+  if (!confirm(`Visszavonod? ${it.name} ${it.qty} ${it.unit || ''} visszakerül erre a napra: ${source.scheduleDate}.`)) return;
+  const twin = (source.items || []).find(x => x.code && x.code === it.code && x.name === it.name);
+  if (twin) {
+    twin.qty = formatQty(numericQty(twin.qty) + numericQty(it.qty));
+    twin.received = false; twin.missingQty = ''; twin.moveTargetDate = '';
+  } else {
+    source.items = source.items || [];
+    source.items.push({ ...it, _id: uid(), received: false, missingQty: '', moveTargetDate: '' });
+  }
+  source.completed = false;
+  current.items = (current.items || []).filter(x => String(x._id) !== String(itemId));
+  current.completed = (current.items || []).length > 0 && (current.items || []).every(x => x.received);
+  state.backlog = (state.backlog || []).filter(b => b.id !== rec.id);
+  save();
+  if (document.getElementById('itemsDialog')?.open) {
+    if (state.orders.some(o => o.id === orderId)) openItems(orderId); else openItems(source.id);
+  }
+  alert(`Visszavonva. ${it.name} újra a(z) ${source.scheduleDate} napon van.`);
+}
+window.undoBacklogMove = undoBacklogMove;
+
+/* V57 – a hátralék ütemezése egy lépés.
+
+   A sofőr a beszállítótól kapott információ alapján beírja a tétel mellé a
+   dátumot, és a tétel AZONNAL átkerül arra a napra: létrejön (vagy
+   kiegészül) az aznapi fuvar, és bekerül a Hátralék fülre. Nem kell külön
+   Áthelyezés gombot nyomni.
+
+   Ami átkerül: a hiányzó mennyiség. Ha nincs megadva, a teljes tétel.
+   A megkapott rész az eredeti napon marad, kipipálva. */
 function setItemMoveDate(orderId,itemId,value){
   const o=state.orders.find(x=>x.id===orderId);if(!o)return;
   const it=(o.items||[]).find(x=>String(x._id)===String(itemId));if(!it)return;
-  it.moveTargetDate=value||'';save(false);
+  const target=(value||'').trim();
+  it.moveTargetDate=target;
+  if(!target||it.received){save(false);return}
+  if(target===o.scheduleDate){it.moveTargetDate='';save(false);return alert('Az új dátum nem lehet az eredeti nappal azonos.')}
+  const result=moveSingleItemToDate(o,it,target);
+  if(result.error){it.moveTargetDate='';save(false);return alert(result.error)}
+  save();
+  if(document.getElementById('itemsDialog')?.open&&state.orders.some(x=>x.id===orderId))openItems(orderId);
+  alert(`${it.name}: ${result.qty} ${it.unit||''} áthelyezve erre a napra: ${target}.`);
+}
+/* Egyetlen tétel áthelyezése. Ugyanaz a logika, mint a tömeges
+   áthelyezésnél, hogy a kétféle út ne tudjon szétcsúszni. */
+function moveSingleItemToDate(o,it,target){
+  ensureItemId(it);
+  const total=numericQty(it.qty);
+  const moveQty=it.missingQty===''||it.missingQty==null?total:numericQty(it.missingQty);
+  if(moveQty<=0)return{error:`A(z) ${it.name} hiányzó mennyisége legyen nagyobb nullánál.`};
+  if(total>0&&moveQty>total)return{error:`A(z) ${it.name} hiányzó mennyisége nem lehet több a rendelt mennyiségnél (${it.qty}).`};
+  let targetOrder=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===o.orderNo&&x.vehicleId===o.vehicleId&&x.projectName===o.projectName&&x.pickupName===o.pickupName&&x.movedFromOrderId===o.id);
+  if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id};state.orders.push(targetOrder)}
+  const moved={...it,_id:uid(),qty:formatQty(moveQty),received:false,missingQty:'',moveTargetDate:''};
+  targetOrder.items.push(moved);
+  state.backlog=state.backlog||[];
+  state.backlog.push({id:uid(),sourceOrderId:o.id,targetOrderId:targetOrder.id,itemId:moved._id,orderNo:o.orderNo,supplier:o.pickupName,projectName:o.projectName,code:it.code,name:it.name,itemNote:itemNoteValue(it),quantity:formatQty(moveQty),unit:it.unit,movedToDate:target,movedAt:new Date().toISOString()});
+  if(total>0&&moveQty<total){it.qty=formatQty(total-moveQty);it.received=true;it.missingQty='';it.moveTargetDate=''}
+  else{o.items=(o.items||[]).filter(x=>String(x._id)!==String(it._id))}
+  o.completed=(o.items||[]).length>0&&(o.items||[]).every(x=>x.received);
+  return{qty:formatQty(moveQty)};
 }
 function applyMoveDateToAllItems(){
   const o=state.orders.find(x=>x.id===currentItemsOrderId);if(!o)return;
   const target=validMoveTargetFromInputs('move');
   if(!target)return alert('Előbb adj meg érvényes dátumot a fejlécben.');
-  (o.items||[]).forEach(it=>{if(!it.received){ensureItemId(it);it.moveTargetDate=target}});
-  save(false);openItems(o.id);
+  // A fő dátum csak azokra vonatkozik, ahol MÉG NINCS saját dátum, hogy egy
+  // véletlen kattintás ne borítsa fel a már beállított egyedi napokat.
+  const pending=(o.items||[]).filter(it=>!it.received&&!backlogRecordForItem(o.id,it._id));
+  if(!pending.length)return alert('Nincs olyan kipipálatlan tétel, aminek még nincs dátuma.');
+  if(target===o.scheduleDate)return alert('Az új dátum nem lehet az eredeti nappal azonos.');
+  if(!confirm(`${pending.length} tétel áthelyezése erre a napra: ${target}?`))return;
+  for(const it of pending.slice()){const r=moveSingleItemToDate(o,it,target);if(r.error){save();return alert(r.error)}}
+  save();
+  if(state.orders.some(x=>x.id===o.id))openItems(o.id);else $('#itemsDialog').close();
 }
 /* V56: a hátralék tételenként ütemezhető.
    Ha egy tételnek van saját dátuma, az az érvényes; ha nincs, a fejlécben
@@ -648,6 +786,7 @@ function backlogGroupHtml(rows, today) {
         </div>
         ${backlogDateEditor(b)}
         <button type="button" class="bl-arrived" onclick="event.stopPropagation();markBacklogArrived('${esc(b.id)}')">Megérkezett</button>
+        <button type="button" class="bl-undo" title="Áthelyezés visszavonása – a tétel visszakerül az eredeti napra" onclick="event.stopPropagation();undoBacklogMove('${esc(b.targetOrderId)}','${esc(b.itemId)}')">Vissza</button>
         <button type="button" class="bl-open" title="Ugrás a fuvarra" onclick="event.stopPropagation();openBacklogResult('${esc(b.targetOrderId)}','${esc(b.movedToDate)}')">↗</button>
       </div>`).join('')}
     </div>`).join('');

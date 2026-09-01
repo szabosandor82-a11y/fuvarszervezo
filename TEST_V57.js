@@ -467,60 +467,85 @@ function krprWith(target) {
   const order56 = items => ({ id: 'o1', scheduleDate: '2026-09-01', vehicleId: 'm', orderNo: '5601',
     pickupName: 'Ezerker kp', projectName: 'Cosmo', items });
 
-  await test('A hátralék tételenként külön dátumra ütemezhető', async () => {
-    const c = itemsCtx();
-    c.currentItemsOrderId = 'o1';
-    c.state.orders = [order56([
-      { _id: 'i1', name: 'Karima', code: 'K1', qty: 10, unit: 'db', received: false, missingQty: '', moveTargetDate: '2026-09-03' },
-      { _id: 'i2', name: 'KPE cső', code: 'K2', qty: 6, unit: 'szál', received: false, missingQty: '', moveTargetDate: '2026-09-08' },
-      { _id: 'i3', name: 'Idom', code: 'K3', qty: 4, unit: 'db', received: true, missingQty: '' }
-    ])];
-    c.moveUncheckedItemsFromDialog();
-    const byDate = Object.fromEntries(c.state.orders.map(o => [o.scheduleDate, (o.items || []).map(x => x.name)]));
-    assert.deepEqual(byDate['2026-09-03'], ['Karima'], '09-03: ' + JSON.stringify(byDate['2026-09-03']));
-    assert.deepEqual(byDate['2026-09-08'], ['KPE cső'], '09-08: ' + JSON.stringify(byDate['2026-09-08']));
-    assert.deepEqual(byDate['2026-09-01'], ['Idom'], 'a megkapott tétel nem maradt az eredeti napon');
-    assert.equal(c.state.backlog.length, 2, 'két hátralék-bejegyzésnek kell keletkeznie');
-    assert.deepEqual(c.state.backlog.map(b => b.movedToDate).sort(), ['2026-09-03', '2026-09-08']);
-  });
+  function moveCtx() {
+    const src = fs.readFileSync(__dirname + '/app.js', 'utf8');
+    const ctx = { console: { info() {}, warn() {}, log() {} }, Math, Date, JSON, Set, Map, Array, Object, String, Number, Boolean, RegExp, Error, isNaN, parseFloat, parseInt };
+    ctx.globalThis = ctx; ctx.window = ctx;
+    ctx.alerts = []; ctx.alert = m => ctx.alerts.push(m); ctx.confirm = () => true;
+    ctx.document = { getElementById: () => ({ open: false }) };
+    ctx.localStorage = { setItem() {}, getItem: () => null };
+    ctx.state = { orders: [], backlog: [], resolvedBacklog: [], routePlans: {}, geo: {} };
+    let n = 0; ctx.uid = () => 'g' + (++n);
+    ctx.numericQty = v => { const x = parseFloat(String(v).replace(',', '.')); return isNaN(x) ? 0 : x; };
+    ctx.formatQty = v => String(v); ctx.itemNoteValue = () => '';
+    ctx.ensureItemId = it => { if (!it._id) it._id = ctx.uid(); };
+    ctx.save = () => { ctx.reconcileState && ctx.reconcileState('t'); };
+    ctx.openItems = () => {}; ctx.$ = () => ({ close() {} });
+    ctx.validMoveTargetFromInputs = () => ctx.headerDate || '';
+    vm.createContext(ctx);
+    for (const name of ['function reconcileState', 'function backlogRecordForItem', 'function rescheduleMovedItem', 'function undoBacklogMove', 'function setItemMoveDate', 'function moveSingleItemToDate', 'function applyMoveDateToAllItems']) {
+      const i = src.lastIndexOf(name);
+      let j = src.indexOf('\nfunction ', i + 40); if (j < 0) j = src.length;
+      vm.runInContext(src.slice(i, j), ctx, { filename: name });
+    }
+    return ctx;
+  }
+  const twoItemOrder = () => ({ id: 'o1', scheduleDate: '2026-09-01', vehicleId: 'm', orderNo: '5714',
+    pickupName: 'Hungarokomplex', projectName: 'Sofitel', items: [
+      { _id: 'i1', name: 'Karima', code: 'K1', qty: 2, unit: 'db', received: false, missingQty: 1 },
+      { _id: 'i2', name: 'Idom', code: 'K2', qty: 5, unit: 'db', received: false, missingQty: '' }] });
 
-  await test('Tétel-dátum hiányában a fejléc dátuma érvényes', async () => {
-    const c = itemsCtx();
-    c.currentItemsOrderId = 'o1';
-    c.headerDate = '2026-09-05';
-    c.state.orders = [order56([
-      { _id: 'i1', name: 'Karima', code: 'K1', qty: 10, unit: 'db', received: false, missingQty: '' },
-      { _id: 'i2', name: 'KPE cső', code: 'K2', qty: 6, unit: 'szál', received: false, missingQty: '', moveTargetDate: '2026-09-08' }
-    ])];
-    c.moveUncheckedItemsFromDialog();
-    const dates = c.state.backlog.map(b => b.movedToDate).sort();
-    assert.deepEqual(dates, ['2026-09-05', '2026-09-08'], 'dátumok: ' + dates.join(', '));
-  });
-
-  await test('Dátum nélküli tételnél nem indul az áthelyezés', async () => {
-    const c = itemsCtx();
-    c.currentItemsOrderId = 'o1';
-    c.headerDate = '';
-    c.state.orders = [order56([
-      { _id: 'i1', name: 'Karima', code: 'K1', qty: 10, unit: 'db', received: false, missingQty: '' }
-    ])];
-    c.moveUncheckedItemsFromDialog();
-    assert.equal(c.state.backlog.length, 0, 'dátum nélkül is áthelyezett');
-    assert.match(c.alerts.join(' '), /nincs dátum/i, 'nem figyelmeztetett: ' + c.alerts.join(' '));
-  });
-
-  await test('Részleges mennyiség: a megkapott rész marad, a hiány megy tovább', async () => {
-    const c = itemsCtx();
-    c.currentItemsOrderId = 'o1';
-    c.state.orders = [order56([
-      { _id: 'i1', name: 'Karima', code: 'K1', qty: 10, unit: 'db', received: false, missingQty: 4, moveTargetDate: '2026-09-04' }
-    ])];
-    c.moveUncheckedItemsFromDialog();
+  await test('A dátum beírása azonnal áthelyezi a tételt', async () => {
+    const c = moveCtx();
+    c.state.orders = [twoItemOrder()];
+    c.setItemMoveDate('o1', 'i1', '2026-09-04');
+    const target = c.state.orders.find(o => o.scheduleDate === '2026-09-04');
+    assert.ok(target, 'nem jött létre a célnap fuvarja');
+    assert.equal(target.items[0].name, 'Karima');
+    assert.equal(target.items[0].qty, '1', 'a hiányzó mennyiség ment át');
+    assert.equal(c.state.backlog.length, 1, 'nem került a Hátralék fülre');
+    assert.equal(c.state.backlog[0].movedToDate, '2026-09-04');
     const src = c.state.orders.find(o => o.scheduleDate === '2026-09-01');
-    const tgt = c.state.orders.find(o => o.scheduleDate === '2026-09-04');
-    assert.equal(src.items[0].qty, '6', 'az eredeti napon 6 marad, most: ' + src.items[0].qty);
-    assert.equal(src.items[0].received, true, 'a megkapott rész nincs kipipálva');
-    assert.equal(tgt.items[0].qty, '4', 'a hátralék 4, most: ' + tgt.items[0].qty);
+    assert.equal(src.items.find(i => i._id === 'i1').qty, '1', 'a megkapott rész nem maradt');
+    assert.equal(src.items.find(i => i._id === 'i1').received, true, 'a megkapott rész nincs kipipálva');
+  });
+
+  await test('Két tétel két külön napra ütemezhető egymás után', async () => {
+    const c = moveCtx();
+    c.state.orders = [twoItemOrder()];
+    c.setItemMoveDate('o1', 'i1', '2026-09-04');
+    c.setItemMoveDate('o1', 'i2', '2026-09-09');
+    const dates = c.state.orders.map(o => o.scheduleDate).sort();
+    assert.deepEqual(dates, ['2026-09-01', '2026-09-04', '2026-09-09'], 'napok: ' + dates.join(', '));
+    assert.deepEqual(c.state.backlog.map(b => b.movedToDate).sort(), ['2026-09-04', '2026-09-09']);
+    const src = c.state.orders.find(o => o.scheduleDate === '2026-09-01');
+    assert.equal(src.items.length, 1, 'a teljes egészében átvitt tétel nem került ki az eredeti napról');
+  });
+
+  await test('Az eredeti nappal azonos dátumot nem fogadja el', async () => {
+    const c = moveCtx();
+    c.state.orders = [twoItemOrder()];
+    c.setItemMoveDate('o1', 'i1', '2026-09-01');
+    assert.equal(c.state.backlog.length, 0, 'áthelyezett az eredeti napra');
+    assert.match(c.alerts.join(' '), /nem lehet az eredeti nappal azonos/i);
+  });
+
+  await test('Már átvett tételnél a dátum nem indít áthelyezést', async () => {
+    const c = moveCtx();
+    const o = twoItemOrder(); o.items[0].received = true;
+    c.state.orders = [o];
+    c.setItemMoveDate('o1', 'i1', '2026-09-04');
+    assert.equal(c.state.backlog.length, 0, 'átvett tételt is áthelyezett');
+  });
+
+  await test('A "Mindet erre a napra" gomb az összes nyitott tételt viszi', async () => {
+    const c = moveCtx();
+    c.currentItemsOrderId = 'o1';
+    c.headerDate = '2026-09-07';
+    c.state.orders = [twoItemOrder()];
+    c.applyMoveDateToAllItems();
+    assert.equal(c.state.backlog.length, 2, 'nem mind a két tétel ment át');
+    assert.deepEqual([...new Set(c.state.backlog.map(b => b.movedToDate))], ['2026-09-07']);
   });
 
   await test('A tételablak minden sorában van hátralék-dátum mező', async () => {
@@ -529,7 +554,9 @@ function krprWith(target) {
     const body = app.slice(start, app.indexOf('\nfunction ', start + 40));
     assert.ok(body.includes('item-move-date-input'), 'nincs tételenkénti dátummező');
     assert.ok(body.includes("setItemMoveDate('"), 'a dátummező nem ment');
-    assert.ok(body.includes('applyMoveDateAll'), 'nincs "Mindre" gomb a fejlécben');
+    assert.ok(body.includes('applyMoveDateAll'), 'nincs "Mindet erre a napra" gomb a fejlécben');
+    assert.ok(!body.includes('id="moveItemsBtn"'), 'a felesleges Áthelyezés gomb bent maradt');
+    assert.ok(app.includes('function moveSingleItemToDate'), 'hiányzik az egytételes áthelyezés');
     assert.ok(app.includes('function setItemMoveDate'), 'hiányzik a setItemMoveDate');
     assert.ok(app.includes('function applyMoveDateToAllItems'), 'hiányzik az applyMoveDateToAllItems');
   });
@@ -672,6 +699,52 @@ function krprWith(target) {
     assert.equal(c.state.resolvedBacklog.length, 1, 'nem került az elintézettek közé');
     assert.equal(c.state.orders[0].items[0].received, true, 'a tétel nincs kipipálva');
     assert.equal(c.state.orders[0].completed, true, 'a fuvar nem lett kész');
+  });
+
+  await test('Az áthelyezett tétel átütemezhető másik napra', async () => {
+    const c = moveCtx();
+    c.state.orders = [twoItemOrder()];
+    c.setItemMoveDate('o1', 'i1', '2026-09-04');
+    let t = c.state.orders.find(o => o.scheduleDate === '2026-09-04');
+    c.rescheduleMovedItem(t.id, t.items[0]._id, '2026-09-11');
+    assert.ok(c.state.orders.some(o => o.scheduleDate === '2026-09-11'), 'nem került át 09-11-re');
+    assert.ok(!c.state.orders.some(o => o.scheduleDate === '2026-09-04'), 'az üres 09-04 fuvar bent maradt');
+    assert.equal(c.state.backlog.length, 1, 'a hátralék megkettőződött');
+    assert.equal(c.state.backlog[0].movedToDate, '2026-09-11', 'a hátralék dátuma nem frissült');
+  });
+
+  await test('A téves áthelyezés visszavonható, minden a helyére kerül', async () => {
+    const c = moveCtx();
+    c.state.orders = [twoItemOrder()];
+    c.setItemMoveDate('o1', 'i2', '2026-09-09');
+    const t = c.state.orders.find(o => o.scheduleDate === '2026-09-09');
+    c.undoBacklogMove(t.id, t.items[0]._id);
+    assert.equal(c.state.orders.length, 1, 'maradt üres fuvar: ' + c.state.orders.map(o => o.scheduleDate).join(', '));
+    assert.equal(c.state.backlog.length, 0, 'a hátralék nem tűnt el');
+    const back = c.state.orders[0].items.find(x => x.name === 'Idom');
+    assert.ok(back, 'a tétel nem került vissza');
+    assert.equal(back.received, false, 'visszavonás után nem lehet kipipálva');
+  });
+
+  await test('A javítás mindkét felületen elérhető', async () => {
+    const app = fs.readFileSync(__dirname + '/app.js', 'utf8');
+    const start = app.lastIndexOf("$('#itemsBody').innerHTML=");
+    const body = app.slice(start, app.indexOf('bindMoveDateParts', start));
+    assert.ok(body.includes('rescheduleMovedItem'), 'a tételablakban nincs átütemezés');
+    assert.ok(body.includes('undoBacklogMove'), 'a tételablakban nincs visszavonás');
+    assert.ok(body.includes('item-grid-head'), 'nincs oszlopfejléc');
+    assert.ok(app.includes("class=\"bl-undo\""), 'a Hátralék fülön nincs Vissza gomb');
+    assert.ok(app.includes('window.undoBacklogMove'), 'a visszavonás nincs globálisan elérhető');
+  });
+
+  await test('A fő dátum nem írja felül a már beállított egyedi napokat', async () => {
+    const c = moveCtx();
+    c.currentItemsOrderId = 'o1'; c.headerDate = '2026-09-07';
+    c.state.orders = [twoItemOrder()];
+    c.setItemMoveDate('o1', 'i1', '2026-09-04');
+    c.applyMoveDateToAllItems();
+    const dates = c.state.backlog.map(b => b.movedToDate).sort();
+    assert.deepEqual(dates, ['2026-09-04', '2026-09-07'], 'a fő dátum felülírta az egyedit: ' + dates.join(', '));
   });
 
   if (!process.exitCode) console.log(`\nV57 elfogadási teszt: ${passed}/${total} sikeres.`);

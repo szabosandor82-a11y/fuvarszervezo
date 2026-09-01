@@ -293,3 +293,32 @@ dialog{background:#fffefd;box-shadow:0 28px 76px #6278872e}dialog::backdrop{back
   background:#eaf6ea;border-radius:6px;cursor:pointer;color:#255f25}
 .bl-arrived:hover{background:#d9eeda}
 .bl-open{flex:none;width:28px;height:28px;border:.5px solid #cfcbbf;background:#fff;border-radius:6px;cursor:pointer}
+
+/* V57 – tételablak négyoszlopos rácsa */
+.item-grid-head,.item-grid{display:grid;grid-template-columns:26px 1fr 92px 148px;gap:10px;align-items:start}
+.item-grid-head{padding:7px 12px;background:#f4f2ec;border-bottom:.5px solid #d9d5c9;
+  font-size:11px;color:#6b675d;position:sticky;top:0;z-index:2}
+.item-grid{padding:9px 12px;border-bottom:.5px solid #ece9e0;align-items:center}
+.item-grid.done{opacity:.55}
+.item-grid.done .item-name{text-decoration:line-through}
+.item-main{min-width:0}
+.item-main .item-name{font-size:13px;font-weight:600}
+.item-sub{font-size:11px;color:#6b675d}
+.item-moved{color:#0c447c}
+.item-main .item-note-edit textarea{width:100%;min-height:30px;font-size:12px;margin-top:4px;
+  border:.5px solid #e0ddd3;border-radius:6px;padding:4px 6px;resize:vertical}
+.item-date-cell{display:flex;flex-direction:column;gap:4px}
+.item-date-cell .item-move-date-input{width:100%;font-size:12px;padding:4px 6px;
+  border:.5px solid #cfcbbf;border-radius:6px;background:#fff}
+.item-undo{font-size:11px;padding:3px 6px;border:.5px solid #e0a4a4;background:#fbeaea;
+  color:#8d2b2b;border-radius:6px;cursor:pointer}
+.item-dash{color:#a5a297;font-size:12px;text-align:center}
+.missing-qty-input{width:100%;font-size:13px;padding:4px 6px;border:.5px solid #cfcbbf;border-radius:6px}
+@media(max-width:640px){
+  .item-grid-head{display:none}
+  .item-grid{grid-template-columns:24px 1fr;gap:8px}
+  .item-grid>.missing-qty-input,.item-grid>.item-date-cell,.item-grid>.item-dash{grid-column:2}
+}
+.bl-undo{flex:none;height:28px;padding:0 9px;font-size:12px;border:.5px solid #e0a4a4;
+  background:#fbeaea;color:#8d2b2b;border-radius:6px;cursor:pointer}
+.bl-undo:hover{background:#f6dada}

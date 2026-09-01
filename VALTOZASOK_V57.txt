@@ -82,9 +82,79 @@ visszajelzése alapján, vagy marad az áthelyezéskori. Jelenleg egy dátum van
 és a lejárat automatikusan számítódik.
 
 
+4. HATRALEK UTEMEZESE EGY LEPESBEN
+----------------------------------
+A tetelablak minden soraban van egy datummezo. A sofor a beszallitotol
+kapott informacio alapjan beirja, es a tetel AZONNAL atkerul arra a napra:
+
+  - letrejon (vagy kiegeszul) az aznapi fuvar ugyanazzal a rendelesszammal,
+    beszallitoval es projekttel
+  - a tetel bekerul a Hatralek fulre
+  - a hianyzo mennyiseg megy at; ha nincs megadva, a teljes tetel
+  - a megkapott resz az eredeti napon marad, kipipalva
+  - ha az egesz atment, a tetel kikerul az eredeti naprol
+
+Nem kell kulon Athelyezes gombot nyomni - az a gomb megszunt. A fejlecben
+maradt egy "Mindet erre a napra", ha egyszerre akarod az osszes nyitott
+tetelt utemezni.
+
+Pelda: 2 db Karimabol 1 erkezett meg, az Idom egyaltalan nem.
+   09-01:  Karima 1 db [atveve]
+   09-04:  Karima 1 db      (a sofor ezt a napot irta be)
+   09-09:  Idom 5 db        (a sofor ezt a napot irta be)
+
+Vedelmek: az eredeti nappal azonos datumot nem fogadja el, mar atvett
+tetelnel nem indit athelyezest, es a hianyzo mennyiseg nem lehet nulla vagy
+a rendeltnel tobb.
+
+MEGJEGYZES: az athelyezes megerosites nelkul fut, ahogy kerted. Ha a
+gyakorlatban egy elgepelt datum gondot okoz, egy sorral betehet egy
+"Biztos?" kerdes.
+
+
+5. UTOLAGOS JAVITAS - ATUTEMEZES ES VISSZAVONAS
+-----------------------------------------------
+Mivel a datum beirasa azonnal mozgat, kell hozza javitasi lehetoseg. Mindket
+feluleten (admin es sofor) ugyanabban a tetelablakban:
+
+  - az athelyezett tetel datuma atirhato -> atkerul a masik napra, es a
+    Hatralek fulon is frissul a datum
+  - a "Vissza" gomb visszateszi a tetelt az eredeti napra es torli a
+    hatralekot; ha ott mar van azonos tetel, a mennyiseg osszeadodik
+  - ugyanez a ket muvelet a Hatralek fulon is elerheto
+
+Az athelyezesbol szuletett fuvar automatikusan megszunik, ha kiurul
+(atutemezes vagy visszavonas utan), tehat nem maradnak ures napok.
+
+Teljes kor probaja:
+   1) sofor 09-04-re utemez   -> 09-01 ures, 09-04 Karima, hatralek 1
+   2) megis 09-11             -> 09-04 megszunik, 09-11 Karima
+   3) visszavonas             -> minden vissza 09-01-re, hatralek 0
+
+
+6. TETELABLAK - NEGY OSZLOP
+---------------------------
+Semmit nem kell kulon megnyitni:
+
+   [pipa] Tetel                    Hianyzik   Hatralek napja
+   ---------------------------------------------------------
+   [ ]    Karima PN16 DN50             1      2026-09-04 [Vissza]
+          K1 . 2 db . athelyezve 09-04
+   [ ]    Menetesszar M10x3000       mind     2026-09-09 [Vissza]
+   [x]    Idom 20x3/4                  -           -
+          K2 . 5 db . atveve
+
+A fejlecben egy fo datum + "Mindet erre a napra" gomb. Ez CSAK azokra
+vonatkozik, amiknek meg nincs sajat datuma, hogy egy veletlen kattintas ne
+borítsa fel a mar beallitott napokat.
+
+Az atvett tetel kiszurkul, es nincs se mennyiseg, se datum mezoje.
+Telefonon a rács egy oszlopba tordelodik.
+
+
 TESZTEK
 -------
-TEST_V57.js   41/41
+TEST_V57.js   46/46
 TEST_V54/53/52/49/44/43/41/37/35/34/33 – mind sikeres
 
 Változatlanul elbukik, de az eredeti V52 csomagban is:
