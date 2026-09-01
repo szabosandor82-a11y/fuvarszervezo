@@ -1,0 +1,93 @@
+FUVARSZERVEZŐ V57 – ADATINTEGRITÁS, SOFŐRI LISTA, HÁTRALÉK
+==========================================================
+
+MÓDOSÍTOTT FÁJLOK
+-----------------
+app.js            központi integritási réteg, új hátralék nézet
+auth-v44-2.js     sofőri oldal egysoros listája
+index.html        a hátralék tábla helyett lista
+styles.css        az új nézetek stílusa
+planner-v44.js / manifest / sw.js   verziószám
+TEST_V57.js       41 teszt
+
+
+1. KÖZPONTI INTEGRITÁSI RÉTEG
+-----------------------------
+Bejelentett hiba: ha egy tételnél hátralékot rögzítesz, majd a rendelést
+törlöd, a hátralék ott marad a Hátralék fülön.
+
+Az audit ötféle árva hivatkozást talált, nem egyet:
+
+   művelet                              ami ott maradt
+   -----------------------------------  ----------------------------------
+   eredeti fuvar törlése                a hátralék a Hátralék fülön
+   a hátralék célfuvarának törlése      a hátralék egy nemlétező fuvarra mutat
+   tétel törlése a célfuvarból          a hátralék egy nemlétező tételre mutat
+   bármely fuvar törlése                az útvonalterv megőrizte a hivatkozást
+   forrás törlése áthelyezés után       a movedFromOrderId a semmibe mutatott
+
+Közös ok: öt-hat helyen törlődik fuvar, és mindegyik csak a saját listáját
+takarítja.
+
+Megoldás: új reconcileState() függvény, amely MINDEN mentés előtt lefut, és
+egy helyen rendezi az összefüggéseket. Ha új kapcsolat kerül a modellbe,
+ide kell felvenni, nem hat helyre.
+
+Két különböző takarítás:
+  - a származtatott hivatkozás (útvonalterv, movedFromOrderId, elintézett
+    hátralék) némán javul
+  - a hátralék NEM tűnik el csendben. Ha a forrásfuvart törölték:
+      * ha a származtatott fuvar még érintetlen (nincs átvett tétel, nincs
+        lezárva), az is törlődik – a hátralék tárgytalan
+      * ha a sofőr már dolgozott rajta, a fuvar MEGMARAD, a hátralék pedig
+        "árva" jelölést kap, és a Hátralék fülön külön látszik, mert ott
+        adat veszne el
+
+Mind a hat forgatókönyv teszttel védve.
+
+
+2. SOFŐRI OLDAL – EGYSOROS LISTA
+--------------------------------
+   005714 — Hungarokomplex — Sofitel
+   [Tétel / hátralék (2/5)]  [Szállítólevél]  [Fuvar átadása]
+
+A tételablak ugyanaz, mint az admin oldalon. A fuvarátadás változatlan.
+
+A címek, megjegyzések, átvevő és a mentett fotók a sor végén lévő nyíllal
+nyithatók, hogy a lista áttekinthető maradjon. A specifikáció szerint a
+felrakó címe nem került az alapsorba – ha a sofőrnek ott kell látnia,
+egy sorral visszatehető.
+
+
+3. ÚJ HÁTRALÉK NÉZET
+--------------------
+A régi nyolc oszlopos tábla tételsoros volt: ha egy fuvarból négy tétel
+csúszott, négy különálló sor lett, és nem látszott, hogy összetartoznak.
+
+Az új nézet arra a két kérdésre válaszol, ami a döntéshez kell: mi csúszott
+meg, és melyik napon mi jön.
+
+  - legfelül MEGCSÚSZOTT szekció pirossal: lejárt dátum, dátum nélküli,
+    vagy árva tétel
+  - alatta napokra bontva, azon belül beszállítónként csoportosítva
+  - soronként "Megérkezett" gomb: kipipálja a tételt a célfuvarban, lezárja
+    a hátralékot és átteszi az elintézettek közé – navigálás nélkül
+  - a dátum továbbra is helyben szerkeszthető
+  - "↗" gomb a fuvarra ugráshoz
+  - a már átvett tételek automatikusan kikerülnek a listából
+
+Amit NEM építettem be, mert kérdés maradt: a külön "várható / visszaigazolt"
+állapot. Ehhez tudni kell, hogy a dátumot te írod-e be a beszállító
+visszajelzése alapján, vagy marad az áthelyezéskori. Jelenleg egy dátum van,
+és a lejárat automatikusan számítódik.
+
+
+TESZTEK
+-------
+TEST_V57.js   41/41
+TEST_V54/53/52/49/44/43/41/37/35/34/33 – mind sikeres
+
+Változatlanul elbukik, de az eredeti V52 csomagban is:
+   TEST_V44_2.js, TEST_V41_MSG.js
+
+Futtatás: node TEST_V57.js

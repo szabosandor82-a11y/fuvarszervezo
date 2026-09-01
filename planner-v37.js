@@ -347,6 +347,57 @@
     return { main: names[0], extra: names.length > 1 ? `+${names.length - 1} projekt` : '' };
   }
 
+
+  /*
+    V56 – egy felrakó = egy sor a Nézetben.
+
+    Ha ugyanarról a felrakóhelyről több projektre is viszünk, az nem külön
+    sor: egyetlen sorban jelenik meg, és a nyíl nyitja le a lerakókat a
+    hozzájuk tartozó tételekkel.
+  */
+  function renderCompactUnitV56(unit, index, vehicleId) {
+    const groups = unit.groups || [];
+    const first = groups[0] || {};
+    const orders = unit.allPickupOrders || [];
+    const ids = orders.map(order => order.id).join(',');
+    const itemCount = orders.reduce((sum, order) => sum + (order.items?.length || 0), 0);
+    const longReasons = [...new Set(orders.map(order => order.longMaterialReason).filter(Boolean))];
+    const resolved = orders.length > 0 && orders.every(isResolvedBacklogOrder);
+    const complete = orders.length > 0 && orders.every(order => order.completed);
+    const pinned = orders.some(order => order.routePinned);
+    const fullLoad = groups.some(group => group.fullLoad);
+    const rawName = String(first.pickupName || 'Felrakó').trim();
+    const central = /\bkp\b|kozpont/.test(nrm(rawName));
+    const displayName = rawName.replace(/\s*\bkp\.?\s*$/i, '').trim() || rawName;
+    const address = first.pickupAddress || '';
+
+    const projects = [...new Set(groups.map(group => group.projectName).filter(Boolean))];
+    const dropCount = projects.length || 1;
+
+    const detail = groups.map(group => {
+      const rows = (group.orders || []).flatMap(order => (order.items || []).map(item =>
+        `<div class="v56-item-row"><span>${escHtml(item.name || 'Tétel')}</span><span class="v56-item-qty">${escHtml(String(item.qty ?? ''))} ${escHtml(item.unit || '')}</span></div>`));
+      const nos = [...new Set((group.orders || []).map(order => order.orderNo).filter(Boolean))];
+      return `<div class="v56-drop-block">
+        <div class="v56-drop-head"><b>${escHtml(group.projectName || 'Nincs projekt')}</b><span class="v56-drop-meta">${escHtml(nos.join(', '))}</span></div>
+        ${rows.join('') || '<div class="v56-item-row v56-item-empty"><span>Nincs rögzített tétel.</span><span></span></div>'}
+      </div>`;
+    }).join('');
+
+    return `<section class="pickup-move-block v56-row-block ${resolved ? 'resolved-pickup-block' : ''} ${pinned ? 'pinned-block' : ''} ${fullLoad ? 'full-load-block' : ''}" data-pickup-move-key="${escHtml(unit.pickupKey)}" data-order-ids="${escHtml(ids)}">
+      <article class="v56-row ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''} ${longReasons.length ? 'has-long' : ''}">
+        <span class="drag v56-drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : 'Húzás'}">☷</span>
+        <span class="v56-index">${escHtml(String(index + 1))}</span>
+        <div class="v56-main">
+          <div class="v56-line-top"><b>${escHtml(displayName)}</b>${central ? '<span class="v56-chip">kp</span>' : ''}${longReasons.length ? '<span class="v56-chip v56-chip-warn">szálas</span>' : ''}<span class="v56-addr">${address ? '— ' + escHtml(address) : ''}</span></div>
+        </div>
+        <button type="button" class="v56-items-btn" onclick="event.stopPropagation();v56ToggleItems('${escHtml(ids)}',this)" title="Lerakók és tételek">${dropCount} lerakó · ${itemCount} tétel <span class="v56-caret">▾</span></button>
+      </article>
+      <div class="v56-items" data-items-for="${escHtml(ids)}" hidden>${detail}</div>
+      ${fullLoad ? '<div class="v56-forced-drop">Kötelező azonnali lerakás</div>' : ''}
+    </section>`;
+  }
+
   function renderCompactRowV56(group, ctx) {
     const { ids, orderNos, itemCount, longReasons, complete, resolved, pinned, fullLoad,
       first, warnings, displayNumber, vehicleId, pickupOrderIds, regroupButton, options } = ctx;
@@ -374,15 +425,6 @@
           ${warnings || ''}
         </div>
         <button type="button" class="v56-items-btn" onclick="event.stopPropagation();v56ToggleItems('${escHtml(ids)}',this)" title="Felrakandó tételek">${itemCount} tétel <span class="v56-caret">▾</span></button>
-        <button type="button" class="v56-more-btn" onclick="event.stopPropagation();v56ToggleMenu(this)" title="További műveletek" aria-label="További műveletek">⋯</button>
-        <div class="v56-menu" hidden>
-          <button type="button" onclick="event.stopPropagation();v56CloseMenus();v37TogglePin('${escHtml(ids)}','${escHtml(vehicleId)}')">${pinned ? 'Rögzítés feloldása' : 'Rögzítés a sorrendben'}</button>
-          <button type="button" onclick="event.stopPropagation();v56CloseMenus();v33ToggleFullLoad('${escHtml(ids)}')">${fullLoad ? 'Teljes autó kikapcsolása' : 'Teljes autó'}</button>
-          <button type="button" onclick="event.stopPropagation();v56CloseMenus();editOrder('${escHtml(first.id)}')">Szerkesztés</button>
-          <button type="button" onclick="event.stopPropagation();v56CloseMenus();v37ToggleGroupComplete('${escHtml(ids)}')">${complete ? 'Visszaállítás nyitottra' : 'Kész'}</button>
-          ${regroupButton ? `<button type="button" onclick="event.stopPropagation();v56CloseMenus();v37SetPickupGrouping('${escHtml(pickupOrderIds)}',false)">Felrakó szétbontása</button>` : ''}
-          <button type="button" class="v56-menu-danger" onclick="event.stopPropagation();v56CloseMenus();v33DeleteGroup('${escHtml(ids)}')">Törlés</button>
-        </div>
       </article>
       <div class="v56-items" data-items-for="${escHtml(ids)}" hidden>${items}</div>
       ${fullLoad ? '<div class="v56-forced-drop">Kötelező azonnali lerakás</div>' : ''}
@@ -405,7 +447,7 @@
       ? `<button type="button" class="group-toggle-button" onclick="event.stopPropagation();v37SetPickupGrouping('${escHtml(pickupOrderIds)}',false)" title="Az azonos felrakó rendeléseinek újracsoportosítása">🔗</button>`
       : '';
     const displayNumber = options.displayLabel || String(index + 1);
-    if (options.focus) return renderCompactRowV56(group, {
+    if (options.focus && !options.unitRow) return renderCompactRowV56(group, {
       ids, orderNos, itemCount, longReasons, complete, resolved, pinned, fullLoad, first,
       warnings, displayNumber, vehicleId, pickupOrderIds, regroupButton, options
     });
@@ -434,6 +476,8 @@
   function groupedBubbles(list, vehicleId, focus = false) {
     const units = focusPickupUnits(list);
     if (!units.length) return '<div class="notice">Nincs fuvar.</div>';
+    // A Nézetben minden felrakó pontosan egyszer szerepel.
+    if (focus) return units.map((unit, unitIndex) => renderCompactUnitV56(unit, unitIndex, vehicleId)).join('');
     return units.map((unit, unitIndex) => {
       if (!unit.grouped) {
         const group = unit.groups[0];
@@ -661,7 +705,7 @@
         // útvonalterv épül újra a kézi sequence értékekből, és csak utána
         // rajzolunk. Fordítva a rajzoló üres tervet találna, és
         // újraoptimalizálná az útvonalat, felülírva a te sorrendedet.
-        const buildManual = global.V56Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
+        const buildManual = global.V57Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
         setTimeout(async () => {
           if (typeof buildManual === 'function') {
             try {
@@ -852,16 +896,6 @@
   global.v37CloseDriverView = closeDriverView;
   global.v37SetPickupGrouping = v37SetPickupGrouping;
   // V56 – kompakt sor viselkedése
-  global.v56CloseMenus = function (except) {
-    document.querySelectorAll('.v56-menu').forEach(menu => { if (menu !== except) menu.hidden = true; });
-  };
-  global.v56ToggleMenu = function (button) {
-    const menu = button?.parentElement?.querySelector('.v56-menu');
-    if (!menu) return;
-    const willOpen = menu.hidden;
-    global.v56CloseMenus(menu);
-    menu.hidden = !willOpen;
-  };
   global.v56ToggleItems = function (ids, button) {
     const panel = document.querySelector(`.v56-items[data-items-for="${(ids || '').replace(/"/g, '')}"]`);
     if (!panel) return;
@@ -870,12 +904,6 @@
     if (caret) caret.textContent = panel.hidden ? '▾' : '▴';
     button?.classList.toggle('open', !panel.hidden);
   };
-  if (typeof document !== 'undefined') {
-    document.addEventListener('click', event => {
-      if (!event.target.closest?.('.v56-menu, .v56-more-btn')) global.v56CloseMenus();
-    });
-  }
-
   global.v37TogglePin = v37TogglePin;
   global.v37ToggleGroupComplete = v37ToggleGroupComplete;
   global.V37Planner = {
@@ -888,6 +916,7 @@
     groupedBubbles,
     drawFocusMap,
     renderCompactRowV56,
+    renderCompactUnitV56,
     projectSummaryV56,
     v37SetPickupGrouping,
     isBacklogOrder,

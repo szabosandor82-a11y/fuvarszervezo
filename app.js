@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V56Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V57Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -34,7 +34,100 @@ function syncScheduleDate(){
 function bindDateParts(prefix){const y=$('#'+prefix+'Year'),m=$('#'+prefix+'Month'),d=$('#'+prefix+'Day');[[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next])=>{if(!el)return;el.addEventListener('input',()=>{el.value=el.value.replace(/\D/g,'').slice(0,max);if(el.value.length===max&&next){next.focus();next.select()}});el.addEventListener('keydown',e=>{if(e.key==='Backspace'&&!el.value){const prev=el===d?m:el===m?y:null;if(prev){e.preventDefault();prev.focus();prev.setSelectionRange(prev.value.length,prev.value.length)}}})})}
 function defaultVehicles(){return[{id:'v-mario',driverName:'Márió',name:'Dobozos 1',type:'3.5 T dobozos autó',homeCity:'Vác',active:true},{id:'v-patrik',driverName:'Patrik',name:'Dobozos 2',type:'3.5 T dobozos autó',homeCity:'Kispest',active:true},{id:'v-martin',driverName:'Martin',name:'Ponyvás',type:'3.5 T plató autó',homeCity:'Felcsút',active:true}]}
 function refreshMasterData(){if(state.masterDataVersion)return;state.recipients=(state.recipients?.length?state.recipients:(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i})));state.projects=(SEED_DATA.projects||[]).map((x,i)=>({...x,id:'p'+i,defaultRecipientId:''}));state.suppliers=(SEED_DATA.suppliers||[]).map((x,i)=>({...x,id:'s'+i,isCentral:!!x.site&&norm(x.site)==='kozpont',pickupNote:x.note||''}));state.projects.forEach(p=>{const r=state.recipients.find(x=>norm(x.project)===norm(p.name))||state.recipients.find(x=>norm(x.name)===norm(p.receiver));p.defaultRecipientId=r?.id||''});(state.orders||[]).forEach(o=>{const p=state.projects.find(x=>norm(x.name)===norm(o.projectName));if(p)o.projectId=p.id;const matches=state.suppliers.filter(x=>norm(x.name)===norm(o.pickupName));if(matches.length===1)o.supplierId=matches[0].id});state.aliases={projects:{},suppliers:{}};state.masterDataVersion='v14-20260717'}function load(){const raw=localStorage.getItem(KEY);if(raw){state=JSON.parse(raw);state.aliases=state.aliases||{projects:{},suppliers:{}};state.vehicles=state.vehicles||defaultVehicles();state.orders=state.orders||[];state.backlog=state.backlog||[];refreshMasterData();save(false);return}state.recipients=(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i}));state.vehicles=defaultVehicles();state.orders=[];refreshMasterData();save(false)}
-function save(renderNow=true){localStorage.setItem(KEY,JSON.stringify(state));if(renderNow)render()}
+/* V57 – KÖZPONTI INTEGRITÁSI RÉTEG
+
+   A fuvarokra több gyűjtemény is hivatkozik: a hátralék (forrás- és
+   célfuvar, tétel), az elintézett hátralék, az útvonalterv és a
+   movedFromOrderId lánc. Korábban minden törlési út csak a saját listáját
+   takarította, ezért árva hivatkozások maradtak – például egy törölt fuvar
+   hátraléka bent maradt a Hátralék fülön.
+
+   Ez a réteg minden mentés előtt egyszer lefut, és egy helyen tartja rendben
+   az összefüggéseket. Ha új kapcsolat kerül a modellbe, ide kell felvenni.
+
+   Kétféle takarítás:
+   - a származtatott hivatkozás (útvonalterv, movedFromOrderId) némán javul
+   - a hátralék NEM tűnik el csendben: ha a fuvara megszűnt, "árva" jelölést
+     kap, és a Hátralék fülön külön látszik, mert ott adat veszne el
+*/
+function reconcileState(reason = '') {
+  const st = state || {};
+  st.orders = st.orders || []; st.backlog = st.backlog || [];
+  st.resolvedBacklog = st.resolvedBacklog || []; st.routePlans = st.routePlans || {};
+  const orderIds = new Set(st.orders.map(o => o.id));
+  const itemIds = new Set();
+  for (const o of st.orders) for (const it of o.items || []) if (it._id) itemIds.add(String(it._id));
+  const report = { orphanBacklog: 0, clearedBacklog: 0, routeRefs: 0, movedFrom: 0, resolved: 0, derivedOrders: 0 };
+
+  // 0. ha a FORRÁS fuvart törlik, az abból származtatott jövőbeli fuvar is
+  //    tárgytalan – feltéve, hogy még érintetlen. Ha a sofőr már dolgozott
+  //    rajta (átvett tétel vagy lezárt fuvar), NEM töröljük: megmarad, és a
+  //    hátralék "árva" jelölést kap, hogy te dönthess róla.
+  const derivedRemoved = new Set();
+  for (const o of st.orders.slice()) {
+    if (!o.movedFromOrderId || orderIds.has(o.movedFromOrderId)) continue;
+    const untouched = !o.completed && (o.items || []).every(it => !it.received);
+    if (!untouched) continue;
+    derivedRemoved.add(o.id);
+    st.orders = st.orders.filter(x => x.id !== o.id);
+    orderIds.delete(o.id);
+    for (const it of o.items || []) itemIds.delete(String(it._id));
+    report.derivedOrders = (report.derivedOrders || 0) + 1;
+  }
+
+  // 1. hátralék: ha a CÉL fuvar megszűnt, a hátralék tárgytalan -> törlés.
+  //    ha csak a FORRÁS szűnt meg, a tétel még jön: megtartjuk, jelöljük.
+  const keptBacklog = [];
+  for (const b of st.backlog) {
+    const targetAlive = orderIds.has(b.targetOrderId);
+    const itemAlive = !b.itemId || itemIds.has(String(b.itemId));
+    if (!targetAlive || !itemAlive) { report.clearedBacklog++; continue; }
+    if (!orderIds.has(b.sourceOrderId)) {
+      if (!b.orphanSource) { b.orphanSource = true; b.orphanAt = new Date().toISOString(); }
+      report.orphanBacklog++;
+    } else if (b.orphanSource) { delete b.orphanSource; delete b.orphanAt; }
+    keptBacklog.push(b);
+  }
+  st.backlog = keptBacklog;
+
+  // 2. elintézett hátralék: a megszűnt fuvarhoz tartozó bejegyzés törlődik
+  const keptResolved = st.resolvedBacklog.filter(r => orderIds.has(r.targetOrderId));
+  report.resolved = st.resolvedBacklog.length - keptResolved.length;
+  st.resolvedBacklog = keptResolved;
+
+  // 3. útvonalterv: a megszűnt fuvarra mutató hivatkozás kikerül,
+  //    az üresen maradt megálló is
+  for (const [date, plans] of Object.entries(st.routePlans)) {
+    if (!plans || typeof plans !== 'object') continue;
+    for (const [vehicleId, events] of Object.entries(plans)) {
+      if (!Array.isArray(events)) continue;
+      const cleaned = [];
+      for (const ev of events) {
+        const before = (ev.orders || []).length;
+        ev.orders = (ev.orders || []).filter(id => orderIds.has(id));
+        report.routeRefs += before - ev.orders.length;
+        if (ev.orders.length || !before) cleaned.push(ev);
+      }
+      plans[vehicleId] = cleaned;
+    }
+  }
+
+  // 4. movedFromOrderId lánc
+  for (const o of st.orders) {
+    if (o.movedFromOrderId && !orderIds.has(o.movedFromOrderId)) {
+      o.movedFromOrderIdLost = o.movedFromOrderId;
+      o.movedFromOrderId = '';
+      report.movedFrom++;
+    }
+  }
+
+  const touched = report.orphanBacklog + report.clearedBacklog + report.routeRefs + report.movedFrom + report.resolved + report.derivedOrders;
+  if (touched) console.info('[V57 integritás]', reason || 'mentés', report);
+  return report;
+}
+window.reconcileState = reconcileState;
+
+function save(renderNow=true){reconcileState('mentés');localStorage.setItem(KEY,JSON.stringify(state));if(renderNow)render()}
 function activeVehicles(){return state.vehicles.filter(v=>v.active)}
 function marioVehicle(){return activeVehicles().find(v=>norm(v.driverName).includes('mario'))||state.vehicles.find(v=>norm(v.driverName).includes('mario'))||null}
 function selectedDate(){return $('#workDate').value||today()}
@@ -423,52 +516,172 @@ function validMoveTargetFromInputs(prefix='move'){
 function bindV21MoveDateParts(){
   const y=$('#moveYear'),m=$('#moveMonth'),d=$('#moveDay'),btn=$('#moveItemsBtn');
   if(!y||!m||!d||!btn)return;
-  const update=()=>{btn.disabled=!validMoveTargetFromInputs('move')};
+  // Az Áthelyezés akkor is elérhető, ha a fejléc üres, de a tételek mellett
+  // van saját dátum – a hátralék tételenként ütemezhető.
+  const anyItemDate=()=>{
+    const o=state.orders.find(x=>x.id===currentItemsOrderId);
+    return !!o&&(o.items||[]).some(it=>!it.received&&(it.moveTargetDate||'').trim());
+  };
+  const update=()=>{btn.disabled=!validMoveTargetFromInputs('move')&&!anyItemDate()};
   [[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next])=>{
     el.addEventListener('input',()=>{el.value=el.value.replace(/\D/g,'').slice(0,max);if(el.value.length===max&&next){next.focus();next.select()}update()});
     el.addEventListener('change',update);
   });
   btn.onclick=moveUncheckedItemsFromDialog;
+  const applyAll=$('#applyMoveDateAll');
+  if(applyAll)applyAll.onclick=applyMoveDateToAllItems;
   update();
 }
 function openItems(id){
   const o=state.orders.find(x=>x.id===id);if(!o)return;currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);
   $('#itemsTitle').textContent=`${o.orderNo} · tételek`;
-  $('#itemMovePanel').innerHTML=`<div class="move-controls"><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Áthelyezés éve"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div><button id="moveItemsBtn" class="move-items-btn" type="button" disabled>Áthelyezés</button></div>`;
-  $('#itemsBody').innerHTML=(o.items||[]).map((it,i)=>`<div class="item-row ${it.received?'done':''}"><input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${id}',${i},this.checked)"><div><b class="item-name">${esc(it.name)}</b><br>${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)} ${it.longMaterial?'· hosszú szál':''}<div class="missing-qty-wrap ${it.received?'hidden':''}"><input class="missing-qty-input" type="number" min="0" step="any" aria-label="Nem kapott mennyiség" value="${esc(it.missingQty||'')}" oninput="updateMissingQty('${id}',${i},this.value)"></div><label class="item-note-edit">Tétel megjegyzés<textarea placeholder="Nincs megjegyzés" oninput="updateItemNote('${id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label></div></div>`).join('')||'<div class="notice">Nincs tétel.</div>';
+  $('#itemMovePanel').innerHTML=`<div class="move-controls"><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Alapértelmezett áthelyezési év"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div><button id="applyMoveDateAll" class="move-items-btn" type="button" title="A fenti dátum beírása minden kipipálatlan tétel mellé">Mindre</button><button id="moveItemsBtn" class="move-items-btn" type="button" disabled>Áthelyezés</button></div>`;
+  $('#itemsBody').innerHTML=(o.items||[]).map((it,i)=>`<div class="item-row ${it.received?'done':''}"><input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${id}',${i},this.checked)"><div><b class="item-name">${esc(it.name)}</b><br>${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)} ${it.longMaterial?'· hosszú szál':''}<div class="missing-qty-wrap ${it.received?'hidden':''}"><input class="missing-qty-input" type="number" min="0" step="any" aria-label="Nem kapott mennyiség" value="${esc(it.missingQty||'')}" oninput="updateMissingQty('${id}',${i},this.value)"><label class="item-move-date">Hátralék napja<input type="date" class="item-move-date-input" value="${esc(it.moveTargetDate||'')}" aria-label="Ennek a tételnek a hátralék dátuma" onchange="setItemMoveDate('${id}','${esc(it._id||'')}',this.value)"></label></div><label class="item-note-edit">Tétel megjegyzés<textarea placeholder="Nincs megjegyzés" oninput="updateItemNote('${id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label></div></div>`).join('')||'<div class="notice">Nincs tétel.</div>';
   bindV21MoveDateParts();if(!$('#itemsDialog').open)$('#itemsDialog').showModal()
 }
 window.openItems=openItems;
 
+function setItemMoveDate(orderId,itemId,value){
+  const o=state.orders.find(x=>x.id===orderId);if(!o)return;
+  const it=(o.items||[]).find(x=>String(x._id)===String(itemId));if(!it)return;
+  it.moveTargetDate=value||'';save(false);
+}
+function applyMoveDateToAllItems(){
+  const o=state.orders.find(x=>x.id===currentItemsOrderId);if(!o)return;
+  const target=validMoveTargetFromInputs('move');
+  if(!target)return alert('Előbb adj meg érvényes dátumot a fejlécben.');
+  (o.items||[]).forEach(it=>{if(!it.received){ensureItemId(it);it.moveTargetDate=target}});
+  save(false);openItems(o.id);
+}
+/* V56: a hátralék tételenként ütemezhető.
+   Ha egy tételnek van saját dátuma, az az érvényes; ha nincs, a fejlécben
+   megadott dátum. Így egy rendelés hiányzó tételei több napra is szétoszthatók,
+   mert a hátralékot nem mindig egyszerre kapjuk meg. */
 function moveUncheckedItemsFromDialog(){
   const o=state.orders.find(x=>x.id===currentItemsOrderId);if(!o)return;
-  const target=validMoveTargetFromInputs('move');if(!target)return alert('Előbb adj meg érvényes áthelyezési dátumot az ablak fejlécében.');
-  if(target===o.scheduleDate)return alert('Az új dátum nem lehet az eredeti nappal azonos.');
-  const moving=(o.items||[]).filter(i=>!i.received);if(!moving.length)return alert('Nincs áthelyezhető, kipipálatlan tétel.');
-  for(const it of moving){const total=numericQty(it.qty),missing=it.missingQty===''||it.missingQty==null?total:numericQty(it.missingQty);if(missing<=0)return alert(`A(z) ${it.name} hiányzó mennyisége legyen nagyobb nullánál.`);if(total>0&&missing>total)return alert(`A(z) ${it.name} hiányzó mennyisége nem lehet több a rendelt mennyiségnél (${it.qty}).`)}
-  if(!confirm(`${moving.length} kipipálatlan tétel hiányzó mennyiségének áthelyezése erre a napra: ${target}?`))return;
-  let targetOrder=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===o.orderNo&&x.vehicleId===o.vehicleId&&x.projectName===o.projectName&&x.pickupName===o.pickupName&&x.movedFromOrderId===o.id);
-  if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id};state.orders.push(targetOrder)}
-  const keep=[];
-  (o.items||[]).forEach(it=>{
-    if(it.received){keep.push(it);return}
-    ensureItemId(it);const total=numericQty(it.qty),moveQty=it.missingQty===''||it.missingQty==null?total:numericQty(it.missingQty);
-    const moved={...it,_id:uid(),qty:formatQty(moveQty),received:false,missingQty:''};targetOrder.items.push(moved);
-    state.backlog.push({id:uid(),sourceOrderId:o.id,targetOrderId:targetOrder.id,itemId:moved._id,orderNo:o.orderNo,supplier:o.pickupName,projectName:o.projectName,code:it.code,name:it.name,itemNote:itemNoteValue(it),quantity:formatQty(moveQty),unit:it.unit,movedToDate:target,movedAt:new Date().toISOString()});
-    if(total>0&&moveQty<total){it.qty=formatQty(total-moveQty);it.received=true;it.missingQty='';keep.push(it)}
-  });
-  o.items=keep;o.completed=o.items.length>0&&o.items.every(i=>i.received);$('#itemsDialog').close();save();alert(`A hiányzó mennyiségek átkerültek a(z) ${target} napra és a Hátralék menübe.`)
+  const fallback=validMoveTargetFromInputs('move');
+  const moving=(o.items||[]).filter(i=>!i.received);
+  if(!moving.length)return alert('Nincs áthelyezhető, kipipálatlan tétel.');
+  const plan=[];
+  for(const it of moving){
+    ensureItemId(it);
+    const target=(it.moveTargetDate||'').trim()||fallback;
+    if(!target)return alert(`A(z) ${it.name} tételhez nincs dátum. Add meg a tétel mellett, vagy írj be egyet a fejlécbe és nyomd meg a Mindre gombot.`);
+    if(target===o.scheduleDate)return alert(`A(z) ${it.name} tételnél az új dátum nem lehet az eredeti nappal azonos.`);
+    const total=numericQty(it.qty),missing=it.missingQty===''||it.missingQty==null?total:numericQty(it.missingQty);
+    if(missing<=0)return alert(`A(z) ${it.name} hiányzó mennyisége legyen nagyobb nullánál.`);
+    if(total>0&&missing>total)return alert(`A(z) ${it.name} hiányzó mennyisége nem lehet több a rendelt mennyiségnél (${it.qty}).`);
+    plan.push({it,target,total,moveQty:missing});
+  }
+  const dates=[...new Set(plan.map(p=>p.target))].sort();
+  const summary=dates.map(d=>`${d}: ${plan.filter(p=>p.target===d).length} tétel`).join('\n');
+  if(!confirm(`${plan.length} tétel hiányzó mennyiségének áthelyezése:\n${summary}`))return;
+  const keep=[],movedIds=new Set();
+  for(const target of dates){
+    let targetOrder=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===o.orderNo&&x.vehicleId===o.vehicleId&&x.projectName===o.projectName&&x.pickupName===o.pickupName&&x.movedFromOrderId===o.id);
+    if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id};state.orders.push(targetOrder)}
+    for(const p of plan.filter(x=>x.target===target)){
+      const it=p.it;
+      const moved={...it,_id:uid(),qty:formatQty(p.moveQty),received:false,missingQty:'',moveTargetDate:''};
+      targetOrder.items.push(moved);
+      state.backlog.push({id:uid(),sourceOrderId:o.id,targetOrderId:targetOrder.id,itemId:moved._id,orderNo:o.orderNo,supplier:o.pickupName,projectName:o.projectName,code:it.code,name:it.name,itemNote:itemNoteValue(it),quantity:formatQty(p.moveQty),unit:it.unit,movedToDate:target,movedAt:new Date().toISOString()});
+      movedIds.add(String(it._id));
+      if(p.total>0&&p.moveQty<p.total){it.qty=formatQty(p.total-p.moveQty);it.received=true;it.missingQty='';it.moveTargetDate='';keep.push(it)}
+    }
+  }
+  (o.items||[]).forEach(it=>{if(it.received&&!movedIds.has(String(it._id))&&!keep.includes(it))keep.push(it)});
+  o.items=keep;o.completed=o.items.length>0&&o.items.every(i=>i.received);
+  $('#itemsDialog').close();save();
+  alert(`A hiányzó mennyiségek átkerültek a Hátralék menübe:\n${summary}`);
 }
 
 function backlogDateEditor(b){
   const [y,m,d]=(b.movedToDate||'---').split('-');
   return `<div class="backlog-date-editor" onclick="event.stopPropagation()"><input id="by-${b.id}" inputmode="numeric" maxlength="4" value="${esc(y||'')}" placeholder="ÉÉÉÉ"><input id="bm-${b.id}" inputmode="numeric" maxlength="2" value="${esc(m||'')}" placeholder="HH"><input id="bd-${b.id}" inputmode="numeric" maxlength="2" value="${esc(d||'')}" placeholder="NN"><button type="button" onclick="rescheduleBacklog('${b.id}')">Ütemezés</button></div>`;
 }
-function renderBacklog(){
-  const q=norm($('#backlogSearch')?.value||''),rows=(state.backlog||[]).map(backlogRecordData).filter(b=>!q||norm(Object.values(b).join(' ')).includes(q));
-  if($('#backlogBody'))$('#backlogBody').innerHTML=rows.map(b=>`<tr class="backlog-row" onclick="openBacklogResult('${b.targetOrderId}','${b.movedToDate}')"><td>${esc(b.orderNo)}</td><td>${esc(b.supplier)}</td><td>${esc(b.projectName)}</td><td>${esc(b.code)}</td><td>${esc(b.name)}</td><td>${esc(b.itemNote)}</td><td>${esc(b.quantity)} ${esc(b.unit)}</td><td>${backlogDateEditor(b)}</td></tr>`).join('')||'<tr><td colspan="8">Nincs találat.</td></tr>';
-  rows.forEach(b=>bindBacklogDateInputs(b.id));
+/* V57 – ÚJRATERVEZETT HÁTRALÉK NÉZET
+
+   A régi nézet tételsoros tábla volt: ha egy fuvarból négy tétel csúszott,
+   négy különálló sor lett, és nem látszott, hogy összetartoznak.
+
+   Az új nézet a döntéshez szükséges kérdésre válaszol: MI CSÚSZOTT MEG, és
+   MELYIK NAPON MI JÖN. Ezért:
+     - felül külön szekció a LEJÁRT tételeknek (a dátum elmúlt, nem érkezett)
+     - alatta napokra bontva, azon belül beszállítónként csoportosítva
+     - soronként egy "Megérkezett" gomb: kipipálja a tételt a célfuvarban
+       és lezárja a hátralékot, navigálás nélkül
+     - az árva tételek (a forrásfuvart törölték) külön jelölést kapnak
+*/
+function backlogStatus(b, today) {
+  if (b.orphanSource) return 'orphan';
+  if (!b.movedToDate) return 'undated';
+  if (b.movedToDate < today) return 'overdue';
+  if (b.movedToDate === today) return 'today';
+  return 'upcoming';
 }
+function backlogReceived(b) {
+  const o = state.orders.find(x => x.id === b.targetOrderId);
+  return !!o?.items?.find(i => String(i._id) === String(b.itemId))?.received;
+}
+window.markBacklogArrived = id => {
+  const b = (state.backlog || []).find(x => x.id === id); if (!b) return;
+  const o = state.orders.find(x => x.id === b.targetOrderId);
+  const it = o?.items?.find(x => String(x._id) === String(b.itemId));
+  if (!it) return alert('A tétel már nincs meg a célfuvarban.');
+  it.received = true;
+  o.completed = (o.items || []).length > 0 && (o.items || []).every(x => x.received);
+  state.resolvedBacklog = state.resolvedBacklog || [];
+  state.resolvedBacklog.push({ ...b, resolvedAt: new Date().toISOString() });
+  state.backlog = state.backlog.filter(x => x.id !== id);
+  save();
+};
+function backlogGroupHtml(rows, today) {
+  const bySupplier = {};
+  for (const b of rows) (bySupplier[b.supplier || 'Ismeretlen beszállító'] ||= []).push(b);
+  return Object.entries(bySupplier).map(([supplier, list]) => `
+    <div class="bl-supplier">
+      <div class="bl-supplier-head"><b>${esc(supplier)}</b><span>${list.length} tétel</span></div>
+      ${list.map(b => `<div class="bl-item ${backlogStatus(b, today)}">
+        <div class="bl-item-main">
+          <div class="bl-item-name">${esc(b.name)}${b.code ? ` <span class="bl-code">${esc(b.code)}</span>` : ''}</div>
+          <div class="bl-item-sub">${esc(b.quantity)} ${esc(b.unit)} · ${esc(b.orderNo)} · ${esc(b.projectName)}${b.orphanSource ? ' · <span class="bl-orphan">a forrásfuvart törölték</span>' : ''}${b.itemNote ? ` · ${esc(b.itemNote)}` : ''}</div>
+        </div>
+        ${backlogDateEditor(b)}
+        <button type="button" class="bl-arrived" onclick="event.stopPropagation();markBacklogArrived('${esc(b.id)}')">Megérkezett</button>
+        <button type="button" class="bl-open" title="Ugrás a fuvarra" onclick="event.stopPropagation();openBacklogResult('${esc(b.targetOrderId)}','${esc(b.movedToDate)}')">↗</button>
+      </div>`).join('')}
+    </div>`).join('');
+}
+function renderBacklog() {
+  const host = $('#backlogBody'); if (!host) return;
+  const today = localISO(new Date());
+  const q = norm($('#backlogSearch')?.value || '');
+  const rows = (state.backlog || []).map(backlogRecordData)
+    .filter(b => !backlogReceived(b))
+    .filter(b => !q || norm(Object.values(b).join(' ')).includes(q));
+  if (!rows.length) { host.innerHTML = '<div class="notice">Nincs nyitott hátralék.</div>'; return; }
+
+  const overdue = rows.filter(b => ['overdue', 'orphan', 'undated'].includes(backlogStatus(b, today)));
+  const rest = rows.filter(b => !overdue.includes(b));
+  const byDate = {};
+  for (const b of rest) (byDate[b.movedToDate] ||= []).push(b);
+
+  const sections = [];
+  if (overdue.length) {
+    sections.push(`<section class="bl-day bl-overdue">
+      <header class="bl-day-head"><b>Megcsúszott · ${overdue.length} tétel</b><span>dátum lejárt, hiányzik vagy árva</span></header>
+      ${backlogGroupHtml(overdue, today)}</section>`);
+  }
+  for (const date of Object.keys(byDate).sort()) {
+    const label = date === today ? `${date} · ma` : date;
+    sections.push(`<section class="bl-day">
+      <header class="bl-day-head"><b>${esc(label)}</b><span>${byDate[date].length} tétel</span></header>
+      ${backlogGroupHtml(byDate[date], today)}</section>`);
+  }
+  host.innerHTML = sections.join('');
+  rows.forEach(b => bindBacklogDateInputs(b.id));
+}
+
 function bindBacklogDateInputs(id){
   const y=$(`#by-${id}`),m=$(`#bm-${id}`),d=$(`#bd-${id}`);if(!y||!m||!d)return;
   [[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next])=>el.addEventListener('input',()=>{el.value=el.value.replace(/\D/g,'').slice(0,max);if(el.value.length===max&&next){next.focus();next.select()}}));

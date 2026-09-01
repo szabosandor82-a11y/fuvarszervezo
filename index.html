@@ -2,10 +2,10 @@
 <html lang="hu">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#647f96"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Fuvar V56"><meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#647f96"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Fuvar V57"><meta name="mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><link rel="stylesheet" href="styles.css?v=56.0">
-<title>Fuvarszervező V56</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><link rel="stylesheet" href="styles.css?v=57.0">
+<title>Fuvarszervező V57</title>
 </head>
 <body class="auth-pending">
 <section id="authScreen" class="auth-screen hidden" aria-label="Belépés">
@@ -24,7 +24,7 @@
 
 <section id="driverPortal" class="driver-portal hidden">
   <header class="driver-portal-header">
-    <div><small>STAND 98 · MOBIL</small><h1 data-app-version>Fuvarszervező V56</h1><p id="driverPortalIdentity"></p></div>
+    <div><small>STAND 98 · MOBIL</small><h1 data-app-version>Fuvarszervező V57</h1><p id="driverPortalIdentity"></p></div>
     <div class="driver-account-actions"><button id="driverLogout" type="button">Kilépés</button></div>
   </header>
   <div class="driver-portal-main">
@@ -32,14 +32,14 @@
     <div id="driverPortalContent"></div>
   </div>
 </section>
-<header class="topbar"><div id="brandHome" class="brand-home" title="Ugrás a következő munkanapra"><small>STAND 98 · LOGISZTIKA</small><h1 data-app-version>Fuvarszervező V56</h1></div><div class="header-search"><input id="globalSearch" type="search" placeholder="Keresés minden fuvaradatban…" autocomplete="off"><button id="clearGlobalSearch" class="search-clear hidden" type="button" title="Keresés törlése">×</button></div><div id="accountBar" class="account-bar hidden"><span id="accountIdentity"></span><button id="accountLogout" type="button" class="ghost">Kilépés</button></div></header>
+<header class="topbar"><div id="brandHome" class="brand-home" title="Ugrás a következő munkanapra"><small>STAND 98 · LOGISZTIKA</small><h1 data-app-version>Fuvarszervező V57</h1></div><div class="header-search"><input id="globalSearch" type="search" placeholder="Keresés minden fuvaradatban…" autocomplete="off"><button id="clearGlobalSearch" class="search-clear hidden" type="button" title="Keresés törlése">×</button></div><div id="accountBar" class="account-bar hidden"><span id="accountIdentity"></span><button id="accountLogout" type="button" class="ghost">Kilépés</button></div></header>
 <main>
 <section id="planner" class="page active">
   <div id="plannerMobileControlHost"></div>
   <div id="dayWarning" class="notice hidden"></div><div id="routes" class="routes"></div>
 </section>
 <section id="orders" class="page"><div class="page-head"><div><small>RENDELÉSEK</small><h2>Összes fuvar</h2></div><button id="addOrderBtn" class="round">＋</button></div><div class="filters panel"><input id="orderSearch" placeholder="Keresés..."><select id="orderVehicleFilter"><option value="">Minden aktív autó</option></select></div><div id="orderList"></div></section>
-<section id="backlog" class="page"><div class="page-head"><div><small>HÁTRALÉK</small><h2>Áthelyezett tételek</h2></div></div><div class="backlog-search panel"><input id="backlogSearch" placeholder="Keresés a hátralékban…"><button id="clearBacklogSearch" class="search-clear hidden" type="button" title="Keresés törlése">×</button></div><div class="table-wrap"><table class="backlog-table"><thead><tr><th>Rendelésszám</th><th>Beszállító</th><th>Projekt neve</th><th>Cikkszám</th><th>Tétel megnevezése</th><th>Tétel megjegyzés</th><th>Mennyiség</th><th>Áthelyezett dátum</th></tr></thead><tbody id="backlogBody"></tbody></table></div></section>
+<section id="backlog" class="page"><div class="page-head"><div><small>HÁTRALÉK</small><h2>Mi csúszott meg, és mikor jön</h2></div></div><div class="backlog-search panel"><input id="backlogSearch" placeholder="Keresés a hátralékban…"><button id="clearBacklogSearch" class="search-clear hidden" type="button" title="Keresés törlése">×</button></div><div id="backlogBody" class="backlog-list"></div></section>
 <section id="reports" class="page"><div class="page-head"><div><small>KIMUTATÁS</small><h2>Havi fuvaros összesítés</h2></div></div><div class="panel report-filter"><label>Hónap<input id="reportMonth" type="month"></label><button id="refreshReportBtn" type="button">Frissítés</button></div><div class="table-wrap"><table class="backlog-table report-table"><thead><tr><th>Fuvaros</th><th>Megtett km</th><th>Teljesített rendelések</th><th>Felrakók</th><th>Lerakók</th><th>Meghiúsult fuvarok</th></tr></thead><tbody id="reportBody"></tbody></table></div><p class="notice report-note">A kilométer a térképen kiszámolt napi útvonalakból összesül. A meghiúsult fuvar csak a „Nem teljesült – következő munkanapra” művelettel kerül a kimutatásba; a tétel-hátralék nem.</p></section>
 <section id="masters" class="page"><div class="page-head"><div><small>TÖRZSADATOK</small><h2>Adatbázisok</h2></div><button id="addMasterBtn" class="round">＋</button></div><div class="master-excel-actions panel"><button id="exportMastersBtn" type="button">Törzsadatok Excel export</button><button id="resyncMastersBtn" type="button">Törzsadatok újraszinkronizálása</button><label class="file-button master-import-label">Törzsadatok Excel import<input id="masterExcelInput" type="file" accept=".xlsx,.xls"></label><button id="clearAllMastersBtn" type="button" class="danger-outline">Minden törzsadat törlése</button><small>Az import azonos név alapján frissíti a meglévő adatokat. A Beszállítók lapon a Cégnév és Cím, a Projekteknél a Projekt neve és Cím szükséges. A program nem keveri vissza automatikusan a régi beépített törzsadatokat.</small></div><div class="tabs"><button class="tab active" data-master="projects">Projektek</button><button class="tab" data-master="suppliers">Beszállítók</button><button class="tab" data-master="recipients">Átvevők</button></div><input id="masterSearch" placeholder="Keresés névre, címre, telefonra..."><div id="masterList"></div></section>
 
@@ -85,5 +85,5 @@
 
 <dialog id="mediaGalleryDialog"><div class="dialog-body"><div class="dialog-head"><h3 id="mediaGalleryTitle">Mentett szállítólevelek</h3><button type="button" class="close" data-close="mediaGalleryDialog">×</button></div><div id="mediaGalleryBody" class="media-gallery"></div></div></dialog>
 
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script><script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script src="ole-msg-reader.js?v=56.0"></script><script src="data.js?v=56.0"></script><script src="app.js?v=56.0"></script><script src="planner-v32.js?v=56.0"></script><script src="planner-v33.js?v=56.0"></script><script src="planner-v34.js?v=56.0"></script><script src="planner-v35.js?v=56.0"></script><script src="planner-v37.js?v=56.0"></script><script src="planner-v41.js?v=56.0"></script><script src="planner-v43.js?v=56.0"></script><script src="planner-v44.js?v=56.0"></script><script src="online-config.js?v=56.0"></script><script src="online-v44-2.js?v=56.0"></script><script src="auth-v44-2.js?v=56.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script><script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script src="ole-msg-reader.js?v=57.0"></script><script src="data.js?v=57.0"></script><script src="app.js?v=57.0"></script><script src="planner-v32.js?v=57.0"></script><script src="planner-v33.js?v=57.0"></script><script src="planner-v34.js?v=57.0"></script><script src="planner-v35.js?v=57.0"></script><script src="planner-v37.js?v=57.0"></script><script src="planner-v41.js?v=57.0"></script><script src="planner-v43.js?v=57.0"></script><script src="planner-v44.js?v=57.0"></script><script src="online-config.js?v=57.0"></script><script src="online-v44-2.js?v=57.0"></script><script src="auth-v44-2.js?v=57.0"></script>
 </body></html>

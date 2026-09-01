@@ -84,7 +84,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V56Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V57Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -203,23 +203,55 @@
     return `<div class="transfer-pending-badge">Átadás folyamatban: ${safe(DRIVER_LABELS[transfer.from_driver_key] || transfer.from_driver_key)} → ${safe(DRIVER_LABELS[transfer.to_driver_key] || transfer.to_driver_key)}</div>`;
   }
 
+  /* V57 – a sofőri oldal is listaszerű.
+
+     Egy fuvar = egy sor:
+         005714 — Hungarokomplex — Sofitel
+         [Tétel/hátralék] [Szállítólevél] [Fuvar átadása]
+
+     A tételablak ugyanaz, mint az admin oldalon; a fuvarátadás változatlan.
+     A címek és a megjegyzések a sor kinyitásával érhetők el, hogy a lista
+     áttekinthető maradjon. */
   function userBubble(order, index) {
     const items = order.items || [];
     const received = items.filter(item => item.received).length;
     const reportPhotos = (order.deliveryReports || []).reduce((sum, report) => sum + (+report.photoCount || +report.fileCount || 0), 0);
     const canTransfer = !order.completed && !transferForOrder(order.id);
-    return `<article class="mobile-user-bubble ${order.completed ? 'done' : ''}" data-id="${safe(order.id)}">
-      <header><span class="mobile-sequence">${index + 1}</span><div><h3>${safe(order.orderNo)} · ${safe(order.projectName || 'Egyedi úticél')}</h3><small>${received}/${items.length} tétel átvéve</small></div></header>
+    const pickup = order.pickupName || 'Felrakó';
+    const drop = order.projectName || 'Egyedi úticél';
+    const detailId = `v57d-${safe(order.id)}`;
+    return `<article class="mobile-user-row ${order.completed ? 'done' : ''}" data-id="${safe(order.id)}">
+      <div class="v57-row-head">
+        <span class="mobile-sequence">${index + 1}</span>
+        <div class="v57-row-title">${safe(order.orderNo)} — ${safe(pickup)} — ${safe(drop)}</div>
+        <button type="button" class="v57-detail-toggle" aria-expanded="false" title="Címek és megjegyzések"
+          onclick="v57ToggleDriverDetail('${detailId}',this)">▾</button>
+      </div>
+      <div class="v57-row-actions">
+        <button type="button" onclick="openItems('${safe(order.id)}')">Tétel / hátralék${items.length ? ` (${received}/${items.length})` : ''}</button>
+        <button type="button" class="camera-action" onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>
+        ${canTransfer ? `<button type="button" class="transfer-action" onclick="openTransferDialog('${safe(order.id)}')">Fuvar átadása</button>` : ''}
+      </div>
       ${transferBadge(order)}
-      <div class="mobile-stop pickup"><b>Felrakó</b><span>${safe(order.pickupName || 'Nincs megadva')}</span><small>${safe(order.pickupAddress || 'Cím nélkül')}</small></div>
-      <div class="mobile-stop drop"><b>Lerakó</b><span>${safe(order.projectName || 'Egyedi úticél')}</span><small>${safe(order.dropAddress || 'Cím nélkül')}</small></div>
-      ${order.pickupNote ? `<p><b>Felrakói megjegyzés:</b> ${safe(order.pickupNote)}</p>` : ''}
-      ${order.note ? `<p><b>Fuvar megjegyzés:</b> ${safe(order.note)}</p>` : ''}
-      ${order.recipientName || order.recipientPhone ? `<p><b>Átvevő:</b> ${safe(order.recipientName || '')}${order.recipientPhone ? ` · <a href="tel:${safe(order.recipientPhone)}">${safe(order.recipientPhone)}</a>` : ''}</p>` : ''}
-      <div class="mobile-bubble-tags"><span>${items.length} tétel</span>${order.longMaterialReason ? `<span>${safe(order.longMaterialReason)}</span>` : ''}${reportPhotos ? `<span>📎 ${reportPhotos} fájl</span>` : ''}</div>
-      <div class="mobile-user-actions"><button type="button" onclick="openItems('${safe(order.id)}')">Tételek / hátralék</button><button type="button" class="camera-action" onclick="openCamera('${safe(order.id)}')">📷 Szállítólevél</button><button type="button" class="secondary" onclick="openMediaGallery('${safe(order.id)}')">Mentett fotók</button>${canTransfer ? `<button type="button" class="transfer-action" onclick="openTransferDialog('${safe(order.id)}')">⇄ Fuvar átadása</button>` : ''}</div>
+      <div class="v57-row-detail" id="${detailId}" hidden>
+        <div class="mobile-stop pickup"><b>Felrakó</b><span>${safe(pickup)}</span><small>${safe(order.pickupAddress || 'Cím nélkül')}</small></div>
+        <div class="mobile-stop drop"><b>Lerakó</b><span>${safe(drop)}</span><small>${safe(order.dropAddress || 'Cím nélkül')}</small></div>
+        ${order.pickupNote ? `<p><b>Felrakói megjegyzés:</b> ${safe(order.pickupNote)}</p>` : ''}
+        ${order.note ? `<p><b>Fuvar megjegyzés:</b> ${safe(order.note)}</p>` : ''}
+        ${order.recipientName || order.recipientPhone ? `<p><b>Átvevő:</b> ${safe(order.recipientName || '')}${order.recipientPhone ? ` · <a href="tel:${safe(order.recipientPhone)}">${safe(order.recipientPhone)}</a>` : ''}</p>` : ''}
+        <div class="mobile-bubble-tags"><span>${items.length} tétel</span>${order.longMaterialReason ? `<span>${safe(order.longMaterialReason)}</span>` : ''}${reportPhotos ? `<span>📎 ${reportPhotos} fájl</span>` : ''}</div>
+        <div class="v57-row-actions"><button type="button" class="secondary" onclick="openMediaGallery('${safe(order.id)}')">Mentett fotók</button></div>
+      </div>
     </article>`;
   }
+
+  global.v57ToggleDriverDetail = function (id, button) {
+    const panel = document.getElementById(id);
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    button.textContent = panel.hidden ? '▾' : '▴';
+    button.setAttribute('aria-expanded', String(!panel.hidden));
+  };
 
   function pendingTransferCards() {
     const profileKey = currentProfile?.driver_key;
