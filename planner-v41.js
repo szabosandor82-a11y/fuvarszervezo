@@ -1017,11 +1017,26 @@
       .sort((a, b) => a.localeCompare(b, 'hu'));
   }
 
+  /* V63: az import mindkét választója mindkét fajtát kínálja.
+     Visszárunál a felrakó egy projekt (onnan hozzuk el az anyagot), a lerakó
+     pedig egy beszállító telephelye. Eddig a felrakóban csak beszállítók, a
+     lerakóban csak projektek voltak, ezért a visszáru nem volt beállítható. */
+  function projectNamesForSelect() {
+    return (typeof state !== 'undefined' ? state.projects || [] : [])
+      .filter(item => item.active !== false && item.name)
+      .map(item => String(item.name).trim())
+      .sort((a, b) => a.localeCompare(b, 'hu'));
+  }
+
   function supplierNameSelect(entry) {
     const names = uniqueSupplierNames();
     if (entry.pickupName && !names.some(name => nrm(name) === nrm(entry.pickupName))) names.unshift(entry.pickupName);
+    const projects = projectNamesForSelect().filter(name => !names.some(item => nrm(item) === nrm(name)));
     const options = ['<option value="">Válassz beszállítót…</option>']
-      .concat(names.map(name => `<option value="${htmlEsc(name)}" ${nrm(name) === nrm(entry.pickupName) ? 'selected' : ''}>${htmlEsc(name)}</option>`));
+      .concat(names.map(name => `<option value="${htmlEsc(name)}" ${nrm(name) === nrm(entry.pickupName) ? 'selected' : ''}>${htmlEsc(name)}</option>`))
+      .concat(projects.length ? [`<optgroup label="Visszáru · projektről">`]
+        .concat(projects.map(name => `<option value="${htmlEsc(name)}" ${nrm(name) === nrm(entry.pickupName) ? 'selected' : ''}>${htmlEsc(name)}</option>`))
+        .concat(['</optgroup>']) : []);
     return `<select data-field="pickupName" data-kind="supplier-name">${options.join('')}</select>`;
   }
 
@@ -1040,11 +1055,20 @@
     if (entry.projectName && !projects.some(item => nrm(item.name) === nrm(entry.projectName))) {
       projects.unshift({ id: entry.projectId || '', name: entry.projectName, address: entry.dropAddress || '' });
     }
+    const suppliers = (typeof state !== 'undefined' ? state.suppliers || [] : [])
+      .filter(item => item.active !== false && item.name && item.address)
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'hu') || String(a.address).localeCompare(String(b.address), 'hu'));
+    const supplierOptions = suppliers.length ? [`<optgroup label="Visszáru · beszállítóhoz">`]
+      .concat(suppliers.map(item => {
+        const label = `${item.name} · ${item.address}`;
+        return `<option value="${htmlEsc(label)}" data-supplier-address="${htmlEsc(item.address)}" ${nrm(label) === nrm(entry.projectName) ? 'selected' : ''}>${htmlEsc(label)}</option>`;
+      }))
+      .concat(['</optgroup>']) : [];
     const options = ['<option value="">Válassz projektet / lerakót…</option>'].concat(projects.map(item => {
       const label = `${item.name || 'Névtelen projekt'}${item.address ? ` · ${item.address}` : ' · cím nélkül'}`;
       return `<option value="${htmlEsc(item.name || '')}" data-project-id="${htmlEsc(item.id || '')}" ${nrm(item.name) === nrm(entry.projectName) ? 'selected' : ''}>${htmlEsc(label)}</option>`;
     }));
-    return `<select data-field="projectName" data-kind="project-name">${options.join('')}</select>`;
+    return `<select data-field="projectName" data-kind="project-name">${options.concat(supplierOptions).join('')}</select>`;
   }
 
   function refreshEntryWarnings(entry) {
@@ -1455,6 +1479,8 @@ ${entry.subject || ''}`) || project;
     inferProjectHint,
     supplierSpecial,
     parsePdfItemsFromLines,
+    supplierNameSelect,
+    projectNameSelect,
     applyBodyScopeV60,
     meaningfulBodyText,
     bestSupplier,

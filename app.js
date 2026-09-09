@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V62Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V63Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -309,9 +309,8 @@ function attachDataCombo(input, listId, itemsFn, onPick){
 
 function setupMasterCombos(){
   attachDataCombo($('#supplierSearch'), 'supplierList',
-    () => state.suppliers.filter(item => item.active !== false && item.name)
-      .sort((a,b)=>a.name.localeCompare(b.name,'hu')||String(a.address||'').localeCompare(String(b.address||''),'hu'))
-      .map(item => ({ label: supplierDisplay(item), note: item.isCentral ? 'központ' : (item.site || ''), search: `${item.name} ${item.address||''} ${item.site||''}`, ref: item })),
+    () => pickupTargetOptions().map(target => ({ label: target.label, note: target.hint,
+      search: `${target.label} ${target.address || ''}`, ref: target })),
     item => { if($('#pickupAddress')) $('#pickupAddress').value = item.ref.address || ''; });
 
   // A felrakó címe: a kiválasztott cég telephelyei közül szűrünk. Ha még
@@ -513,6 +512,43 @@ function dropTargetOptions(){
   return out;
 }
 window.dropTargetOptions=dropTargetOptions;
+/* V62 – a felrakó is lehet PROJEKT.
+
+   Visszárunál és bérelt eszköznél a fuvar egy építkezésről indul, nem
+   beszállítótól. Eddig a felrakó mezőben csak beszállítók szerepeltek, a
+   lerakóban pedig már ott voltak a beszállítói telephelyek is – így a
+   visszárunak csak a fele volt beállítható.
+
+   Mostantól mindkét mező mindkét fajtát kínálja, "Visszáru" jelöléssel. */
+function pickupTargetOptions(){
+  const out=[];
+  for(const su of state.suppliers.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu')||String(a.address||'').localeCompare(String(b.address||''),'hu'))){
+    if(su.active===false||!su.name)continue;
+    out.push({kind:'supplier',ref:su,label:supplierDisplay(su),address:su.address||'',
+      hint:su.isCentral?'központ':(su.site||'telephely')});
+  }
+  for(const p of state.projects.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu'))){
+    if(p.active===false)continue;
+    out.push({kind:'project',ref:p,label:p.name,address:p.address||'',hint:'Visszáru · projektről'});
+  }
+  return out;
+}
+window.pickupTargetOptions=pickupTargetOptions;
+
+function findPickupTargetByInput(v){
+  const n=norm(v);if(!n)return null;
+  const supplier=state.suppliers.find(su=>norm(supplierDisplay(su))===n)||state.suppliers.find(su=>norm(su.name)===n);
+  if(supplier)return{kind:'supplier',ref:supplier,address:supplier.address||''};
+  const project=state.projects.find(p=>norm(p.name)===n);
+  if(project)return{kind:'project',ref:project,address:project.address||''};
+  const partialSupplier=uniquePartial(state.suppliers,v,su=>supplierDisplay(su));
+  if(partialSupplier)return{kind:'supplier',ref:partialSupplier,address:partialSupplier.address||''};
+  const partialProject=uniquePartial(state.projects,v,p=>`${p.name} ${p.address||''}`);
+  if(partialProject)return{kind:'project',ref:partialProject,address:partialProject.address||''};
+  return null;
+}
+window.findPickupTargetByInput=findPickupTargetByInput;
+
 function findDropTargetByInput(v){
   const n=norm(v);if(!n)return null;
   const project=state.projects.find(p=>norm(p.name)===n);
@@ -555,7 +591,16 @@ function setCustomProjectMode(custom){$('#recipientSelectWrap').classList.toggle
 function openOrder(o={}){$('#orderId').value=o.id||'';$('#orderTitle').textContent=o.id?'Fuvar szerkesztése':'Új fuvar';setScheduleParts(o.scheduleDate||selectedDate());setDateParts('deadline',o.requestedDeadline||'');fillSelectors();fillSearchableMasters();$('#vehicleId').value=o.vehicleId||'';$('#orderNo').value=o.orderNo||'';const s=state.suppliers.find(x=>x.id===o.supplierId);$('#supplierId').value=o.supplierId||'';$('#supplierSearch').value=s?supplierDisplay(s):(o.pickupName||'');fillSupplierAddressList(s?.name||o.pickupName||'');$('#pickupAddress').value=o.pickupAddress||'';$('#pickupNote').value=o.pickupNote||'';const p=state.projects.find(x=>x.id===o.projectId);$('#projectId').value=o.projectId||'';$('#projectSearch').value=p?.name||o.projectName||'';$('#dropAddress').value=o.dropAddress||'';$('#recipientId').innerHTML=recipientOptions(o.projectName,o.recipientId);$('#recipientName').value=o.recipientName||'';$('#recipientPhone').value=o.recipientPhone||'';$('#recipientEmail').value=o.recipientEmail||'';setCustomProjectMode(!p);$('#pickupFrom').value=o.pickupFrom||'';$('#pickupTo').value=o.pickupTo||'';$('#dropFrom').value=o.dropFrom||'';$('#dropTo').value=o.dropTo||'';$('#orderNote').value=o.note||'';$('#orderDialog').showModal();setTimeout(()=>$('#scheduleYear').focus(),30)}
 window.editOrder=id=>openOrder(state.orders.find(x=>x.id===id));
 $('#orderForm').onsubmit=e=>{e.preventDefault();if(!syncScheduleDate())return alert('Adj meg érvényes szállítási dátumot.');if(!syncDateParts('deadline',false))return alert('Adj meg érvényes kért szállítási határidőt, vagy hagyd üresen.');const old=state.orders.find(x=>x.id===$('#orderId').value),s=findSupplierByInput($('#supplierSearch').value),p=findProjectByInput($('#projectSearch').value),r=state.recipients.find(x=>x.id===$('#recipientId').value);const o={...old,id:old?.id||uid(),scheduleDate:$('#scheduleDate').value,vehicleId:$('#vehicleId').value||marioVehicle()?.id||'',orderNo:last5($('#orderNo').value),requestedDeadline:$('#deadline').value,supplierId:s?.id||'',pickupName:s?.name||$('#supplierSearch').value.trim()||old?.pickupName||'',pickupAddress:$('#pickupAddress').value,pickupNote:$('#pickupNote').value,projectId:p?.id||'',projectName:p?.name||$('#projectSearch').value.trim()||'Egyedi úticél',dropAddress:$('#dropAddress').value,recipientId:p?(r?.id||''):'',recipientName:$('#recipientName').value.trim()||r?.name||'',recipientPhone:$('#recipientPhone').value,recipientEmail:$('#recipientEmail').value,pickupFrom:$('#pickupFrom').value,pickupTo:$('#pickupTo').value,dropFrom:$('#dropFrom').value,dropTo:$('#dropTo').value,note:$('#orderNote').value,items:old?.items||[],completed:old?.completed||false,sequence:old?.sequence||999};const i=state.orders.findIndex(x=>x.id===o.id);if(i>=0)state.orders[i]=o;else state.orders.push(o);$('#orderDialog').close();save()}
-$('#supplierSearch').oninput=()=>{const s=findSupplierByInput($('#supplierSearch').value);$('#supplierId').value=s?.id||'';fillSupplierAddressList(s?.name||$('#supplierSearch').value);if(s){$('#pickupAddress').value=s.address||'';$('#pickupNote').value=s.pickupNote||''}else{$('#pickupAddress').value='';$('#pickupNote').value=''}};
+$('#supplierSearch').oninput=()=>{
+  // V62: a felrakó lehet projekt is (visszáru forrása).
+  const target=findPickupTargetByInput($('#supplierSearch').value);
+  if(target?.kind==='project'){
+    $('#supplierId').value='';
+    $('#pickupAddress').value=target.address||'';
+    $('#pickupNote').value='';
+    return;
+  }
+  const s=findSupplierByInput($('#supplierSearch').value);$('#supplierId').value=s?.id||'';fillSupplierAddressList(s?.name||$('#supplierSearch').value);if(s){$('#pickupAddress').value=s.address||'';$('#pickupNote').value=s.pickupNote||''}else{$('#pickupAddress').value='';$('#pickupNote').value=''}};
 $('#pickupAddress').onchange=()=>{const current=findSupplierByInput($('#supplierSearch').value),name=current?.name||$('#supplierSearch').value;const match=state.suppliers.find(s=>norm(s.name)===norm(name)&&norm(s.address)===norm($('#pickupAddress').value));if(match){$('#supplierId').value=match.id;$('#supplierSearch').value=supplierDisplay(match);$('#pickupNote').value=match.pickupNote||match.note||''}};
 $('#projectSearch').oninput=()=>{
   // V60: a lerakó lehet beszállítói telephely is (visszáru, bérelt eszköz).
@@ -603,7 +648,61 @@ function saveReview(){const o=reviewQueue[reviewIndex],p=state.projects.find(x=>
 function finalizeImport(){state.orders.push(...importOrders);const unassigned=importOrders.filter(o=>!o.vehicleId).length;importOrders=[];$('#importDialog').close();save();alert(`Import beillesztve. ${unassigned} fuvar kiosztatlan maradt. A „Fuvar szétosztása” gombbal automatikusan, földrajzi és terhelési szempontok szerint szétosztható.`)}
 function safeFilePart(v=''){return String(v).trim().replace(/[\\/:*?"<>|]/g,'_')}
 function buildDriverWorkbook(rows){const wb=XLSX.utils.book_new(),main=[['Jármű','Sorrend','Rendelésszám','Felrakó','Felrakó cím','Projekt','Lerakó cím','Átvevő','Telefon','Időablak','Megjegyzés','Tétel megjegyzések']];rows.forEach(o=>main.push([state.vehicles.find(v=>v.id===o.vehicleId)?.driverName||'',o.sequence,o.orderNo,o.pickupName,o.pickupAddress,o.projectName,o.dropAddress,o.recipientName,o.recipientPhone,[o.pickupFrom&&`F ${o.pickupFrom}-${o.pickupTo}`,o.dropFrom&&`L ${o.dropFrom}-${o.dropTo}`].filter(Boolean).join('; '),o.note,(o.items||[]).map((i,n)=>itemNoteValue(i)?`${n+1}. ${itemNoteValue(i)}`:'').filter(Boolean).join(' | ')]));const items=[['Rendelésszám','Termékkód','Termék név','Mennyiség','M.e.','Tétel megjegyzés','Átvéve']];rows.forEach(o=>(o.items||[]).forEach(i=>items.push([o.orderNo,i.code,i.name,i.qty,i.unit,itemNoteValue(i),i.received?'Igen':'Nem'])));XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(main),'Fuvarok');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(items),'Tételek');return wb}
-function exportExcel(){const date=selectedDate(),groups=activeVehicles().map(v=>({v,rows:state.orders.filter(o=>o.scheduleDate===date&&o.vehicleId===v.id)})).filter(g=>g.rows.length);if(!groups.length)return alert('Az aktuális napon nincs exportálható fuvar.');groups.forEach((g,i)=>setTimeout(()=>XLSX.writeFile(buildDriverWorkbook(g.rows),`${date}_${safeFilePart(g.v.driverName)}.xlsx`),i*350))}
+/* V63 – EGYETLEN EXPORT A NAPRA, A SAJÁT SABLON SZERINT
+
+   Korábban sofőrönként külön fájl készült, 350 ms késleltetéssel: három
+   sofőrnél három letöltés, mindegyik más oszlopszerkezettel, mint a
+   "Sablon - szállítások.xlsx" Fuvarok munkalapja.
+
+   Mostantól egy fájl, egy munkalap, pontosan a sablon oszlopaival:
+
+     A Dátum   B Sorrend   C sofőr   D Felrakó   E Felrakó címe
+     F Rendelésszám   G "Projekt:"   H Projekt neve   I "Cím:"
+     J Projekt címe   K "Megjegyzés:"   L Megjegyzés   M Átvevő
+
+   A G, I és K oszlop állandó felirat, ahogy a sablonban. A Sorrend oszlop
+   üresen marad – a sablonban is csak elvétve van kitöltve.
+
+   Rendezés: felrakó neve, azon belül projekt neve – ez a sablon sorrendje,
+   így a beillesztés a meglévő sorok közé illeszkedik. */
+const EXPORT_HEADERS_V63 = ['Dátum','Sorrend',' ','Felrakó','Felrakó címe','Rendelésszám',
+  'mj1','Projekt neve','mj2','Projekt címe','mj3','Megjegyzés','Átvevő'];
+
+function exportRowsV63(date){
+  const byId = Object.fromEntries(activeVehicles().map(v => [v.id, v.driverName]));
+  return state.orders
+    .filter(o => o.scheduleDate === date)
+    .map(o => ({
+      driver: byId[o.vehicleId] || '',
+      pickup: o.pickupName || '',
+      pickupAddress: o.pickupAddress || '',
+      orderNo: o.orderNo || '',
+      project: o.projectName || '',
+      dropAddress: o.dropAddress || '',
+      note: o.note || '',
+      recipient: [o.recipientName, o.recipientPhone].filter(Boolean).join(' ')
+    }))
+    .sort((a,b) => a.pickup.localeCompare(b.pickup,'hu') || a.project.localeCompare(b.project,'hu'));
+}
+
+function exportExcel(){
+  const date = selectedDate();
+  const rows = exportRowsV63(date);
+  if(!rows.length) return alert('Az aktuális napon nincs exportálható fuvar.');
+  const dateValue = new Date(`${date}T00:00:00`);
+  const aoa = [
+    [dateValue, '', '', '', '', '', '', '', '', '', '', '', ''],
+    [], [],
+    EXPORT_HEADERS_V63,
+    ...rows.map(r => [dateValue, '', r.driver, r.pickup, r.pickupAddress, r.orderNo,
+      'Projekt:', r.project, 'Cím:', r.dropAddress, 'Megjegyzés:', r.note, r.recipient])
+  ];
+  const sheet = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
+  sheet['!cols'] = [{wch:11},{wch:8},{wch:9},{wch:20},{wch:32},{wch:13},{wch:9},{wch:22},{wch:6},{wch:32},{wch:12},{wch:34},{wch:26}];
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, sheet, 'Fuvarok');
+  XLSX.writeFile(book, `Szallitasok_${date}.xlsx`);
+}
 function exportPdf(){const date=selectedDate(),groups=activeVehicles().map(v=>({v,rows:state.orders.filter(o=>o.scheduleDate===date&&o.vehicleId===v.id)})).filter(g=>g.rows.length);if(!groups.length)return alert('Az aktuális napon nincs exportálható fuvar.');groups.forEach((g,i)=>setTimeout(()=>{const{jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape'});doc.text(`${g.v.driverName} fuvarjai - ${date}`,14,14);doc.autoTable({startY:20,head:[['#','Rendelés','Felrakó','Lerakó','Átvevő','Megjegyzés','Tétel megjegyzések']],body:g.rows.map(o=>[o.sequence,o.orderNo,`${o.pickupName}\n${o.pickupAddress}`,`${o.projectName}\n${o.dropAddress}`,`${o.recipientName||''}\n${o.recipientPhone||''}`,o.note||'',(o.items||[]).map((it,n)=>itemNoteValue(it)?`${n+1}. ${itemNoteValue(it)}`:'').filter(Boolean).join('\n')]),styles:{fontSize:6.5}});doc.save(`${date}_${safeFilePart(g.v.driverName)}.pdf`)},i*350))}
 function exportMenu(){const t=prompt('Export: excel vagy pdf','excel');if(norm(t).startsWith('p'))exportPdf();else exportExcel()}
 function backup(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='fuvarszervezo-v11-telefonra.json';a.click()}
