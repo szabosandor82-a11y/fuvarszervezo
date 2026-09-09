@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V61Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V62Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -155,65 +155,193 @@ function itemNoteValue(it={}){return String(it.itemNote??it.itemRemark??it.tetel
 function bubbles(list){if(!list.length)return'<div class="notice">Nincs fuvar.</div>';return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')} · ${esc(o.pickupAddress||'')}</p><p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs megadva')}</p>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('')}
 window.renameDriver=(id,name)=>{const v=state.vehicles.find(x=>x.id===id);if(v){v.driverName=name.trim()||v.driverName;save()}};
 function initSortables(){activeVehicles().forEach(v=>{const el=$('#route-'+v.id);if(!el)return;new Sortable(el,{group:'vehicles',animation:180,handle:'.drag',onEnd:e=>{const o=state.orders.find(x=>x.id===e.item.dataset.id);if(o)o.vehicleId=e.to.id.replace('route-','');activeVehicles().forEach(x=>{$$('#route-'+x.id+' .bubble').forEach((n,i)=>{const r=state.orders.find(o=>o.id===n.dataset.id);if(r)r.sequence=i+1})});save()}})})}
-/* V60 – KERESHETŐ LEGÖRDÜLŐK AZ EGÉSZ OLDALON
+/* V61 – EGYSÉGES KERESŐS LENYÍLÓ AZ EGÉSZ OLDALON
 
-   A törzsadatban a projektek "Budapest_Waterfront_City_V.ütem" alakban
-   szerepelnek, ezért a "waterfront" beírására egy sima <select> nem talál
-   semmit: a böngésző csak a szó elejére ugrik.
+   Minden hosszabb legördülő és törzsadat-mező ugyanúgy viselkedik: egyetlen
+   beírómező, alatta élőben szűkülő lista. A "water" beírására csak a
+   Waterfront projektek maradnak, és a kapcsolt címmező magától követi.
 
-   Ez a rész minden hosszabb legördülő elé tesz egy keresőmezőt, és a
-   beírt szövegrészletre szűkíti a listát – ékezet- és kis-nagybetű-
-   érzéketlenül, több szóra is (pl. "water city").
+   Az eredeti <select> a háttérben megmarad és megkapja a kiválasztott
+   értéket, majd egy change eseményt – így minden meglévő eseménykezelő
+   változatlanul működik, nem kellett hozzájuk nyúlni.
 
-   Az eredeti <select> megmarad, tehát minden meglévő eseménykezelő és
-   érték változatlanul működik. Az újonnan megjelenő legördülőket (import
-   előnézet, párbeszédablakok) egy figyelő automatikusan bekapcsolja. */
-const SELECT_FILTER_MIN_OPTIONS = 8;
-const selectFilterStore = new WeakMap();
+   A keresés ékezet- és kisbetű-érzéketlen, több szóra is szűr ("water iv"),
+   és a névben és a címben egyszerre keres. */
+const COMBO_MIN_OPTIONS = 8;
 
-function selectFilterMatch(haystack, needle){
+function comboMatch(haystack, needle){
   const h = norm(haystack), tokens = norm(needle).split(' ').filter(Boolean);
   return tokens.every(token => h.includes(token));
 }
 
-function applySelectFilter(select, term){
-  const all = selectFilterStore.get(select);
-  if(!all) return;
-  const previous = select.value;
-  const keep = all.filter(item => !item.value || !term || selectFilterMatch(item.label + ' ' + item.value, term));
-  // Ha a keresés semmit nem talál, inkább a teljes listát mutatjuk, mint egy
-  // üres legördülőt – így nem lehet beleragadni egy elgépelésbe.
-  const list = keep.some(item => item.value) ? keep : all;
-  select.innerHTML = list.map(item =>
-    `<option value="${esc(item.value)}"${item.attrs}${item.value === previous ? ' selected' : ''}>${esc(item.label)}</option>`).join('');
-  if(list.some(item => item.value === previous)) select.value = previous;
+function closeAllCombos(except){
+  document.querySelectorAll('.combo-list').forEach(list => { if(list !== except) list.hidden = true; });
 }
 
-function makeSelectSearchable(select){
-  if(!select || select.dataset.searchable === '1') return;
-  if(select.multiple || select.options.length < SELECT_FILTER_MIN_OPTIONS) return;
-  const all = [...select.options].map(option => ({
+function buildCombo(select){
+  if(!select || select.dataset.combo === '1' || select.multiple) return;
+  if(select.options.length < COMBO_MIN_OPTIONS) return;
+  const items = [...select.options].map(option => ({
     value: option.value,
-    label: option.textContent || '',
-    attrs: [...option.attributes]
-      .filter(attribute => attribute.name.startsWith('data-'))
-      .map(attribute => ` ${attribute.name}="${esc(attribute.value)}"`).join('')
+    label: (option.textContent || '').trim(),
+    attrs: [...option.attributes].filter(a => a.name.startsWith('data-'))
+      .map(a => ` ${a.name}="${esc(a.value)}"`).join('')
   }));
-  selectFilterStore.set(select, all);
-  select.dataset.searchable = '1';
-  const box = document.createElement('input');
-  box.type = 'search';
-  box.className = 'select-filter';
-  box.placeholder = 'Keresés a listában…';
-  box.autocomplete = 'off';
-  box.addEventListener('input', () => applySelectFilter(select, box.value));
-  box.addEventListener('keydown', event => { if(event.key === 'Enter'){ event.preventDefault(); select.focus(); } });
-  select.parentNode?.insertBefore(box, select);
+  select.dataset.combo = '1';
+  select.classList.add('combo-hidden-select');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'combo';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'combo-input';
+  input.autocomplete = 'off';
+  input.placeholder = select.dataset.comboPlaceholder || 'Kezdj el gépelni a szűréshez…';
+  const list = document.createElement('div');
+  list.className = 'combo-list';
+  list.hidden = true;
+
+  select.parentNode.insertBefore(wrap, select);
+  wrap.appendChild(input);
+  wrap.appendChild(select);
+  wrap.appendChild(list);
+
+  const labelOf = value => items.find(item => item.value === value)?.label || '';
+  input.value = labelOf(select.value);
+
+  let active = -1;
+  const render = term => {
+    const hits = items.filter(item => item.value && (!term || comboMatch(`${item.label} ${item.value}`, term)));
+    active = -1;
+    list.innerHTML = hits.length
+      ? hits.map((item, index) => `<button type="button" class="combo-option" data-value="${esc(item.value)}" data-index="${index}">${esc(item.label)}</button>`).join('')
+      : '<div class="combo-empty">Nincs találat</div>';
+    list.hidden = false;
+    return hits;
+  };
+  const choose = value => {
+    select.value = value;
+    input.value = labelOf(value);
+    list.hidden = true;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  input.addEventListener('focus', () => { closeAllCombos(list); render(''); });
+  input.addEventListener('input', () => { closeAllCombos(list); render(input.value); });
+  input.addEventListener('keydown', event => {
+    const options = [...list.querySelectorAll('.combo-option')];
+    if(event.key === 'ArrowDown' || event.key === 'ArrowUp'){
+      event.preventDefault();
+      if(list.hidden) render(input.value);
+      active = Math.max(0, Math.min(options.length - 1, active + (event.key === 'ArrowDown' ? 1 : -1)));
+      options.forEach((option, index) => option.classList.toggle('active', index === active));
+      options[active]?.scrollIntoView({ block: 'nearest' });
+    } else if(event.key === 'Enter'){
+      if(!list.hidden && options.length){ event.preventDefault(); choose((options[active] || options[0]).dataset.value); }
+    } else if(event.key === 'Escape'){ list.hidden = true; }
+  });
+  input.addEventListener('blur', () => setTimeout(() => { list.hidden = true; input.value = labelOf(select.value); }, 150));
+  list.addEventListener('mousedown', event => {
+    const option = event.target.closest('.combo-option');
+    if(option){ event.preventDefault(); choose(option.dataset.value); }
+  });
+  select.addEventListener('change', () => { input.value = labelOf(select.value); });
 }
+
+/* A törzsadat-mezők (felrakó, lerakó) eddig datalist-tel működtek, ahol a
+   böngésző dönti el, mit mutat, és a cím nem követte a választást. Ezeket is
+   ugyanarra a kereső lenyílóra állítjuk, hogy az egész oldal egyforma legyen. */
+function attachDataCombo(input, listId, itemsFn, onPick){
+  if(!input || input.dataset.combo === '1') return;
+  input.dataset.combo = '1';
+  input.setAttribute('autocomplete','off');
+  input.removeAttribute('list');
+  document.getElementById(listId)?.remove();
+
+  const wrap = document.createElement('div');
+  wrap.className = 'combo';
+  input.parentNode.insertBefore(wrap, input);
+  wrap.appendChild(input);
+  const list = document.createElement('div');
+  list.className = 'combo-list';
+  list.hidden = true;
+  wrap.appendChild(list);
+
+  let active = -1;
+  const render = term => {
+    const hits = itemsFn().filter(item => !term || comboMatch(item.search || item.label, term)).slice(0, 200);
+    active = -1;
+    list.innerHTML = hits.length
+      ? hits.map((item, index) => `<button type="button" class="combo-option" data-index="${index}"><span>${esc(item.label)}</span>${item.note ? `<small>${esc(item.note)}</small>` : ''}</button>`).join('')
+      : '<div class="combo-empty">Nincs találat</div>';
+    list.hidden = false;
+    return hits;
+  };
+  let current = [];
+  const pick = index => {
+    const item = current[index];
+    if(!item) return;
+    input.value = item.label;
+    list.hidden = true;
+    onPick(item);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  input.addEventListener('focus', () => { closeAllCombos(list); current = render(''); });
+  input.addEventListener('input', () => { closeAllCombos(list); current = render(input.value); });
+  input.addEventListener('keydown', event => {
+    const options = [...list.querySelectorAll('.combo-option')];
+    if(event.key === 'ArrowDown' || event.key === 'ArrowUp'){
+      event.preventDefault();
+      if(list.hidden) current = render(input.value);
+      active = Math.max(0, Math.min(options.length - 1, active + (event.key === 'ArrowDown' ? 1 : -1)));
+      options.forEach((option, index) => option.classList.toggle('active', index === active));
+      options[active]?.scrollIntoView({ block: 'nearest' });
+    } else if(event.key === 'Enter' && !list.hidden && options.length){
+      event.preventDefault(); pick(active >= 0 ? active : 0);
+    } else if(event.key === 'Escape'){ list.hidden = true; }
+  });
+  input.addEventListener('blur', () => setTimeout(() => { list.hidden = true; }, 150));
+  list.addEventListener('mousedown', event => {
+    const option = event.target.closest('.combo-option');
+    if(option){ event.preventDefault(); pick(+option.dataset.index); }
+  });
+}
+
+function setupMasterCombos(){
+  attachDataCombo($('#supplierSearch'), 'supplierList',
+    () => state.suppliers.filter(item => item.active !== false && item.name)
+      .sort((a,b)=>a.name.localeCompare(b.name,'hu')||String(a.address||'').localeCompare(String(b.address||''),'hu'))
+      .map(item => ({ label: supplierDisplay(item), note: item.isCentral ? 'központ' : (item.site || ''), search: `${item.name} ${item.address||''} ${item.site||''}`, ref: item })),
+    item => { if($('#pickupAddress')) $('#pickupAddress').value = item.ref.address || ''; });
+
+  // A felrakó címe: a kiválasztott cég telephelyei közül szűrünk. Ha még
+  // nincs cég kiválasztva, minden hitelesített telephely látszik.
+  attachDataCombo($('#pickupAddress'), 'supplierAddressList',
+    () => {
+      const name = norm($('#supplierSearch')?.value || '').split(' · ')[0];
+      const chosen = findSupplierByInput($('#supplierSearch')?.value || '');
+      const base = chosen
+        ? state.suppliers.filter(item => norm(item.name) === norm(chosen.name))
+        : state.suppliers.filter(item => item.active !== false && item.address
+            && (!name || comboMatch(`${item.name} ${item.address}`, name)));
+      return base
+        .sort((a,b)=>(b.isCentral?1:0)-(a.isCentral?1:0)||String(a.address||'').localeCompare(String(b.address||''),'hu'))
+        .filter(item => item.address)
+        .map(item => ({ label: item.address, search: `${item.address} ${item.site||''} ${item.name}`,
+          note: [item.isCentral ? 'központ' : item.site, item.pickupNote].filter(Boolean).join(' · '), ref: item }));
+    },
+    () => {});
+
+  attachDataCombo($('#projectSearch'), 'projectList',
+    () => dropTargetOptions().map(target => ({ label: target.label, note: target.hint,
+      search: `${target.label} ${target.address || ''}`, ref: target })),
+    item => { if($('#dropAddress')) $('#dropAddress').value = item.ref.address || ''; });
+}
+window.setupMasterCombos = setupMasterCombos;
 
 function makeSearchableSelects(root){
   const scope = root && root.querySelectorAll ? root : document;
-  scope.querySelectorAll('select:not([data-searchable])').forEach(makeSelectSearchable);
+  scope.querySelectorAll('select:not([data-combo])').forEach(buildCombo);
 }
 window.makeSearchableSelects = makeSearchableSelects;
 
@@ -222,14 +350,16 @@ if(typeof MutationObserver !== 'undefined'){
     for(const record of records){
       for(const node of record.addedNodes){
         if(node.nodeType !== 1) continue;
-        if(node.tagName === 'SELECT') makeSelectSearchable(node);
-        else makeSearchableSelects(node);
+        if(node.tagName === 'SELECT') buildCombo(node);
+        else if(node.querySelectorAll) makeSearchableSelects(node);
       }
     }
   });
   document.addEventListener('DOMContentLoaded', () => {
     makeSearchableSelects(document);
+    setupMasterCombos();
     observer.observe(document.body, { childList: true, subtree: true });
+    document.addEventListener('mousedown', event => { if(!event.target.closest('.combo')) closeAllCombos(); });
   });
 }
 
@@ -402,7 +532,7 @@ window.findDropTargetByInput=findDropTargetByInput;
    találat van, nem tippelünk. */
 function uniquePartial(list, value, labelOf){
   const n = norm(value); if(n.length < 3) return null;
-  const hits = list.filter(item => selectFilterMatch(labelOf(item), value));
+  const hits = list.filter(item => comboMatch(labelOf(item), value));
   return hits.length === 1 ? hits[0] : null;
 }
 function findProjectByInput(v){
@@ -411,7 +541,11 @@ function findProjectByInput(v){
     || uniquePartial(state.projects, v, p=>`${p.name} ${p.address||''}`)
     || null;
 }
-function fillSearchableMasters(){const sv=$('#supplierSearch')?.value||'',pv=$('#projectSearch')?.value||'';$('#supplierList').innerHTML=state.suppliers.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(s=>`<option value="${esc(supplierDisplay(s))}"></option>`).join('');$('#projectList').innerHTML=dropTargetOptions().map(t=>`<option value="${esc(t.label)}">${esc(t.hint)}</option>`).join('');if($('#supplierSearch'))$('#supplierSearch').value=sv;if($('#projectSearch'))$('#projectSearch').value=pv}
+/* A datalisteket a keresős lenyíló váltotta le, ezért futásidőben eltűnnek.
+   A régi feltöltő hívások megmaradtak, de már nem szabad elhasalniuk. */
+function fillSearchableMasters(){const sv=$('#supplierSearch')?.value||'',pv=$('#projectSearch')?.value||'';
+  if(!$('#supplierList')||!$('#projectList')){if($('#supplierSearch'))$('#supplierSearch').value=sv;if($('#projectSearch'))$('#projectSearch').value=pv;return}
+  $('#supplierList').innerHTML=state.suppliers.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(s=>`<option value="${esc(supplierDisplay(s))}"></option>`).join('');$('#projectList').innerHTML=dropTargetOptions().map(t=>`<option value="${esc(t.label)}">${esc(t.hint)}</option>`).join('');if($('#supplierSearch'))$('#supplierSearch').value=sv;if($('#projectSearch'))$('#projectSearch').value=pv}
 function fillSupplierAddressList(name=''){
   const list=$('#supplierAddressList');if(!list)return;
   const locations=state.suppliers.filter(s=>norm(s.name)===norm(name)).sort((a,b)=>(b.isCentral?1:0)-(a.isCentral?1:0)||String(a.address||'').localeCompare(String(b.address||''),'hu'));
@@ -440,14 +574,14 @@ $('#recipientId').onchange=()=>{const r=state.recipients.find(x=>x.id===$('#reci
 function deleteOne(id){const o=state.orders.find(x=>x.id===id);if(o&&confirm(`Törlöd ezt a fuvart?\n${o.orderNo} · ${o.projectName||o.dropAddress}`)){state.orders=state.orders.filter(x=>x.id!==id);save()}}
 function deleteAll(){const date=selectedDate(),count=state.orders.filter(o=>o.scheduleDate===date).length;if(!count)return alert('Az aktuális napon nincs törölhető fuvar.');if(confirm(`Biztosan törölni szeretnéd a(z) ${date} nap összes (${count}) fuvarját?`)&&prompt('Írd be: TÖRLÉS')?.toUpperCase()==='TÖRLÉS'){state.orders=state.orders.filter(o=>o.scheduleDate!==date);save()}}
 function ensureItemId(it){if(!it._id)it._id=uid();return it._id}
-function openItems(id){const o=state.orders.find(x=>x.id===id);if(!o)return;currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);$('#itemsTitle').textContent=`${o.orderNo} · tételek`;$('#itemMovePanel').innerHTML=`<p><b>Nem kipipált tételek áthelyezése másik napra</b><br>A teljes dátum megadása után a program megerősítést kér, majd automatikusan áthelyezi a tételeket.</p><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Áthelyezés éve"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div>`;$('#itemsBody').innerHTML=(o.items||[]).map((it,i)=>`<div class="item-row ${it.received?'done':''}"><input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${id}',${i},this.checked)"><div><b class="item-name">${esc(it.name)}</b><br>${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)} ${it.longMaterial?'· hosszú szál':''}<label class="item-note-edit">Tétel megjegyzés<textarea placeholder="Nincs megjegyzés" oninput="updateItemNote('${id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label></div></div>`).join('')||'<div class="notice">Nincs tétel.</div>';bindMoveDateParts();if(!$('#itemsDialog').open)$('#itemsDialog').showModal()}
+function openItems(id){const o=state.orders.find(x=>x.id===id);if(!o)return;currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);$('#itemsTitle').textContent=`${o.orderNo} · Tételek`;$('#itemMovePanel').innerHTML=`<p><b>Nem kipipált tételek áthelyezése másik napra</b><br>A teljes dátum megadása után a program megerősítést kér, majd automatikusan áthelyezi a tételeket.</p><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Áthelyezés éve"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div>`;$('#itemsBody').innerHTML=(o.items||[]).map((it,i)=>`<div class="item-row ${it.received?'done':''}"><input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${id}',${i},this.checked)"><div><b class="item-name">${esc(it.name)}</b><br>${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)} ${it.longMaterial?'· hosszú szál':''}<label class="item-note-edit">Tétel megjegyzés<textarea placeholder="Nincs megjegyzés" oninput="updateItemNote('${id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label></div></div>`).join('')||'<div class="notice">Nincs tétel.</div>';bindMoveDateParts();if(!$('#itemsDialog').open)$('#itemsDialog').showModal()}
 function bindMoveDateParts(){const y=$('#moveYear'),m=$('#moveMonth'),d=$('#moveDay');[[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next])=>{el.addEventListener('input',()=>{el.value=el.value.replace(/\D/g,'').slice(0,max);if(el.value.length===max&&next){next.focus();next.select()}if(y.value.length===4&&m.value.length===2&&d.value.length===2)setTimeout(moveUncheckedItemsFromDialog,0)});el.addEventListener('change',()=>{if(y.value&&m.value&&d.value)moveUncheckedItemsFromDialog()})})}
 function moveUncheckedItemsFromDialog(){const o=state.orders.find(x=>x.id===currentItemsOrderId);if(!o)return;const y=$('#moveYear')?.value,m=$('#moveMonth')?.value,d=$('#moveDay')?.value;if(!y||!m||!d)return;const target=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`,dt=new Date(target+'T12:00:00');if(isNaN(dt)||localISO(dt)!==target)return alert('Érvénytelen dátum.');if(target===o.scheduleDate)return alert('Az új dátum nem lehet az eredeti nappal azonos.');const moving=(o.items||[]).filter(i=>!i.received);if(!moving.length)return alert('Nincs áthelyezhető, kipipálatlan tétel.');if(!confirm(`${moving.length} kipipálatlan tétel áthelyezése erre a napra: ${target}?`))return;let targetOrder=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===o.orderNo&&x.vehicleId===o.vehicleId&&x.projectName===o.projectName&&x.pickupName===o.pickupName);if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id};state.orders.push(targetOrder)}moving.forEach(it=>{ensureItemId(it);it.received=false;targetOrder.items.push(it);state.backlog.push({id:uid(),sourceOrderId:o.id,targetOrderId:targetOrder.id,itemId:it._id,orderNo:o.orderNo,supplier:o.pickupName,projectName:o.projectName,code:it.code,name:it.name,itemNote:itemNoteValue(it),movedToDate:target,movedAt:new Date().toISOString()})});o.items=(o.items||[]).filter(i=>i.received);o.completed=o.items.length>0&&o.items.every(i=>i.received);$('#itemsDialog').close();save();alert(`Az áthelyezés elkészült: ${moving.length} tétel → ${target}.`)}
 window.openItems=openItems;window.toggleItem=(id,i,val)=>{const o=state.orders.find(x=>x.id===id);if(!o||!o.items?.[i])return;o.items[i].received=val;o.completed=(o.items||[]).length>0&&o.items.every(x=>x.received);save(false);openItems(id);renderRoutes();renderDriver()};window.updateItemNote=(id,i,val)=>{const o=state.orders.find(x=>x.id===id);if(!o||!o.items?.[i])return;o.items[i].itemNote=val;const itemId=ensureItemId(o.items[i]);state.backlog.filter(b=>b.itemId===itemId).forEach(b=>b.itemNote=val);save(false);renderRoutes();renderOrders();renderBacklog()};
 function backlogRecordData(b){const o=state.orders.find(x=>x.id===b.targetOrderId),it=o?.items?.find(i=>i._id===b.itemId);return{...b,orderNo:o?.orderNo||b.orderNo,supplier:o?.pickupName||b.supplier,projectName:o?.projectName||b.projectName,code:it?.code||b.code,name:it?.name||b.name,itemNote:it?itemNoteValue(it):b.itemNote,movedToDate:o?.scheduleDate||b.movedToDate,targetOrderId:o?.id||b.targetOrderId}}
 function renderBacklog(){const q=norm($('#backlogSearch')?.value||''),rows=(state.backlog||[]).map(backlogRecordData).filter(b=>!q||norm(Object.values(b).join(' ')).includes(q));if($('#backlogBody'))$('#backlogBody').innerHTML=rows.map(b=>`<tr class="backlog-row" onclick="openBacklogResult('${b.targetOrderId}','${b.movedToDate}')"><td>${esc(b.orderNo)}</td><td>${esc(b.supplier)}</td><td>${esc(b.projectName)}</td><td>${esc(b.code)}</td><td>${esc(b.name)}</td><td>${esc(b.itemNote)}</td><td>${esc(b.movedToDate)}</td></tr>`).join('')||'<tr><td colspan="7">Nincs találat.</td></tr>'}
 window.openBacklogResult=(id,date)=>{const o=state.orders.find(x=>x.id===id);$('#workDate').value=o?.scheduleDate||date;showPage('planner');render();setTimeout(()=>{const el=document.querySelector(`.bubble[data-id="${id}"]`);if(el){el.classList.add('search-highlight');el.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>el.classList.remove('search-highlight'),7000)}},180)};
-function openCamera(id){const o=state.orders.find(x=>x.id===id);$('#cameraOrderId').value=id;$('#cameraTitle').textContent=`${o.orderNo} · szállítólevél`;$('#cameraPreview').innerHTML='';$('#cameraNote').value='';$('#cameraInput').value='';$('#cameraDialog').showModal()}
+function openCamera(id){const o=state.orders.find(x=>x.id===id);$('#cameraOrderId').value=id;$('#cameraTitle').textContent=`${o.orderNo} · Szállítólevél`;$('#cameraPreview').innerHTML='';$('#cameraNote').value='';$('#cameraInput').value='';$('#cameraDialog').showModal()}
 window.openCamera=openCamera;$('#cameraInput').onchange=e=>{$('#cameraPreview').innerHTML=[...e.target.files].map(f=>`<img src="${URL.createObjectURL(f)}">`).join('')};$('#cameraForm').onsubmit=e=>{e.preventDefault();const o=state.orders.find(x=>x.id===$('#cameraOrderId').value);o.deliveryReports=o.deliveryReports||[];o.deliveryReports.push({at:new Date().toISOString(),note:$('#cameraNote').value,photoCount:$('#cameraInput').files.length,hasAudio:!!audioBlob});$('#cameraDialog').close();save();alert('A fotó és megjegyzés helyben rögzítve.')};
 function editVehicle(id){const v=state.vehicles.find(x=>x.id===id)||{};$('#vehicleTitle').textContent=v.id?'Jármű szerkesztése':'Új jármű';$('#editVehicleId').value=v.id||'';$('#driverName').value=v.driverName||'';$('#vehicleName').value=v.name||'';$('#vehicleType').innerHTML=VEHICLE_TYPES.map(t=>option(t,t,v.type)).join('');$('#homeCity').value=v.homeCity||'';$('#vehicleActive').checked=v.active!==false;$('#vehicleDialog').showModal()}
 window.editVehicle=editVehicle;$('#vehicleForm').onsubmit=e=>{e.preventDefault();const id=$('#editVehicleId').value,v={id:id||uid(),driverName:$('#driverName').value,name:$('#vehicleName').value,type:$('#vehicleType').value,homeCity:$('#homeCity').value,active:$('#vehicleActive').checked};const i=state.vehicles.findIndex(x=>x.id===id);if(i>=0)state.vehicles[i]=v;else state.vehicles.push(v);$('#vehicleDialog').close();save()}
@@ -538,7 +672,7 @@ function numericQty(v){const n=parseFloat(String(v??'').replace(',','.').replace
 function formatQty(v){return Number.isInteger(v)?String(v):String(Math.round(v*1000)/1000).replace('.',',')}
 function openItems(id){
   const o=state.orders.find(x=>x.id===id);if(!o)return;currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);
-  $('#itemsTitle').textContent=`${o.orderNo} · tételek`;
+  $('#itemsTitle').textContent=`${o.orderNo} · Tételek`;
   $('#itemMovePanel').innerHTML=`<p><b>Nem kipipált tételek áthelyezése másik napra</b><br>Írd be a következő felvétel dátumát. A hiányzó darabszám kerül át; üres mező esetén a teljes rendelt mennyiség.</p><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN"></div>`;
   $('#itemsBody').innerHTML=(o.items||[]).map((it,i)=>`<div class="item-row ${it.received?'done':''}"><input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${id}',${i},this.checked)"><div><b class="item-name">${esc(it.name)}</b><br>${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)} ${it.longMaterial?'· hosszú szál':''}<div class="missing-qty-wrap ${it.received?'hidden':''}"><label>Nem kaptam meg – mennyiség<input type="number" min="0" step="any" placeholder="Üres = teljes mennyiség" value="${esc(it.missingQty||'')}" oninput="updateMissingQty('${id}',${i},this.value)"></label><small>Áthelyezéskor ez a mennyiség kerül a következő napra és a Hátralékba.</small></div><label class="item-note-edit">Tétel megjegyzés<textarea placeholder="Nincs megjegyzés" oninput="updateItemNote('${id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label></div></div>`).join('')||'<div class="notice">Nincs tétel.</div>';
   bindMoveDateParts();if(!$('#itemsDialog').open)$('#itemsDialog').showModal()
@@ -747,7 +881,7 @@ function bindV21MoveDateParts(){
 }
 function openItems(id){
   const o=state.orders.find(x=>x.id===id);if(!o)return;currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);
-  $('#itemsTitle').textContent=`${o.orderNo} · tételek`;
+  $('#itemsTitle').textContent=`${o.orderNo} · Tételek`;
   $('#itemMovePanel').innerHTML=`<div class="move-controls"><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Alapértelmezett áthelyezési év"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div><button id="applyMoveDateAll" class="move-items-btn" type="button" title="Minden kipipálatlan tétel áthelyezése a fenti napra">Mindet erre a napra</button></div>`;
   $('#itemsBody').innerHTML=`<div class="item-grid-head"><span></span><span>Tétel</span><span>Hiányzik</span><span>Hátralék napja</span></div>`+(o.items||[]).map((it,i)=>{
     /* V58: az alapállapot a letisztult sor. A pipa azt jelenti, hogy a tételt

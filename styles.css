@@ -268,9 +268,14 @@ dialog{background:#fffefd;box-shadow:0 28px 76px #6278872e}dialog::backdrop{back
 .v57-row-title{flex:1;min-width:0;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .v57-detail-toggle{flex:none;width:28px;height:28px;border:.5px solid #cfcbbf;background:#fff;border-radius:6px;cursor:pointer}
 .v57-row-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
-.v57-row-actions button{flex:1 1 auto;min-height:34px;font-size:13px;border:.5px solid #cfcbbf;background:#fff;border-radius:7px;cursor:pointer}
-.v57-row-actions .camera-action{background:#e6f1fb;border-color:#85b7eb}
-.v57-row-actions .transfer-action{background:#f2ecfb;border-color:#b9a6e6}
+/* Az alap button szabály fehér betűt ad (color:#fff), a soron viszont világos
+   a háttér – ezért a felirat olvashatatlan volt. A gombok betűszíne ugyanaz,
+   mint a felrakó/lerakó soré. */
+.v57-row-actions button{flex:1 1 auto;min-height:36px;font-size:13px;font-weight:600;
+  border:.5px solid #cfcbbf;background:#fff;color:var(--ink);border-radius:7px;cursor:pointer}
+.v57-row-actions button:hover{background:#f4f2ec}
+.v57-row-actions .camera-action{background:#e6f1fb;border-color:#85b7eb;color:var(--ink)}
+.v57-row-actions .transfer-action{background:#f2ecfb;border-color:#b9a6e6;color:var(--ink)}
 .v57-row-detail{margin-top:8px;padding-top:8px;border-top:.5px solid #e6e3d9}
 
 /* V57 – hátralék nézet */
@@ -364,7 +369,7 @@ dialog{background:#fffefd;box-shadow:0 28px 76px #6278872e}dialog::backdrop{back
 .v56-row{padding-left:6px}
 
 /* V60 – importált levél a sofőri felületen */
-.v57-row-actions .mail-action{background:#eef7ea;border-color:#a9cf9a}
+.v57-row-actions .mail-action{background:#eef7ea;border-color:#a9cf9a;color:var(--ink)}
 .source-mail{max-height:70vh;overflow:auto}
 .mail-meta{font-size:12px;color:#5f5c54;margin:0 0 8px;display:flex;flex-direction:column;gap:2px}
 .mail-body{white-space:pre-wrap;word-break:break-word;font:13px/1.5 system-ui,sans-serif;
@@ -374,7 +379,24 @@ dialog{background:#fffefd;box-shadow:0 28px 76px #6278872e}dialog::backdrop{back
   background:#e6f1fb;color:#0c447c;border-radius:7px;text-decoration:none}
 .mail-file:hover{background:#d4e7f8}
 
-/* V60 – kereső a legördülők felett */
-.select-filter{display:block;width:100%;margin:0 0 4px;padding:5px 8px;font-size:12px;
-  border:.5px solid #cfcbbf;border-radius:6px;background:#fff}
-.select-filter:focus{border-color:#85b7eb;outline:2px solid #d8e8f8;outline-offset:1px}
+
+/* A sofőri sor egyéb elemei is örökölhetik a fehér betűt – rögzítjük. */
+.v57-detail-toggle{color:var(--ink)}
+.v57-row-detail button{color:var(--ink)}
+
+
+/* V61 – egységes keresős lenyíló */
+.combo{position:relative}
+.combo-hidden-select{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.combo-input{width:100%;padding:8px 10px;font-size:13px;border:.5px solid #cfcbbf;
+  border-radius:8px;background:#fff;color:var(--ink)}
+.combo-input:focus{border-color:#85b7eb;outline:2px solid #d8e8f8;outline-offset:1px}
+.combo-list{position:absolute;left:0;right:0;top:calc(100% + 3px);z-index:60;max-height:280px;
+  overflow:auto;background:#fff;border:.5px solid #cfcbbf;border-radius:8px;
+  box-shadow:0 10px 26px rgba(0,0,0,.16);padding:3px}
+.combo-option{display:flex;justify-content:space-between;align-items:baseline;gap:10px;width:100%;
+  padding:7px 9px;border:0;background:none;color:var(--ink);font-size:13px;text-align:left;
+  border-radius:6px;cursor:pointer;font-weight:500}
+.combo-option small{color:#8a877d;font-size:11px;white-space:nowrap;font-weight:400}
+.combo-option:hover,.combo-option.active{background:#e6f1fb}
+.combo-empty{padding:9px;font-size:12px;color:#8a877d}

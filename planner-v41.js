@@ -437,14 +437,26 @@
     const name = nrm(supplier?.name || '');
     if (!name || /stand\s*98/.test(name)) return -100;
     const nameTokens = significantTokens(supplier.name);
-    const addressTokens = significantTokens(supplier.address, new Set(['budapest', 'utca', 'ut', 'ter', 'koz', 'kapu']));
-    const siteTokens = significantTokens(supplier.site || supplier.pickupNote || '');
+    /* V61: a helynevek nem érnek pontot.
+       A telephelyek neve a törzsadatban "Budapest 10. ker." alakú, a
+       "budapest" és a "ker" viszont szinte minden bizonylaton szerepel.
+       Emiatt egy rossz telephely ingyen pontokat kapott, és a Lambdánál az
+       Akna utca nyert a Hengermalom helyett. Ezeket a szavakat kiszűrjük. */
+    const PLACE_NOISE = new Set(['budapest', 'utca', 'ut', 'ter', 'koz', 'kapu', 'ker', 'kerulet',
+      'telephely', 'magyarorszag', 'hrsz', 'ipari', 'park', 'raktar']);
+    const addressTokens = significantTokens(supplier.address, PLACE_NOISE);
+    const siteTokens = significantTokens(supplier.site || supplier.pickupNote || '', PLACE_NOISE);
     let score = 0;
     if (name && sourceNorm.includes(name)) score += 30;
     for (const token of nameTokens) if (sourceNorm.includes(token)) score += token.length >= 6 ? 8 : 5;
     for (const token of siteTokens) if (sourceNorm.includes(token)) score += 6;
     for (const token of addressTokens) if (sourceNorm.includes(token)) score += token.length >= 6 ? 4 : 2;
     if (nameTokens.length && nameTokens.every(token => sourceNorm.includes(token))) score += 10;
+    /* Ha a bizonylaton ott a telephely UTCANEVE, az dönt: az a cím szerepel a
+       papíron, nem egy másik telephelyé. */
+    const street = significantTokens(supplier.address, PLACE_NOISE)
+      .find(token => token.length >= 5 && !/^\d+$/.test(token));
+    if (street && sourceNorm.includes(street)) score += 25;
     return score;
   }
 
