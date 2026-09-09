@@ -1,4 +1,4 @@
-/* Fuvarszervező V59
+/* Fuvarszervező V60
    Sáv-alapú szétosztás és lánc-optimalizált felrakási sorrend.
 
    Kemény szabályok:
@@ -23,7 +23,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '59';
+  const VERSION = '60';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   // Alapértelmezett indulási pontok. A törzsadat (SEED_DATA.vehicles) felülírja
   // őket, ha ott meg van adva a sofőr lakóhelye.
@@ -759,7 +759,10 @@
     if (!orders.length) return null;
     for (const order of orders) {
       const address = projectAddressV54(order);
-      const point = state.geo?.[canonicalAddress(address)] || state.geo?.[address];
+      let point = state.geo?.[canonicalAddress(address)] || state.geo?.[address];
+      // V60: a lerakó címére is elfogadjuk a becsült koordinátát, különben a
+      // lánc vége hiányzik, és az útvonal nem a lerakók felé zár.
+      if (!finitePoint(point) && typeof global.offlineGeo === 'function') point = global.offlineGeo(address);
       if (finitePoint(point)) points.push(point);
     }
     if (!points.length) return null;
@@ -781,27 +784,71 @@
       return total;
     };
 
-    // Legközelebbi szomszéd indulás, majd 2-opt javítás a teljes láncon.
-    let current = startPoint;
-    const left = known.slice(), route = [];
-    while (left.length) {
-      left.sort((a, b) => km(current, a.point) - km(current, b.point) || String(a.key).localeCompare(String(b.key), 'hu'));
-      const next = left.shift();
-      route.push(next);
-      current = next.point;
+    /* V60: a korábbi legközelebbi-szomszéd + 2-opt kereső beragadt lokális
+       minimumba. Egy valós napon (Néber, Szatmári, Ryng, Uniball, Lambda)
+       2,8 km-rel rosszabb sorrendet adott, mint a kézi.
+       Hét megállóig ezért végigpróbáljuk az összes sorrendet – ez pontos és
+       gyors. Felette többféle kezdőpontból indított 2-opt és Or-opt fut;
+       méréssel kilenc megállóig szintén az optimumot adta. */
+    if (known.length <= 7) {
+      let best = null, bestCost = Infinity;
+      const permute = (rest, acc) => {
+        if (!rest.length) {
+          const value = cost(acc);
+          if (value < bestCost - 1e-9) { bestCost = value; best = acc.slice(); }
+          return;
+        }
+        for (let i = 0; i < rest.length; i++) {
+          permute([...rest.slice(0, i), ...rest.slice(i + 1)], [...acc, rest[i]]);
+        }
+      };
+      permute(known, []);
+      return [...(best || known), ...unknown];
     }
-    let best = route, bestCost = cost(route), improved = true, guard = 0;
-    while (improved && guard++ < 200) {
-      improved = false;
-      for (let i = 0; i < best.length - 1 && !improved; i++) {
-        for (let j = i + 2; j <= best.length; j++) {
-          const candidate = [...best.slice(0, i), ...best.slice(i, j).reverse(), ...best.slice(j)];
-          const candidateCost = cost(candidate);
-          if (candidateCost < bestCost - 1e-9) { best = candidate; bestCost = candidateCost; improved = true; break; }
+
+    const nearestFrom = first => {
+      const left = known.filter(stop => stop !== first);
+      const route = first ? [first] : [];
+      let current = first ? first.point : startPoint;
+      while (left.length) {
+        left.sort((a, b) => km(current, a.point) - km(current, b.point) || String(a.key).localeCompare(String(b.key), 'hu'));
+        const next = left.shift(); route.push(next); current = next.point;
+      }
+      return route;
+    };
+
+    const improve = route => {
+      let best = route.slice(), bestCost = cost(best), improved = true, guard = 0;
+      while (improved && guard++ < 400) {
+        improved = false;
+        // 2-opt: szakasz megfordítása
+        for (let i = 0; i < best.length - 1 && !improved; i++) {
+          for (let j = i + 2; j <= best.length; j++) {
+            const candidate = [...best.slice(0, i), ...best.slice(i, j).reverse(), ...best.slice(j)];
+            const value = cost(candidate);
+            if (value < bestCost - 1e-9) { best = candidate; bestCost = value; improved = true; break; }
+          }
+        }
+        // Or-opt: egy megálló áthelyezése máshova
+        for (let i = 0; i < best.length && !improved; i++) {
+          const without = [...best.slice(0, i), ...best.slice(i + 1)];
+          for (let j = 0; j <= without.length; j++) {
+            if (j === i) continue;
+            const candidate = [...without.slice(0, j), best[i], ...without.slice(j)];
+            const value = cost(candidate);
+            if (value < bestCost - 1e-9) { best = candidate; bestCost = value; improved = true; break; }
+          }
         }
       }
+      return { route: best, value: bestCost };
+    };
+
+    let winner = improve(nearestFrom(null));
+    for (const seed of known) {
+      const attempt = improve(nearestFrom(seed));
+      if (attempt.value < winner.value - 1e-9) winner = attempt;
     }
-    return [...best, ...unknown];
+    return [...winner.route, ...unknown];
   }
 
   function stablePrecedenceOrderV49(stops, vehicle) {
@@ -879,7 +926,7 @@
         if (Number.isFinite(metres)) fallback[from.index][to.index] = metres / 1000;
       }));
     } catch (error) {
-      console.warn('[V59] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
+      console.warn('[V60] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
     }
     return fallback;
   }
@@ -927,6 +974,8 @@
     return [...(best?.path || known.map((_, index) => index)).map(index => known[index]), ...unknown];
   }
 
+  let lastRouteWarningsV60 = [];
+
   async function buildVehicleRouteV49(vehicle, profiles) {
     const allOrders = (typeof dayOrders === 'function' ? dayOrders(vehicle.id) : []).slice().sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
     const isResolved = order => global.V37Planner?.isResolvedBacklogOrder ? global.V37Planner.isResolvedBacklogOrder(order) : false;
@@ -946,6 +995,25 @@
       });
     const chainStart = await vehicleHomeV44(vehicle);
     const chainEnd = dropCentroidV53(vehicle.id);
+    // V60: ha egy felrakónak nincs koordinátája, a lánc-optimalizáló kihagyja.
+    // Korábban ez csendben történt, és az útvonal optimalizálatlan maradt.
+    // Most megpróbáljuk pótolni, és ha marad hiány, jelezzük.
+    for (const stop of normalPickupsOriginal) {
+      if (finitePoint(stop.point)) continue;
+      if (typeof global.offlineGeo === 'function') {
+        const guess = global.offlineGeo(stop.address || '');
+        if (finitePoint(guess)) { stop.point = guess; stop.approxPoint = true; continue; }
+      }
+      if (typeof geo === 'function') {
+        const found = await geo(stop.address || '');
+        if (finitePoint(found)) stop.point = found;
+      }
+    }
+    const missing = normalPickupsOriginal.filter(stop => !finitePoint(stop.point));
+    if (missing.length) {
+      lastRouteWarningsV60 = lastRouteWarningsV60.concat(
+        missing.map(stop => `${vehicle.driverName}: ${stop.name} (${stop.address || 'cím nélkül'})`));
+    }
     const chained = chainOrderV53(normalPickupsOriginal, chainStart, chainEnd);
     const orderedNormal = preservePinnedPickupSlotsV49(normalPickupsOriginal, chained);
 
@@ -1017,7 +1085,14 @@
     const vehicles = typeof activeVehicles === 'function' ? activeVehicles() : [];
     const before = new Map((state.orders || []).filter(order => order.scheduleDate === selectedDate()).map(order => [order.id, order.vehicleId]));
     const routeProfiles = profiles || await buildProfiles((state.orders || []).filter(order => order.scheduleDate === selectedDate()));
+    lastRouteWarningsV60 = [];
     for (const vehicle of vehicles) await buildVehicleRouteV49(vehicle, routeProfiles);
+    if (lastRouteWarningsV60.length && typeof alert === 'function') {
+      const list = [...new Set(lastRouteWarningsV60)];
+      alert('Ezeknek a felrakóknak nincs koordinátája, ezért kimaradtak az útvonal-optimalizálásból:\n\n'
+        + list.slice(0, 10).join('\n') + (list.length > 10 ? `\n… és további ${list.length - 10}` : '')
+        + '\n\nEllenőrizd a címüket a Törzs menüben.');
+    }
     const changed = (state.orders || []).filter(order => order.scheduleDate === selectedDate() && before.has(order.id) && before.get(order.id) !== order.vehicleId);
     if (changed.length) {
       changed.forEach(order => { order.vehicleId = before.get(order.id); });
@@ -1052,10 +1127,10 @@
       await persistOnlineV49();
       if (typeof render === 'function') render();
       const conflictText = result.conflicts.length ? `\nFigyelem: ${result.conflicts.length} felrakóhelyen egymással ütköző fix sofőrjelölés maradt.` : '';
-      alert(`Fuvarok V59 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
+      alert(`Fuvarok V60 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
       return result;
     } catch (error) {
-      console.error('[V59] Szétosztási hiba', error);
+      console.error('[V60] Szétosztási hiba', error);
       alert(`A fuvarok szétosztása közben hiba történt: ${error?.message || error}`);
       return null;
     }
@@ -1071,10 +1146,10 @@
       if (changed.length) throw new Error('Az optimalizálás sofőrt változtatott.');
       await persistOnlineV49();
       if (typeof render === 'function') render();
-      alert('V59 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
+      alert('V60 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
       return true;
     } catch (error) {
-      console.error('[V59] Optimalizálási hiba', error);
+      console.error('[V60] Optimalizálási hiba', error);
       alert(`Az optimalizálás közben hiba történt: ${error?.message || error}`);
       return false;
     }
@@ -1288,12 +1363,12 @@
     if (balanceButton) {
       balanceButton.onclick = event => { event.preventDefault(); return balanceActionV44(); };
       balanceButton.dataset.algorithmVersion = VERSION;
-      balanceButton.title = 'V59: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
+      balanceButton.title = 'V60: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
     }
     if (optimizeButton) {
       optimizeButton.onclick = event => { event.preventDefault(); return optimizeActionV44(); };
       optimizeButton.dataset.algorithmVersion = VERSION;
-      optimizeButton.title = 'V59: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
+      optimizeButton.title = 'V60: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
     }
     document.getElementById('clearAllMastersBtn')?.addEventListener('click', clearAllMasterDataV44);
     document.getElementById('loadBuiltInMastersBtn')?.addEventListener('click', loadBuiltInMasterDataV44);
@@ -1329,7 +1404,7 @@
   global.clearAllMasterDataV44 = clearAllMasterDataV44;
   global.loadBuiltInMasterDataV44 = loadBuiltInMasterDataV44;
 
-  global.V59Planner = {
+  global.V60Planner = {
     version: VERSION,
     canonicalAddress,
     locationKey,
@@ -1348,6 +1423,7 @@
     applyVersionLabelV54,
     exportMasterDataV55,
     v53IsLongOrder,
+    getRouteWarningsV60: () => lastRouteWarningsV60.slice(),
     transferChainCost,
     transferDriver,
     isProjectTransferBlock,
@@ -1365,15 +1441,16 @@
     clearAllMasterDataV44,
     loadBuiltInMasterDataV44
   };
-  global.V58Planner = global.V59Planner;
-  global.V57Planner = global.V59Planner;
-  global.V56Planner = global.V59Planner;
-  global.V55Planner = global.V59Planner;
-  global.V54Planner = global.V59Planner;
-  global.V53Planner = global.V59Planner;
-  global.V50Planner = global.V59Planner;
-  global.V49Planner = global.V59Planner;
-  global.V44Planner = global.V59Planner;
+  global.V59Planner = global.V60Planner;
+  global.V58Planner = global.V60Planner;
+  global.V57Planner = global.V60Planner;
+  global.V56Planner = global.V60Planner;
+  global.V55Planner = global.V60Planner;
+  global.V54Planner = global.V60Planner;
+  global.V53Planner = global.V60Planner;
+  global.V50Planner = global.V60Planner;
+  global.V49Planner = global.V60Planner;
+  global.V44Planner = global.V60Planner;
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(bindV44, 0), { once: true });

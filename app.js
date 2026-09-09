@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V59Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V60Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -155,6 +155,62 @@ function itemNoteValue(it={}){return String(it.itemNote??it.itemRemark??it.tetel
 function bubbles(list){if(!list.length)return'<div class="notice">Nincs fuvar.</div>';return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')} · ${esc(o.pickupAddress||'')}</p><p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs megadva')}</p>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('')}
 window.renameDriver=(id,name)=>{const v=state.vehicles.find(x=>x.id===id);if(v){v.driverName=name.trim()||v.driverName;save()}};
 function initSortables(){activeVehicles().forEach(v=>{const el=$('#route-'+v.id);if(!el)return;new Sortable(el,{group:'vehicles',animation:180,handle:'.drag',onEnd:e=>{const o=state.orders.find(x=>x.id===e.item.dataset.id);if(o)o.vehicleId=e.to.id.replace('route-','');activeVehicles().forEach(x=>{$$('#route-'+x.id+' .bubble').forEach((n,i)=>{const r=state.orders.find(o=>o.id===n.dataset.id);if(r)r.sequence=i+1})});save()}})})}
+/* V60 – OFFLINE TARTALÉK GEOKÓDOLÁS
+
+   A lánc-optimalizáló csak azokat a felrakókat tudja sorba rakni, amiknek van
+   koordinátájuk. Ha egy címre nem érkezik találat, a felrakó kimarad, és ha
+   kettőnél kevesebb marad, a motor CSENDBEN visszaadja az eredeti sorrendet –
+   ilyenkor úgy tűnik, hogy az optimalizálás nem működik.
+
+   Ezért minden magyar címre adunk becsült koordinátát az irányítószámból, a
+   római számmal írt kerületből vagy a településnévből. Ez utcára pontatlan,
+   de a sorrendhez bőven elég, és mindig van eredmény. */
+const BP_DISTRICT_POINTS={1:[47.497,19.038],2:[47.535,19.010],3:[47.567,19.040],4:[47.565,19.089],
+ 5:[47.500,19.052],6:[47.508,19.066],7:[47.500,19.073],8:[47.489,19.076],9:[47.477,19.083],
+ 10:[47.483,19.145],11:[47.462,19.032],12:[47.497,18.990],13:[47.530,19.066],14:[47.514,19.108],
+ 15:[47.560,19.130],16:[47.517,19.192],17:[47.480,19.250],18:[47.430,19.190],19:[47.457,19.140],
+ 20:[47.437,19.113],21:[47.427,19.071],22:[47.412,19.005],23:[47.402,19.114]};
+const HU_TOWN_POINTS={szigetszentmiklos:[47.343,19.044],torokbalint:[47.431,18.913],budaors:[47.462,18.946],
+ erd:[47.394,18.913],dunaharaszti:[47.352,19.093],biatorbagy:[47.472,18.817],maglod:[47.443,19.372],
+ tokol:[47.322,18.966],tatabanya:[47.569,18.404],felcsut:[47.455,18.586],vac:[47.776,19.136],
+ godollo:[47.600,19.360],dunakeszi:[47.632,19.138],vecses:[47.410,19.263],gyal:[47.385,19.222],
+ ullo:[47.386,19.354],szigethalom:[47.322,18.968],halasztelek:[47.377,18.983],budakeszi:[47.510,18.928],
+ diosd:[47.407,18.947],sooskut:[47.402,18.836],dunavarsany:[47.283,19.077],delegyhaza:[47.245,19.028],
+ kistarcsa:[47.542,19.271],nagytarcsa:[47.520,19.278],pecel:[47.489,19.343],csomor:[47.552,19.235],
+ fot:[47.615,19.187],veresegyhaz:[47.650,19.284],szada:[47.635,19.317],isaszeg:[47.529,19.400],
+ kerepes:[47.564,19.281],mogyorod:[47.591,19.240],bicske:[47.489,18.637],etyek:[47.446,18.752],
+ martonvasar:[47.315,18.789],szentendre:[47.667,19.075],debrecen:[47.531,21.625],szeged:[46.253,20.148],
+ pecs:[46.073,18.233],gyor:[47.687,17.634],miskolc:[48.104,20.791],kecskemet:[46.897,19.690],
+ szekesfehervar:[47.186,18.423],nyiregyhaza:[47.956,21.717],kaposvar:[46.359,17.796],
+ szombathely:[47.235,16.622],szolnok:[47.174,20.196],veszprem:[47.093,17.911],sopron:[47.685,16.583],
+ eger:[47.903,20.374],bekescsaba:[46.679,21.087],szekszard:[46.350,18.704],baja:[46.183,18.954],
+ esztergom:[47.795,18.741],komarom:[47.743,18.124],hatvan:[47.667,19.680],cegled:[47.174,19.800],
+ nagykanizsa:[46.453,16.990],dunaujvaros:[46.963,18.936],papa:[47.330,17.468],keszthely:[46.767,17.244],
+ mosonmagyarovar:[47.868,17.271],gyongyos:[47.783,19.928],jaszbereny:[47.500,19.911],
+ zalaegerszeg:[46.845,16.844],salgotarjan:[48.104,19.800],mohacs:[45.993,18.683],
+ pilisvorosvar:[47.618,18.911],tata:[47.649,18.323],balassagyarmat:[48.076,19.295],
+ racalmas:[47.028,18.937],szigetvar:[46.048,17.807],szecseny:[48.081,19.520]};
+const ROMAN_DISTRICT={i:1,ii:2,iii:3,iv:4,v:5,vi:6,vii:7,viii:8,ix:9,x:10,xi:11,xii:12,xiii:13,
+ xiv:14,xv:15,xvi:16,xvii:17,xviii:18,xix:19,xx:20,xxi:21,xxii:22,xxiii:23};
+function offlineGeo(addr){
+  const raw=String(addr||'');if(!raw.trim())return null;
+  const code=raw.match(/\b(1\d{3})\b/);
+  if(code){const c=code[1];const d=c.startsWith('10')?+c[2]:+c.slice(1,3);
+    if(BP_DISTRICT_POINTS[d])return BP_DISTRICT_POINTS[d].slice()}
+  const t=norm(raw);
+  if(/\bbudapest\b|\bbp\b/.test(t)){
+    const r=t.match(/\b([ivx]{1,6})\s*ker/);
+    if(r&&ROMAN_DISTRICT[r[1]])return BP_DISTRICT_POINTS[ROMAN_DISTRICT[r[1]]].slice();
+    const a=t.match(/\b(\d{1,2})\s*ker/);
+    if(a&&BP_DISTRICT_POINTS[+a[1]])return BP_DISTRICT_POINTS[+a[1]].slice();
+  }
+  for(const town in HU_TOWN_POINTS){
+    if(new RegExp('\\b'+town+'\\b').test(t))return HU_TOWN_POINTS[town].slice();
+  }
+  return null;
+}
+window.offlineGeo=offlineGeo;
+
 function seedPoint(addr){
   if(!addr)return null;
   const want=norm(addr);
@@ -166,7 +222,17 @@ function seedPoint(addr){
 }
 async function geo(addr){if(!addr)return null;if(state.geo[addr])return state.geo[addr];
   const seeded=seedPoint(addr);
-  if(seeded){state.geo[addr]=seeded;return seeded;}try{const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=hu&q='+encodeURIComponent(addr));const j=await r.json();if(j[0]){state.geo[addr]=[+j[0].lat,+j[0].lon];save(false);await new Promise(r=>setTimeout(r,1050));return state.geo[addr]}}catch{}return null}
+  if(seeded){state.geo[addr]=seeded;return seeded;}
+  // Előbb a pontos, hálózati feloldás; ha nem sikerül, a becsült pont jön.
+  // Így soha nem marad koordináta nélkül egy magyar cím.
+  const offline=offlineGeo(addr);
+  try{
+    const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=hu&q='+encodeURIComponent(addr));
+    const j=await r.json();
+    if(j[0]){state.geo[addr]=[+j[0].lat,+j[0].lon];save(false);await new Promise(res=>setTimeout(res,1050));return state.geo[addr]}
+  }catch{}
+  if(offline){state.geo[addr]=offline;state.geoApprox=state.geoApprox||{};state.geoApprox[addr]=true;save(false);return offline}
+  return null}
 function initMaps(){activeVehicles().forEach(v=>{if(maps[v.id])maps[v.id].remove();maps[v.id]=L.map('map-'+v.id).setView([47.45,19.04],9);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(maps[v.id]);drawMap(v.id)})}
 async function roadRoute(pts){if(pts.length<2)return null;try{const c=pts.map(p=>`${p[1]},${p[0]}`).join(';');const r=await fetch(`https://router.project-osrm.org/route/v1/driving/${c}?overview=full&geometries=geojson`);const j=await r.json();return j.routes?.[0]||null}catch{return null}}
 async function drawMap(id){
@@ -217,8 +283,40 @@ function renderMasters(){const q=norm($('#masterSearch').value),arr=state[master
 function supplierOptions(sel=''){return'<option value="">Egyedi / nincs kiválasztva</option>'+state.suppliers.sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(s=>option(s.id,`${s.name}${s.isCentral?' ★ központ':''} · ${s.address}`,sel)).join('')}
 function projectOptions(sel=''){return'<option value="">Egyedi úticél</option>'+state.projects.sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(p=>option(p.id,p.name,sel)).join('')}
 function recipientOptions(project,sel=''){return'<option value="">Nincs átvevő</option>'+state.recipients.filter(r=>!project||norm(r.project)===norm(project)).map(r=>option(r.id,`${r.name} · ${r.phone||''}`,sel)).join('')}
-function supplierDisplay(s){return s?`${s.name} · ${s.address}`:''}function findSupplierByInput(v){const n=norm(v);return state.suppliers.find(s=>norm(supplierDisplay(s))===n)||state.suppliers.find(s=>norm(s.name)===n)||null}function findProjectByInput(v){const n=norm(v);return state.projects.find(p=>norm(p.name)===n)||null}
-function fillSearchableMasters(){const sv=$('#supplierSearch')?.value||'',pv=$('#projectSearch')?.value||'';$('#supplierList').innerHTML=state.suppliers.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(s=>`<option value="${esc(supplierDisplay(s))}"></option>`).join('');$('#projectList').innerHTML=state.projects.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(p=>`<option value="${esc(p.name)}"></option>`).join('');if($('#supplierSearch'))$('#supplierSearch').value=sv;if($('#projectSearch'))$('#projectSearch').value=pv}
+function supplierDisplay(s){return s?`${s.name} · ${s.address}`:''}function findSupplierByInput(v){const n=norm(v);return state.suppliers.find(s=>norm(supplierDisplay(s))===n)||state.suppliers.find(s=>norm(s.name)===n)||null}/* V60 – a lerakó nem csak projekt lehet.
+
+   Visszáru és bérelt eszköz visszaszállítása esetén a cél egy BESZÁLLÍTÓ
+   telephelye (pl. Székely Szerszám). Ezért a lerakó legördülőjében a
+   projektek mellett a beszállítói telephelyek is választhatók.
+
+   A beszállítói tételek "cégnév · cím" alakban jelennek meg, hogy ugyanannak
+   a cégnek a több telephelye megkülönböztethető legyen. */
+function dropTargetOptions(){
+  const out=[];
+  for(const p of state.projects.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu'))){
+    if(p.active===false)continue;
+    out.push({kind:'project',ref:p,label:p.name,address:p.address||'',hint:'Projekt'});
+  }
+  for(const su of state.suppliers.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu')||String(a.address||'').localeCompare(String(b.address||''),'hu'))){
+    if(su.active===false||!su.address)continue;
+    out.push({kind:'supplier',ref:su,label:supplierDisplay(su),address:su.address,
+      hint:`Visszáru · ${su.isCentral?'központ':(su.site||'telephely')}`});
+  }
+  return out;
+}
+window.dropTargetOptions=dropTargetOptions;
+function findDropTargetByInput(v){
+  const n=norm(v);if(!n)return null;
+  const project=state.projects.find(p=>norm(p.name)===n);
+  if(project)return{kind:'project',ref:project,address:project.address||''};
+  const supplier=state.suppliers.find(su=>norm(supplierDisplay(su))===n)
+    ||state.suppliers.find(su=>norm(su.name)===n&&su.address);
+  if(supplier)return{kind:'supplier',ref:supplier,address:supplier.address||''};
+  return null;
+}
+window.findDropTargetByInput=findDropTargetByInput;
+function findProjectByInput(v){const n=norm(v);return state.projects.find(p=>norm(p.name)===n)||null}
+function fillSearchableMasters(){const sv=$('#supplierSearch')?.value||'',pv=$('#projectSearch')?.value||'';$('#supplierList').innerHTML=state.suppliers.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(s=>`<option value="${esc(supplierDisplay(s))}"></option>`).join('');$('#projectList').innerHTML=dropTargetOptions().map(t=>`<option value="${esc(t.label)}">${esc(t.hint)}</option>`).join('');if($('#supplierSearch'))$('#supplierSearch').value=sv;if($('#projectSearch'))$('#projectSearch').value=pv}
 function fillSupplierAddressList(name=''){
   const list=$('#supplierAddressList');if(!list)return;
   const locations=state.suppliers.filter(s=>norm(s.name)===norm(name)).sort((a,b)=>(b.isCentral?1:0)-(a.isCentral?1:0)||String(a.address||'').localeCompare(String(b.address||''),'hu'));
@@ -230,7 +328,19 @@ window.editOrder=id=>openOrder(state.orders.find(x=>x.id===id));
 $('#orderForm').onsubmit=e=>{e.preventDefault();if(!syncScheduleDate())return alert('Adj meg érvényes szállítási dátumot.');if(!syncDateParts('deadline',false))return alert('Adj meg érvényes kért szállítási határidőt, vagy hagyd üresen.');const old=state.orders.find(x=>x.id===$('#orderId').value),s=findSupplierByInput($('#supplierSearch').value),p=findProjectByInput($('#projectSearch').value),r=state.recipients.find(x=>x.id===$('#recipientId').value);const o={...old,id:old?.id||uid(),scheduleDate:$('#scheduleDate').value,vehicleId:$('#vehicleId').value||marioVehicle()?.id||'',orderNo:last5($('#orderNo').value),requestedDeadline:$('#deadline').value,supplierId:s?.id||'',pickupName:s?.name||$('#supplierSearch').value.trim()||old?.pickupName||'',pickupAddress:$('#pickupAddress').value,pickupNote:$('#pickupNote').value,projectId:p?.id||'',projectName:p?.name||$('#projectSearch').value.trim()||'Egyedi úticél',dropAddress:$('#dropAddress').value,recipientId:p?(r?.id||''):'',recipientName:$('#recipientName').value.trim()||r?.name||'',recipientPhone:$('#recipientPhone').value,recipientEmail:$('#recipientEmail').value,pickupFrom:$('#pickupFrom').value,pickupTo:$('#pickupTo').value,dropFrom:$('#dropFrom').value,dropTo:$('#dropTo').value,note:$('#orderNote').value,items:old?.items||[],completed:old?.completed||false,sequence:old?.sequence||999};const i=state.orders.findIndex(x=>x.id===o.id);if(i>=0)state.orders[i]=o;else state.orders.push(o);$('#orderDialog').close();save()}
 $('#supplierSearch').oninput=()=>{const s=findSupplierByInput($('#supplierSearch').value);$('#supplierId').value=s?.id||'';fillSupplierAddressList(s?.name||$('#supplierSearch').value);if(s){$('#pickupAddress').value=s.address||'';$('#pickupNote').value=s.pickupNote||''}else{$('#pickupAddress').value='';$('#pickupNote').value=''}};
 $('#pickupAddress').onchange=()=>{const current=findSupplierByInput($('#supplierSearch').value),name=current?.name||$('#supplierSearch').value;const match=state.suppliers.find(s=>norm(s.name)===norm(name)&&norm(s.address)===norm($('#pickupAddress').value));if(match){$('#supplierId').value=match.id;$('#supplierSearch').value=supplierDisplay(match);$('#pickupNote').value=match.pickupNote||match.note||''}};
-$('#projectSearch').oninput=()=>{const p=findProjectByInput($('#projectSearch').value);$('#projectId').value=p?.id||'';setCustomProjectMode(!p);if(p){$('#dropAddress').value=p.address||'';$('#recipientId').innerHTML=recipientOptions(p.name,p.defaultRecipientId);const r=state.recipients.find(x=>x.id===p.defaultRecipientId);$('#recipientName').value=r?.name||'';$('#recipientPhone').value=r?.phone||p.phone||'';$('#recipientEmail').value=r?.email||''}else{$('#recipientId').innerHTML='<option value="">Egyedi átvevő</option>'}};
+$('#projectSearch').oninput=()=>{
+  // V60: a lerakó lehet beszállítói telephely is (visszáru, bérelt eszköz).
+  const target=findDropTargetByInput($('#projectSearch').value);
+  if(target?.kind==='supplier'){
+    $('#projectId').value='';
+    setCustomProjectMode(true);
+    $('#dropAddress').value=target.address||'';
+    $('#recipientId').innerHTML='<option value="">Egyedi átvevő</option>';
+    $('#recipientName').value=target.ref.name||'';
+    $('#recipientPhone').value='';$('#recipientEmail').value='';
+    return;
+  }
+  const p=findProjectByInput($('#projectSearch').value);$('#projectId').value=p?.id||'';setCustomProjectMode(!p);if(p){$('#dropAddress').value=p.address||'';$('#recipientId').innerHTML=recipientOptions(p.name,p.defaultRecipientId);const r=state.recipients.find(x=>x.id===p.defaultRecipientId);$('#recipientName').value=r?.name||'';$('#recipientPhone').value=r?.phone||p.phone||'';$('#recipientEmail').value=r?.email||''}else{$('#recipientId').innerHTML='<option value="">Egyedi átvevő</option>'}};
 $('#recipientId').onchange=()=>{const r=state.recipients.find(x=>x.id===$('#recipientId').value);$('#recipientName').value=r?.name||$('#recipientName').value||'';$('#recipientPhone').value=r?.phone||'';$('#recipientEmail').value=r?.email||''};
 function deleteOne(id){const o=state.orders.find(x=>x.id===id);if(o&&confirm(`Törlöd ezt a fuvart?\n${o.orderNo} · ${o.projectName||o.dropAddress}`)){state.orders=state.orders.filter(x=>x.id!==id);save()}}
 function deleteAll(){const date=selectedDate(),count=state.orders.filter(o=>o.scheduleDate===date).length;if(!count)return alert('Az aktuális napon nincs törölhető fuvar.');if(confirm(`Biztosan törölni szeretnéd a(z) ${date} nap összes (${count}) fuvarját?`)&&prompt('Írd be: TÖRLÉS')?.toUpperCase()==='TÖRLÉS'){state.orders=state.orders.filter(o=>o.scheduleDate!==date);save()}}

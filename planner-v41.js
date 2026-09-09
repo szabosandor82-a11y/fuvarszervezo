@@ -128,12 +128,98 @@
     return `${dd}-${mm}-${yy}`;
   }
 
+/* V60 – A LEVÉL SZÖVEGÉNEK ÉRTELMEZÉSE
+
+   Gyakori, hogy a bizonylat több tételt tartalmaz, de a levélben az áll, hogy
+   csak egy részüket kell felvenni – például "Írd ki kérlek részünkre a
+   rendelésben szereplő gipszet", vagy "csak a hátralékot hozd".
+
+   Ez a rész a levéltörzsből kiolvassa, hogy szűkíteni kell-e a tételeket, és
+   ha igen, mire. Óvatosan jár el: csak akkor szűkít, ha egyértelmű jelet
+   talál ÉS a szűkítés után marad tétel. Ha bizonytalan, mindent behoz, és
+   megjegyzésben jelzi, hogy nézd át.
+*/
+  const BODY_SCOPE_HINTS = [
+    /\bcsak\s+(?:a|az)\s+/i,
+    /\bkiz[aá]r[oó]lag\b/i,
+    /\br[eé]sz[uü]nkre\s+a\b/i,
+    /\b[ií]rd\s+ki\b/i,
+    /\bhozd?\s+(?:el\s+)?(?:csak\s+)?(?:a|az)\b/i,
+    /\bvedd?\s+fel\b/i,
+    /\bcsak\s+ennyit\b/i
+  ];
+  const BODY_BACKLOG_HINTS = [/h[aá]tral[eé]k/i, /marad[eé]k/i, /ami\s+nem\s+j[oö]tt/i, /kor[aá]bbi\s+rendel[eé]s/i];
+  // A levél udvariassági és aláírás-részét nem elemezzük.
+  const BODY_STOP_RE = /^\s*(k[oö]sz|üdv|udv|tisztelettel|l[eé]vai|szab[oó]|kérj[uü]k, hogy|a sz[aá]ml|projekt asszisztens|\+36|http|mailto)/i;
+
+  function meaningfulBodyText(body = '') {
+    const out = [];
+    for (const raw of String(body || '').split(/\r?\n/)) {
+      const line = raw.replace(/\s+/g, ' ').trim();
+      if (!line) continue;
+      if (BODY_STOP_RE.test(line)) break;
+      out.push(line);
+    }
+    return out.join(' ');
+  }
+
+  /* A levélben említett tételekre illesztés: a bizonylat tételnevének
+     érdemi szavai közül legalább egy szerepeljen a levélben. Rövid vagy
+     általános szavakat (pl. "cső") nem fogadunk el önmagában, hogy ne
+     szűkítsünk véletlenül. */
+  // Az önmagukban semmitmondó szavak nem elegendők az illesztéshez, mert
+  // szinte minden tételben szerepelnek.
+  const GENERIC_ITEM_WORDS = new Set(['cso', 'rud', 'lap', 'szal', 'anyag', 'elem', 'db',
+    'mm', 'cm', 'kg', 'szet', 'tipus', 'meret', 'fekete', 'feher', 'kicsi', 'nagy']);
+
+  function bodyMentionsItem(bodyNorm, item) {
+    const name = nrm(item.name || '');
+    if (!name) return false;
+    if (name.length >= 4 && bodyNorm.includes(name)) return true;
+    const tokens = name.split(' ')
+      .filter(token => token.length >= 3 && !GENERIC_ITEM_WORDS.has(token) && !/^\d+$/.test(token));
+    if (!tokens.length) return false;
+    return tokens.some(token => {
+      if (bodyNorm.includes(token)) return true;
+      // magyar toldalékok miatt a szótő is elég: "gipszet" -> "gipsz"
+      const stem = token.length > 4 ? token.slice(0, -1) : token;
+      return stem.length >= 4 && bodyNorm.includes(stem);
+    });
+  }
+
+  function applyBodyScopeV60(items, body, subject) {
+    const result = { items, note: '', narrowed: false, backlogOnly: false };
+    if (!items || items.length < 2) return result;      // egytételes bizonylatot nincs mit szűkíteni
+    const text = meaningfulBodyText(body);
+    if (!text) return result;
+    const hasHint = BODY_SCOPE_HINTS.some(re => re.test(text));
+    const backlog = BODY_BACKLOG_HINTS.some(re => re.test(text)) || BODY_BACKLOG_HINTS.some(re => re.test(subject || ''));
+    if (!hasHint && !backlog) return result;
+
+    const bodyNorm = nrm(text);
+    const matched = items.filter(item => bodyMentionsItem(bodyNorm, item));
+    if (backlog && !matched.length) {
+      result.note = 'A levél hátralékra utal, de nem nevez meg tételt – minden tétel behozva, ellenőrizd.';
+      return result;
+    }
+    if (!matched.length || matched.length === items.length) {
+      if (hasHint) result.note = 'A levél szűkítésre utal, de nem sikerült tételt azonosítani – minden tétel behozva, ellenőrizd.';
+      return result;
+    }
+    result.items = matched;
+    result.narrowed = true;
+    result.backlogOnly = backlog;
+    result.note = `A levél alapján csak ${matched.length} tétel került be a bizonylat ${items.length} tétele közül: `
+      + matched.map(item => item.name).join(', ') + '.';
+    return result;
+  }
+
   function parseBodyItems(text = '') {
     const items = [];
     for (const raw of linesOf(text)) {
       const line = raw.replace(/\s+/g, ' ').trim();
-      let match = line.match(/^([A-Z0-9._\/-]{3,})\s*[-–]\s*(.+?)\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*(m2|m²|m3|m³|fm|m|db|kg|csomag|tekercs|klt|p[aá]r)\b/i);
-      if (!match) match = line.match(/^([A-Z0-9._\/-]{3,})\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s*(m2|m²|m3|m³|fm|m|db|kg|csomag|tekercs|klt|p[aá]r)\s*(?:[oö]sszesen)?$/i);
+      let match = line.match(/^([A-Z0-9._\/-]{3,})\s*[-–]\s*(.+?)\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+      if (!match) match = line.match(/^([A-Z0-9._\/-]{3,})\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\s*(?:[oö]sszesen)?$/i);
       if (!match) continue;
       const [, code, name, qty, unit] = match;
       const materialSearch = nrm(`${name} ${qty}${unit}`);
@@ -635,14 +721,14 @@
       const line = String(raw || '').replace(/\s+/g, ' ').trim();
       if (!line || /egys[eé]g[aá]r|engedm[eé]ny|nett[oó]|[oö]sszesen|alapbizonylat|rendel[eé]s\s*:/i.test(line)) continue;
       let code = '', name = '', qty = '', unit = '';
-      let match = line.match(/^\s*\d+\s*\.\s*([A-Z0-9._\/-]+)\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s*(m2|m²|m3|m³|fm|m|db|kg|csomag|tekercs|klt|p[aá]r)\b/i);
+      let match = line.match(/^\s*\d+\s*\.\s*([A-Z0-9._\/-]+)\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
       if (match) [, code, name, qty, unit] = match;
       if (!match) {
-        match = line.match(/^\s*\d+\s+([A-Z0-9._\/-]{3,})\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s*(m2|m²|m3|m³|fm|m|db|kg|csomag|tekercs|klt|p[aá]r)\b/i);
+        match = line.match(/^\s*\d+\s+([A-Z0-9._\/-]{3,})\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
         if (match) [, code, name, qty, unit] = match;
       }
       if (!match) {
-        match = line.match(/^\s*([A-Z][A-Z0-9._\/-]{2,})\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s*(m2|m²|m3|m³|fm|m|db|kg|csomag|tekercs|klt|p[aá]r)\b/i);
+        match = line.match(/^\s*([A-Z][A-Z0-9._\/-]{2,})\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
         if (match) [, code, name, qty, unit] = match;
       }
       if (!match || /^huf$/i.test(code) || name.length < 3) continue;
@@ -716,6 +802,10 @@
     let items = parsePdfItemsFromLines(pdfLines);
     if (!items.length) items = parseBodyItems(body);
     const reasons = [];
+    // V60: a levél szövege szűkítheti a bizonylat tételeit.
+    const bodyScope = applyBodyScopeV60(items, body, subject);
+    if (bodyScope.note) reasons.push(bodyScope.note);
+    items = bodyScope.items;
 
     if (orderType === 'KRPR') {
       pickup = { ...CENTRAL_WAREHOUSE, reason: 'KRPR: felrakó mindig a szigetszentmiklósi központi raktár' };
@@ -829,14 +919,32 @@
         console.warn('[V43] PDF melléklet hiba', attachmentName, error);
       }
     }
-    if (!pdfs.length) return entriesFromMessageBody({ category, sourceName: file.name, subject, body, attachmentNames: names });
+    // V60: a sofőrnek szüksége lehet az eredeti levélre (cím, megjegyzés,
+    // melléklet), ezért megőrizzük a szövegét és a PDF mellékleteket.
+    const sourceMail = {
+      subject, body,
+      from: cleanText(info.senderEmail || info.senderName || ''),
+      attachmentNames: names,
+      fileName: file.name,
+      files: []
+    };
+    for (const attachment of attachments) {
+      const attachmentName = attachment.fileName || attachment.fileNameShort || '';
+      if (!/\.(pdf|jpe?g|png)$/i.test(attachmentName)) continue;
+      try {
+        const extracted = reader.getAttachment(attachment);
+        const content = extracted?.content || extracted?.data;
+        if (content) sourceMail.files.push({ name: attachmentName, content });
+      } catch (error) { /* a melléklet kihagyható */ }
+    }
+    if (!pdfs.length) return entriesFromMessageBody({ category, sourceName: file.name, subject, body, attachmentNames: names, sourceMail });
 
     const classified = pdfs.map(pdf => ({ pdf, info: classifyPdfDocument(pdf) }));
     const primary = classified.filter(item => item.info.primary);
     const candidates = primary.length
       ? primary
       : classified.filter(item => !item.info.confirmation && item.info.refs.length);
-    if (!candidates.length) return entriesFromMessageBody({ category, sourceName: file.name, subject, body, attachmentNames: names });
+    if (!candidates.length) return entriesFromMessageBody({ category, sourceName: file.name, subject, body, attachmentNames: names, sourceMail });
 
     const selected = [];
     const seenRefs = new Set();
@@ -848,13 +956,41 @@
     }
     const allMessageOrderNos = unique(selected.flatMap(pdf => extractOrderRefs(pdf.text || '', pdf.name || '').map(ref => ref.no)));
     return selected.flatMap(pdf => entriesFromPdfDocument({ category, sourceName: file.name, subject, body, pdf, attachmentNames: names }))
-      .map(entry => ({ ...entry, messageOrderNos: allMessageOrderNos.length ? allMessageOrderNos : (entry.messageOrderNos || entry.sourceOrderNos || []) }));
+      .map(entry => ({ ...entry, sourceMail, messageOrderNos: allMessageOrderNos.length ? allMessageOrderNos : (entry.messageOrderNos || entry.sourceOrderNos || []) }));
   }
 
   async function parseDroppedFile(file, category) {
     if (/\.pdf$/i.test(file.name)) return parsePdfFile(file, category);
     if (/\.msg$/i.test(file.name)) return parseMsgFile(file, category);
     throw new Error('Csak .msg vagy teszteléshez .pdf fájl fogadható.');
+  }
+
+  /* V60 – a forráslevél mellékleteinek feltöltése a fuvarhoz.
+     A meglévő szállítólevél-tárolót használjuk, "Outlook forrás" jelöléssel,
+     hogy ne kelljen új infrastruktúra. */
+  async function uploadSourceMailFiles(entries, orders) {
+    if (!global.V44Online?.createDeliveryReport || typeof File === 'undefined') return;
+    for (let index = 0; index < entries.length; index++) {
+      const mail = entries[index]?.sourceMail;
+      const order = orders[index];
+      if (!mail?.files?.length || !order?.id) continue;
+      const files = [];
+      for (const item of mail.files) {
+        try {
+          const bytes = item.content instanceof Uint8Array ? item.content : new Uint8Array(item.content);
+          const mime = /\.pdf$/i.test(item.name) ? 'application/pdf'
+            : /\.png$/i.test(item.name) ? 'image/png' : 'image/jpeg';
+          files.push(new File([bytes], item.name, { type: mime }));
+        } catch (error) { /* egy melléklet kihagyható */ }
+      }
+      if (!files.length) continue;
+      try {
+        await global.V44Online.createDeliveryReport(order, files,
+          `Outlook forrás · ${mail.fileName || ''}`.trim());
+      } catch (error) {
+        console.warn('[V60] forráslevél feltöltése sikertelen', order.orderNo, error);
+      }
+    }
   }
 
   function statusText(entry) {
@@ -1099,6 +1235,15 @@ ${entry.subject || ''}`) || project;
       pickupRole: entry.pickupRole || 'supplier', dropRole: entry.dropRole || 'project', returnSourceProjectId: entry.returnSourceProjectId || '', returnDestinationSupplierId: entry.returnDestinationSupplierId || '',
       recipientId: recipient?.id || entry.recipientId || '', recipientName: recipient?.name || entry.recipientName || '', recipientPhone: recipient?.phone || entry.recipientPhone || '', recipientEmail: recipient?.email || entry.recipientEmail || '',
       requestedDeadline: entry.requestedDate || '', note: `Outlook import · ${entry.orderType || 'SR0'} · ${entry.sourceName}${entry.pdfName ? ` · ${entry.pdfName}` : ''}`,
+      // V60: a levél lényege a fuvaron marad, hogy a sofőr hálózat nélkül is
+      // elolvashassa. A mellékletek a szállítólevél-tárolóba kerülnek.
+      sourceMail: entry.sourceMail ? {
+        subject: entry.sourceMail.subject || entry.subject || '',
+        from: entry.sourceMail.from || '',
+        body: String(entry.sourceMail.body || '').slice(0, 6000),
+        attachmentNames: entry.sourceMail.attachmentNames || [],
+        fileName: entry.sourceMail.fileName || entry.sourceName || ''
+      } : null,
       items: (entry.items || []).map(item => ({ ...item, _id: item._id || id(), received: false, missingQty: '' })),
       longMaterialReason: isMartin ? ((entry.items || []).find(item => item.longMaterial)?.name || 'Martin / Platós Outlook import') : '',
       markedMartin: isMartin, importVehicleCategory: isMartin ? 'martin' : 'dobozos', importAutoRaw: isMartin ? 'Martin' : 'Dobozos', importVehicleLocked: isMartin,
@@ -1152,6 +1297,12 @@ ${entry.subject || ''}`) || project;
     state.routePlans = state.routePlans || {};
     for (const order of accepted) state.routePlans[order.scheduleDate] = {};
     if (typeof save === 'function') save(false);
+
+    // V60: a levél mellékleteit feltöltjük a fuvarhoz, hogy a sofőr a saját
+    // felületén megnyithassa. Ha nincs kapcsolat, a levél szövege akkor is
+    // elérhető marad a fuvaron.
+    uploadSourceMailFiles(acceptedEntries, accepted).catch(error =>
+      console.warn('[V60] A levél mellékletének feltöltése nem sikerült', error));
 
     const acceptedIds = new Set(acceptedEntries.map(entry => entry._id));
     pending = pending.filter(entry => !acceptedIds.has(entry._id));
@@ -1292,6 +1443,8 @@ ${entry.subject || ''}`) || project;
     inferProjectHint,
     supplierSpecial,
     parsePdfItemsFromLines,
+    applyBodyScopeV60,
+    meaningfulBodyText,
     bestSupplier,
     supplierFromPdfHeader,
     bestProject,

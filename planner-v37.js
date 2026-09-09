@@ -564,11 +564,17 @@
     setTimeout(() => focusMap?.invalidateSize(), 80);
   }
 
+  /* V60: a kompakt Nézet-sor maga a pickup-move-block, és a data-order-ids
+     RAJTA van, nem egy belső .route-block elemen. Korábban ilyenkor üres
+     listát kaptunk, ezért a húzás utáni sorszámozás elmaradt, és a fuvar
+     visszaugrott az eredeti helyére. */
   function orderedRouteBlocks(container) {
     const result = [];
     for (const child of [...container.children]) {
       if (child.classList.contains('pickup-move-block')) {
-        result.push(...child.querySelectorAll(':scope > .pickup-group-orders > .route-block'));
+        const inner = [...child.querySelectorAll(':scope > .pickup-group-orders > .route-block')];
+        if (inner.length) result.push(...inner);
+        else if (child.dataset.orderIds) result.push(child);
       } else if (child.classList.contains('route-block')) result.push(child);
     }
     return result;
@@ -705,7 +711,7 @@
         // útvonalterv épül újra a kézi sequence értékekből, és csak utána
         // rajzolunk. Fordítva a rajzoló üres tervet találna, és
         // újraoptimalizálná az útvonalat, felülírva a te sorrendedet.
-        const buildManual = global.V59Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
+        const buildManual = global.V60Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
         setTimeout(async () => {
           if (typeof buildManual === 'function') {
             try {

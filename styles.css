@@ -354,3 +354,22 @@ dialog{background:#fffefd;box-shadow:0 28px 76px #6278872e}dialog::backdrop{back
   .item-grid>.missing-qty-input{grid-column:2}
   .item-grid>.missing-qty-input,.item-qty-cell .missing-qty-input{height:48px!important;font-size:20px!important}
 }
+
+/* V60 – nagyobb, jól megfogható húzófogantyú a Nézetben */
+.v56-drag{display:flex;align-items:center;justify-content:center;width:30px;height:34px;
+  margin-left:-4px;font-size:19px;color:#8a877d;border-radius:7px;cursor:grab;
+  touch-action:none;user-select:none}
+.v56-drag:hover{background:#efece4;color:#4a4842}
+.v56-drag:active{cursor:grabbing;background:#e4e0d5}
+.v56-row{padding-left:6px}
+
+/* V60 – importált levél a sofőri felületen */
+.v57-row-actions .mail-action{background:#eef7ea;border-color:#a9cf9a}
+.source-mail{max-height:70vh;overflow:auto}
+.mail-meta{font-size:12px;color:#5f5c54;margin:0 0 8px;display:flex;flex-direction:column;gap:2px}
+.mail-body{white-space:pre-wrap;word-break:break-word;font:13px/1.5 system-ui,sans-serif;
+  background:#faf9f5;border:.5px solid #e0ddd3;border-radius:8px;padding:10px;margin:0 0 10px}
+.mail-files{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.mail-file{display:inline-block;padding:7px 11px;font-size:13px;border:.5px solid #85b7eb;
+  background:#e6f1fb;color:#0c447c;border-radius:7px;text-decoration:none}
+.mail-file:hover{background:#d4e7f8}

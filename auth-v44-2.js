@@ -84,7 +84,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V59Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V60Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -230,6 +230,7 @@
       <div class="v57-row-actions">
         <button type="button" onclick="openItems('${safe(order.id)}')">Tétel / hátralék${items.length ? ` (${received}/${items.length})` : ''}</button>
         <button type="button" class="camera-action" onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>
+        ${order.sourceMail ? `<button type="button" class="mail-action" onclick="openSourceMail('${safe(order.id)}')">Levél</button>` : ''}
         ${canTransfer ? `<button type="button" class="transfer-action" onclick="openTransferDialog('${safe(order.id)}')">Fuvar átadása</button>` : ''}
       </div>
       ${transferBadge(order)}
@@ -406,6 +407,42 @@
     } catch (error) { alert(`Fuvarátadási hiba: ${error.message}`); }
   }
   global.respondTransfer = respondTransfer;
+
+  /* V60 – az importált levél megnyitása a sofőri felületen.
+     A levél szövege a fuvaron van, tehát hálózat nélkül is olvasható; a
+     mellékleteket a szállítólevél-tárolóból töltjük be. */
+  async function openSourceMail(orderId) {
+    if (!canAccessOrder(orderId)) return alert('Ehhez a fuvarhoz nincs jogosultságod.');
+    const order = (state.orders || []).find(item => String(item.id) === String(orderId));
+    const mail = order?.sourceMail;
+    if (!mail) return alert('Ehhez a fuvarhoz nincs mentett levél.');
+    const host = byId('sourceMailBody');
+    if (byId('sourceMailTitle')) byId('sourceMailTitle').textContent = mail.subject || 'Importált levél';
+    if (host) {
+      host.innerHTML = `
+        <div class="mail-meta">
+          ${mail.from ? `<div><b>Feladó:</b> ${safe(mail.from)}</div>` : ''}
+          ${mail.fileName ? `<div><b>Fájl:</b> ${safe(mail.fileName)}</div>` : ''}
+          ${order.orderNo ? `<div><b>Rendelés:</b> ${safe(order.orderNo)}</div>` : ''}
+        </div>
+        <pre class="mail-body">${safe(mail.body || '(A levélnek nincs szöveges tartalma.)')}</pre>
+        ${(mail.attachmentNames || []).length ? `<div class="mail-meta"><b>Mellékletek:</b> ${safe(mail.attachmentNames.join(', '))}</div>` : ''}
+        <div id="sourceMailFiles" class="mail-files"><small>Mellékletek betöltése…</small></div>`;
+    }
+    byId('sourceMailDialog')?.showModal();
+    const files = byId('sourceMailFiles');
+    if (!files) return;
+    try {
+      const list = await global.V44Online.listDeliveryFiles(orderId);
+      const sources = (list || []).filter(file => /\.(pdf|jpe?g|png)$/i.test(file.file_name || ''));
+      files.innerHTML = sources.length
+        ? sources.map(file => `<a class="mail-file" href="${safe(file.url)}" target="_blank" rel="noopener">${safe(file.file_name)}</a>`).join('')
+        : '<small>Nincs megnyitható melléklet.</small>';
+    } catch (error) {
+      files.innerHTML = `<small>A mellékletek nem tölthetők be: ${safe(error.message)}</small>`;
+    }
+  }
+  global.openSourceMail = openSourceMail;
 
   async function openMediaGallery(orderIds) {
     const ids = String(orderIds || '').split(',').map(id => id.trim()).filter(Boolean);
