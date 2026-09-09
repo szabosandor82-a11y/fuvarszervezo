@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V60Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V61Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -155,6 +155,84 @@ function itemNoteValue(it={}){return String(it.itemNote??it.itemRemark??it.tetel
 function bubbles(list){if(!list.length)return'<div class="notice">Nincs fuvar.</div>';return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')} · ${esc(o.pickupAddress||'')}</p><p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs megadva')}</p>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('')}
 window.renameDriver=(id,name)=>{const v=state.vehicles.find(x=>x.id===id);if(v){v.driverName=name.trim()||v.driverName;save()}};
 function initSortables(){activeVehicles().forEach(v=>{const el=$('#route-'+v.id);if(!el)return;new Sortable(el,{group:'vehicles',animation:180,handle:'.drag',onEnd:e=>{const o=state.orders.find(x=>x.id===e.item.dataset.id);if(o)o.vehicleId=e.to.id.replace('route-','');activeVehicles().forEach(x=>{$$('#route-'+x.id+' .bubble').forEach((n,i)=>{const r=state.orders.find(o=>o.id===n.dataset.id);if(r)r.sequence=i+1})});save()}})})}
+/* V60 – KERESHETŐ LEGÖRDÜLŐK AZ EGÉSZ OLDALON
+
+   A törzsadatban a projektek "Budapest_Waterfront_City_V.ütem" alakban
+   szerepelnek, ezért a "waterfront" beírására egy sima <select> nem talál
+   semmit: a böngésző csak a szó elejére ugrik.
+
+   Ez a rész minden hosszabb legördülő elé tesz egy keresőmezőt, és a
+   beírt szövegrészletre szűkíti a listát – ékezet- és kis-nagybetű-
+   érzéketlenül, több szóra is (pl. "water city").
+
+   Az eredeti <select> megmarad, tehát minden meglévő eseménykezelő és
+   érték változatlanul működik. Az újonnan megjelenő legördülőket (import
+   előnézet, párbeszédablakok) egy figyelő automatikusan bekapcsolja. */
+const SELECT_FILTER_MIN_OPTIONS = 8;
+const selectFilterStore = new WeakMap();
+
+function selectFilterMatch(haystack, needle){
+  const h = norm(haystack), tokens = norm(needle).split(' ').filter(Boolean);
+  return tokens.every(token => h.includes(token));
+}
+
+function applySelectFilter(select, term){
+  const all = selectFilterStore.get(select);
+  if(!all) return;
+  const previous = select.value;
+  const keep = all.filter(item => !item.value || !term || selectFilterMatch(item.label + ' ' + item.value, term));
+  // Ha a keresés semmit nem talál, inkább a teljes listát mutatjuk, mint egy
+  // üres legördülőt – így nem lehet beleragadni egy elgépelésbe.
+  const list = keep.some(item => item.value) ? keep : all;
+  select.innerHTML = list.map(item =>
+    `<option value="${esc(item.value)}"${item.attrs}${item.value === previous ? ' selected' : ''}>${esc(item.label)}</option>`).join('');
+  if(list.some(item => item.value === previous)) select.value = previous;
+}
+
+function makeSelectSearchable(select){
+  if(!select || select.dataset.searchable === '1') return;
+  if(select.multiple || select.options.length < SELECT_FILTER_MIN_OPTIONS) return;
+  const all = [...select.options].map(option => ({
+    value: option.value,
+    label: option.textContent || '',
+    attrs: [...option.attributes]
+      .filter(attribute => attribute.name.startsWith('data-'))
+      .map(attribute => ` ${attribute.name}="${esc(attribute.value)}"`).join('')
+  }));
+  selectFilterStore.set(select, all);
+  select.dataset.searchable = '1';
+  const box = document.createElement('input');
+  box.type = 'search';
+  box.className = 'select-filter';
+  box.placeholder = 'Keresés a listában…';
+  box.autocomplete = 'off';
+  box.addEventListener('input', () => applySelectFilter(select, box.value));
+  box.addEventListener('keydown', event => { if(event.key === 'Enter'){ event.preventDefault(); select.focus(); } });
+  select.parentNode?.insertBefore(box, select);
+}
+
+function makeSearchableSelects(root){
+  const scope = root && root.querySelectorAll ? root : document;
+  scope.querySelectorAll('select:not([data-searchable])').forEach(makeSelectSearchable);
+}
+window.makeSearchableSelects = makeSearchableSelects;
+
+if(typeof MutationObserver !== 'undefined'){
+  const observer = new MutationObserver(records => {
+    for(const record of records){
+      for(const node of record.addedNodes){
+        if(node.nodeType !== 1) continue;
+        if(node.tagName === 'SELECT') makeSelectSearchable(node);
+        else makeSearchableSelects(node);
+      }
+    }
+  });
+  document.addEventListener('DOMContentLoaded', () => {
+    makeSearchableSelects(document);
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+}
+
 /* V60 – OFFLINE TARTALÉK GEOKÓDOLÁS
 
    A lánc-optimalizáló csak azokat a felrakókat tudja sorba rakni, amiknek van
@@ -283,7 +361,7 @@ function renderMasters(){const q=norm($('#masterSearch').value),arr=state[master
 function supplierOptions(sel=''){return'<option value="">Egyedi / nincs kiválasztva</option>'+state.suppliers.sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(s=>option(s.id,`${s.name}${s.isCentral?' ★ központ':''} · ${s.address}`,sel)).join('')}
 function projectOptions(sel=''){return'<option value="">Egyedi úticél</option>'+state.projects.sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(p=>option(p.id,p.name,sel)).join('')}
 function recipientOptions(project,sel=''){return'<option value="">Nincs átvevő</option>'+state.recipients.filter(r=>!project||norm(r.project)===norm(project)).map(r=>option(r.id,`${r.name} · ${r.phone||''}`,sel)).join('')}
-function supplierDisplay(s){return s?`${s.name} · ${s.address}`:''}function findSupplierByInput(v){const n=norm(v);return state.suppliers.find(s=>norm(supplierDisplay(s))===n)||state.suppliers.find(s=>norm(s.name)===n)||null}/* V60 – a lerakó nem csak projekt lehet.
+function supplierDisplay(s){return s?`${s.name} · ${s.address}`:''}function findSupplierByInput(v){const n=norm(v);return state.suppliers.find(s=>norm(supplierDisplay(s))===n)||state.suppliers.find(s=>norm(s.name)===n)||uniquePartial(state.suppliers,v,s=>supplierDisplay(s))||null}/* V60 – a lerakó nem csak projekt lehet.
 
    Visszáru és bérelt eszköz visszaszállítása esetén a cél egy BESZÁLLÍTÓ
    telephelye (pl. Székely Szerszám). Ezért a lerakó legördülőjében a
@@ -312,10 +390,27 @@ function findDropTargetByInput(v){
   const supplier=state.suppliers.find(su=>norm(supplierDisplay(su))===n)
     ||state.suppliers.find(su=>norm(su.name)===n&&su.address);
   if(supplier)return{kind:'supplier',ref:supplier,address:supplier.address||''};
+  const partialProject=uniquePartial(state.projects,v,p=>`${p.name} ${p.address||''}`);
+  if(partialProject)return{kind:'project',ref:partialProject,address:partialProject.address||''};
+  const partialSupplier=uniquePartial(state.suppliers.filter(su=>su.address),v,su=>supplierDisplay(su));
+  if(partialSupplier)return{kind:'supplier',ref:partialSupplier,address:partialSupplier.address||''};
   return null;
 }
 window.findDropTargetByInput=findDropTargetByInput;
-function findProjectByInput(v){const n=norm(v);return state.projects.find(p=>norm(p.name)===n)||null}
+/* A beírt szövegrészlet is azonosítson, ha egyértelmű. A "waterfront"
+   így megtalálja a "Budapest_Waterfront_City_V.ütem" projektet. Ha több
+   találat van, nem tippelünk. */
+function uniquePartial(list, value, labelOf){
+  const n = norm(value); if(n.length < 3) return null;
+  const hits = list.filter(item => selectFilterMatch(labelOf(item), value));
+  return hits.length === 1 ? hits[0] : null;
+}
+function findProjectByInput(v){
+  const n=norm(v);
+  return state.projects.find(p=>norm(p.name)===n)
+    || uniquePartial(state.projects, v, p=>`${p.name} ${p.address||''}`)
+    || null;
+}
 function fillSearchableMasters(){const sv=$('#supplierSearch')?.value||'',pv=$('#projectSearch')?.value||'';$('#supplierList').innerHTML=state.suppliers.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(s=>`<option value="${esc(supplierDisplay(s))}"></option>`).join('');$('#projectList').innerHTML=dropTargetOptions().map(t=>`<option value="${esc(t.label)}">${esc(t.hint)}</option>`).join('');if($('#supplierSearch'))$('#supplierSearch').value=sv;if($('#projectSearch'))$('#projectSearch').value=pv}
 function fillSupplierAddressList(name=''){
   const list=$('#supplierAddressList');if(!list)return;

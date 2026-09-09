@@ -84,7 +84,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V60Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V61Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -228,9 +228,9 @@
           onclick="v57ToggleDriverDetail('${detailId}',this)">▾</button>
       </div>
       <div class="v57-row-actions">
-        <button type="button" onclick="openItems('${safe(order.id)}')">Tétel / hátralék${items.length ? ` (${received}/${items.length})` : ''}</button>
+        <button type="button" onclick="openItems('${safe(order.id)}')">Tételek${items.length ? ` (${received}/${items.length})` : ''}</button>
         <button type="button" class="camera-action" onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>
-        ${order.sourceMail ? `<button type="button" class="mail-action" onclick="openSourceMail('${safe(order.id)}')">Levél</button>` : ''}
+        ${order.sourceMail ? `<button type="button" class="mail-action" onclick="openSourceMail('${safe(order.id)}')">Csatolmány</button>` : ''}
         ${canTransfer ? `<button type="button" class="transfer-action" onclick="openTransferDialog('${safe(order.id)}')">Fuvar átadása</button>` : ''}
       </div>
       ${transferBadge(order)}
@@ -417,7 +417,7 @@
     const mail = order?.sourceMail;
     if (!mail) return alert('Ehhez a fuvarhoz nincs mentett levél.');
     const host = byId('sourceMailBody');
-    if (byId('sourceMailTitle')) byId('sourceMailTitle').textContent = mail.subject || 'Importált levél';
+    if (byId('sourceMailTitle')) byId('sourceMailTitle').textContent = mail.subject || 'Csatolmány';
     if (host) {
       host.innerHTML = `
         <div class="mail-meta">
