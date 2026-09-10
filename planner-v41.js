@@ -66,7 +66,9 @@
   function extractOrderRefsDetailed(...sources) {
     const text = sources.filter(Boolean).join('\n');
     const refs = [];
-    for (const match of text.matchAll(/\b(20\d{2})\s*-\s*(SR0|KRPR|PRPR)\s*\/\s*([0-9]{4,12})\b/gi)) {
+    // V63: a BR0 (belső rendelés) eddig kimaradt, ezért az ilyen bizonylatokról
+    // a program semmit nem ismert fel – sem a rendelésszámot, sem a tételeket.
+    for (const match of text.matchAll(/\b(20\d{2})\s*-\s*(SR0|BR0|KRPR|PRPR)\s*\/\s*([0-9]{4,12})\b/gi)) {
       const ref = { year: match[1], type: match[2].toUpperCase(), no: match[3], full: `${match[1]}-${match[2].toUpperCase()}/${match[3]}`, index: match.index ?? -1 };
       if (!refs.some(existing => existing.full === ref.full)) refs.push(ref);
     }
@@ -219,7 +221,7 @@
     for (const raw of linesOf(text)) {
       const line = raw.replace(/\s+/g, ' ').trim();
       let match = line.match(/^([A-Z0-9._\/-]{3,})\s*[-–]\s*(.+?)\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
-      if (!match) match = line.match(/^([A-Z0-9._\/-]{3,})\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\s*(?:[oö]sszesen)?$/i);
+      if (!match) match = line.match(/^([A-Z0-9._\/-]{3,})\s+(.+)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\s*(?:[oö]sszesen)?$/i);
       if (!match) continue;
       const [, code, name, qty, unit] = match;
       const materialSearch = nrm(`${name} ${qty}${unit}`);
@@ -453,10 +455,19 @@
     for (const token of addressTokens) if (sourceNorm.includes(token)) score += token.length >= 6 ? 4 : 2;
     if (nameTokens.length && nameTokens.every(token => sourceNorm.includes(token))) score += 10;
     /* Ha a bizonylaton ott a telephely UTCANEVE, az dönt: az a cím szerepel a
-       papíron, nem egy másik telephelyé. */
+       papíron, nem egy másik telephelyé.
+
+       V64: SZÓHATÁRRAL illesztünk. Korábban szórészletként kereste, ezért a
+       "Fizetési határidő" feliratban lévő "hatar" a Határ úti telephelyre
+       illett, és a Gienger a Dűlő utca helyett a Határ utat kapta. */
     const street = significantTokens(supplier.address, PLACE_NOISE)
       .find(token => token.length >= 5 && !/^\d+$/.test(token));
-    if (street && sourceNorm.includes(street)) score += 25;
+    if (street && new RegExp(`\\b${street}\\b`).test(sourceNorm)) score += 25;
+
+    /* Az irányítószám önmagában is erős jel, és nem téveszthető össze
+       szövegrészlettel. */
+    const zip = String(supplier.address || '').match(/\b(\d{4})\b/);
+    if (zip && new RegExp(`\\b${zip[1]}\\b`).test(sourceNorm)) score += 20;
     return score;
   }
 
@@ -645,7 +656,7 @@
 
   function projectLabelWindow(pdfText = '', pdfLines = [], mode = 'SR0') {
     const lines = (pdfLines?.length ? pdfLines : linesOf(pdfText));
-    const target = mode === 'KRPR' || mode === 'PRPR'
+    const target = mode === 'KRPR' || mode === 'BR0' || mode === 'PRPR'
       ? /c[eé]l\s*rakt[aá]r/i
       : /projekt\s*n[eé]v|(?:^|\s)rakt[aá]r\s*:/i;
     const found = [];
@@ -704,7 +715,9 @@
     const head = nrm((pdf.lines || []).slice(0, 30).join(' ') || String(pdf.text || '').slice(0, 2500));
     const refs = extractOrderRefs(pdf.text || '', pdf.name || '');
     const supplierOrder = /szallito\s+rendeles/.test(head);
-    const warehouseTransfer = /raktarkozi/.test(head) || refs.some(ref => ref.type === 'KRPR' || ref.type === 'PRPR');
+    // V64: a belső rendelés (BR0) mindenben a raktárközivel azonos.
+    const warehouseTransfer = /raktarkozi|belso rendeles/.test(head)
+      || refs.some(ref => ref.type === 'KRPR' || ref.type === 'BR0' || ref.type === 'PRPR');
     const confirmation = /visszaigazolas|rendeles\s+visszaigazolas|megrendeles\s+visszaigazolasa|ajanlat/.test(head) && !supplierOrder && !warehouseTransfer;
     return { primary: supplierOrder || warehouseTransfer, supplierOrder, warehouseTransfer, confirmation, refs };
   }
@@ -733,14 +746,14 @@
       const line = String(raw || '').replace(/\s+/g, ' ').trim();
       if (!line || /egys[eé]g[aá]r|engedm[eé]ny|nett[oó]|[oö]sszesen|alapbizonylat|rendel[eé]s\s*:/i.test(line)) continue;
       let code = '', name = '', qty = '', unit = '';
-      let match = line.match(/^\s*\d+\s*\.\s*([A-Z0-9._\/-]+)\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+      let match = line.match(/^\s*\d+\s*\.\s*([A-Z0-9._\/-]+)\s+(.+)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
       if (match) [, code, name, qty, unit] = match;
       if (!match) {
-        match = line.match(/^\s*\d+\s+([A-Z0-9._\/-]{3,})\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+        match = line.match(/^\s*\d+\s+([A-Z0-9._\/-]{3,})\s+(.+)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
         if (match) [, code, name, qty, unit] = match;
       }
       if (!match) {
-        match = line.match(/^\s*([A-Z][A-Z0-9._\/-]{2,})\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+        match = line.match(/^\s*([A-Z][A-Z0-9._\/-]{2,})\s+(.+)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
         if (match) [, code, name, qty, unit] = match;
       }
       if (!match || /^huf$/i.test(code) || name.length < 3) continue;
@@ -819,8 +832,11 @@
     if (bodyScope.note) reasons.push(bodyScope.note);
     items = bodyScope.items;
 
-    if (orderType === 'KRPR') {
-      pickup = { ...CENTRAL_WAREHOUSE, reason: 'KRPR: felrakó mindig a szigetszentmiklósi központi raktár' };
+    // V63: a belső rendelés (BR0) szerkezetileg ugyanaz, mint a raktárközi:
+    // Forrás raktár / Cél raktár hasáb. A felrakó a központi raktár, a lerakó
+    // a cél oszlopban álló projekt.
+    if (orderType === 'KRPR' || orderType === 'BR0') {
+      pickup = { ...CENTRAL_WAREHOUSE, reason: `${orderType}: felrakó a központi raktár` };
       // A lerakó KIZÁRÓLAG a Cél raktár hasábjából jöhet. A bal hasábban álló
       // "Stand 98 Kft. Új Központi Raktár" korábban minden KRPR-nél megnyerte
       // a lerakó helyét, mert szó szerint egyezett egy projektnévvel.
@@ -832,8 +848,8 @@
         || (hint ? bestProject(hint, hint) : null);
       if (project && isCentralWarehouseName(project.name)) project = null;
       drop = project;
-      if (!drop) reasons.push('KRPR: a cél raktár nem azonosítható, ellenőrizd');
-      else reasons.push('KRPR: lerakó a Cél raktár hasábból');
+      if (!drop) reasons.push(`${orderType}: a cél raktár nem azonosítható, ellenőrizd`);
+      else reasons.push(`${orderType}: lerakó a Cél raktár hasábból`);
       pickupRole = 'warehouse'; dropRole = 'project';
     } else if (orderType === 'PRPR') {
       // Projektről projektre: a felrakó a Forrás, a lerakó a Cél hasáb.
@@ -1232,7 +1248,7 @@
       || exactProjects.find(item => String(item.address || '').trim())
       || exactProjects[0]
       || (state.projects || []).find(item => entry.dropAddress && nrm(item.address) === nrm(entry.dropAddress));
-    if (entry.orderType === 'KRPR' && (!project?.address || !entry.dropAddress)) {
+    if ((entry.orderType === 'KRPR' || entry.orderType === 'BR0') && (!project?.address || !entry.dropAddress)) {
       project = projectWithAddressFromMaster(project || { id: entry.projectId || '', name: entry.projectName || '' }, `${entry.sourcePdfText || ''}
 ${entry.sourceBody || ''}
 ${entry.subject || ''}`) || project;
@@ -1252,7 +1268,7 @@ ${entry.subject || ''}`) || project;
     const existingSupplier = ensureSupplierMaster(entry);
     const { supplier, project } = masterIdsForEntry(entry);
     const resolvedSupplier = supplier || existingSupplier;
-    if (entry.orderType === 'KRPR' && project?.address && !entry.dropAddress) {
+    if ((entry.orderType === 'KRPR' || entry.orderType === 'BR0') && project?.address && !entry.dropAddress) {
       entry.projectId = project.id || entry.projectId || '';
       entry.projectName = project.name || entry.projectName || '';
       entry.dropAddress = project.address;
