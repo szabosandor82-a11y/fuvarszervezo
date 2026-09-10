@@ -31,6 +31,7 @@
   const escHtml = value => typeof esc === 'function'
     ? esc(value ?? '')
     : String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const hasOutlookSource = order => !!(order && (order.sourceMail || order.outlookImport || order.outlookSourceFile || order.outlookPdfFile || /^outlook import/i.test(String(order.note || '')) || (order.deliveryReports || []).some(report => /^Outlook forrás/i.test(String(report.note || '')))));
   const driverKey = vehicle => {
     const text = nrm(vehicle?.driverName || '');
     if (text.includes('patrik')) return 'patrik';
@@ -366,6 +367,7 @@
     const complete = orders.length > 0 && orders.every(order => order.completed);
     const pinned = orders.some(order => order.routePinned);
     const fullLoad = groups.some(group => group.fullLoad);
+    const unreadComment = orders.some(order => global.userCommentClass?.(order));
     const rawName = String(first.pickupName || 'Felrakó').trim();
     const central = /\bkp\b|kozpont/.test(nrm(rawName));
     const displayName = rawName.replace(/\s*\bkp\.?\s*$/i, '').trim() || rawName;
@@ -375,13 +377,14 @@
     const projects = [...new Set(groups.map(group => group.projectName).filter(Boolean))];
     const dropCount = projects.length || 1;
 
-    const hasSourceMail = orders.some(order => order.sourceMail);
+    const hasSourceMail = orders.some(hasOutlookSource);
+    const sourceOrder = orders.find(hasOutlookSource) || orders[0] || {};
     const manualBlock = manualNotes.length
       ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${manualNotes.map(escHtml).join(' · ')}</div>`
       : '';
     const detail = groups.map(group => {
       const rows = (group.orders || []).flatMap(order => (order.items || []).map(item =>
-        `<div class="v56-item-row"><span>${escHtml(item.name || 'Tétel')}</span><span class="v56-item-qty">${escHtml(String(item.qty ?? ''))} ${escHtml(item.unit || '')}</span></div>`));
+        `<div class="v56-item-row"><span><b class="v56-item-code">${escHtml(item.code || 'Cikkszám nélkül')}</b><span class="v56-item-description">${escHtml(item.description || item.productName || item.name || 'Tétel')}</span></span><span class="v56-item-qty">${escHtml(String(item.qty ?? ''))} ${escHtml(item.unit || '')}</span></div>`));
       const nos = [...new Set((group.orders || []).map(order => order.orderNo).filter(Boolean))];
       return `<div class="v56-drop-block">
         <div class="v56-drop-head"><b>${escHtml(group.projectName || 'Nincs projekt')}</b><span class="v56-drop-meta">${escHtml(nos.join(', '))}</span></div>
@@ -390,16 +393,16 @@
     }).join('');
 
     return `<section class="pickup-move-block v56-row-block ${resolved ? 'resolved-pickup-block' : ''} ${pinned ? 'pinned-block' : ''} ${fullLoad ? 'full-load-block' : ''}" data-pickup-move-key="${escHtml(unit.pickupKey)}" data-order-ids="${escHtml(ids)}">
-      <article class="v56-row ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''} ${longReasons.length ? 'has-long' : ''}">
+      <article class="v56-row ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''} ${longReasons.length ? 'has-long' : ''}${unreadComment ? ' user-comment-unread' : ''}" data-id="${escHtml(first.id || ids.split(',')[0] || '')}">
         <span class="drag v56-drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : 'Húzás'}">☷</span>
         <span class="v56-index">${escHtml(String(index + 1))}</span>
         <div class="v56-main">
           <div class="v56-line-top"><b>${escHtml(displayName)}</b>${central ? '<span class="v56-chip">kp</span>' : ''}${longReasons.length ? '<span class="v56-chip v56-chip-warn">szálas</span>' : ''}<span class="v56-addr">${address ? '— ' + escHtml(address) : ''}</span></div>
         </div>
         <button type="button" class="v56-items-btn" onclick="event.stopPropagation();v56ToggleItems('${escHtml(ids)}',this)" title="Lerakók és tételek">${dropCount} lerakó · ${itemCount} tétel${manualNotes.length ? ' + kézi' : ''} <span class="v56-caret">▾</span></button>
-        ${hasSourceMail ? `<button type="button" class="v56-mail-btn" title="Importált levél és csatolmány" onclick="event.stopPropagation();openSourceMail('${escHtml(first.id)}')">Csatolmány</button>` : ''}
+        ${hasSourceMail ? `<button type="button" class="v56-mail-btn" title="Importált levél és csatolmány" onclick="event.stopPropagation();openSourceMail('${escHtml(sourceOrder.id || '')}')">Csatolmány</button>` : ''}
       </article>
-      <div class="v56-items" data-items-for="${escHtml(ids)}" hidden>${manualBlock}${detail}</div>
+      <div class="v56-items" data-items-for="${escHtml(ids)}" hidden>${manualBlock}${detail}<button type="button" class="v56-pdf-button secondary" onclick="event.stopPropagation();openOrderPdfAttachments('${escHtml(ids)}')">PDF mellékletek megnyitása</button><div class="v56-pdf-status" id="v56-pdf-${escHtml(first.id || ids.split(',')[0] || '')}"></div></div>
       ${fullLoad ? '<div class="v56-forced-drop">Kötelező azonnali lerakás</div>' : ''}
     </section>`;
   }
@@ -413,13 +416,14 @@
     const rawName = String(group.pickupName || '').trim();
     const central = /\bkp\b|kozpont/.test(nrm(rawName));
     const displayName = rawName.replace(/\s*\bkp\.?\s*$/i, '').trim() || rawName;
+    const unreadComment = (group.orders || []).some(order => global.userCommentClass?.(order));
     const itemRows = (group.orders || []).flatMap(order => (order.items || []).map(item => ({ item, order })));
     const items = itemRows.length
-      ? itemRows.map(({ item, order }) => `<div class="v56-item-row"><span>${escHtml(item.name || 'Tétel')}</span><span class="v56-item-qty">${escHtml(String(item.qty ?? ''))} ${escHtml(item.unit || '')}</span></div>`).join('')
+      ? itemRows.map(({ item, order }) => `<div class="v56-item-row"><span><b class="v56-item-code">${escHtml(item.code || 'Cikkszám nélkül')}</b><span class="v56-item-description">${escHtml(item.description || item.productName || item.name || 'Tétel')}</span></span><span class="v56-item-qty">${escHtml(String(item.qty ?? ''))} ${escHtml(item.unit || '')}</span></div>`).join('')
       : '<div class="v56-item-row v56-item-empty"><span>Nincs rögzített tétel.</span><span></span></div>';
 
     return `<div class="route-block v56-row-block ${options.insidePickupGroup ? 'inside-pickup-group' : ''} ${pinned ? 'pinned-block' : ''} ${fullLoad ? 'full-load-block' : ''} ${resolved ? 'resolved-backlog-block' : ''}" data-order-ids="${escHtml(ids)}">
-      <article class="v56-row ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''} ${longReasons.length ? 'has-long' : ''}" data-id="${escHtml(first.id)}">
+      <article class="v56-row ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''} ${longReasons.length ? 'has-long' : ''}${unreadComment ? ' user-comment-unread' : ''}" data-id="${escHtml(first.id)}" data-order-ids="${escHtml(ids)}">
         <span class="drag v56-drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : 'Húzás'}">☷</span>
         <span class="v56-index">${escHtml(displayNumber)}</span>
         <div class="v56-main">
@@ -432,7 +436,7 @@
         </div>
         <button type="button" class="v56-items-btn" onclick="event.stopPropagation();v56ToggleItems('${escHtml(ids)}',this)" title="Felrakandó tételek">${itemCount} tétel <span class="v56-caret">▾</span></button>
       </article>
-      <div class="v56-items" data-items-for="${escHtml(ids)}" hidden>${items}</div>
+      <div class="v56-items" data-items-for="${escHtml(ids)}" hidden>${items}<button type="button" class="v56-pdf-button secondary" onclick="event.stopPropagation();openOrderPdfAttachments('${escHtml(ids)}')">PDF mellékletek megnyitása</button></div>
       ${fullLoad ? '<div class="v56-forced-drop">Kötelező azonnali lerakás</div>' : ''}
     </div>`;
   }
@@ -454,6 +458,7 @@
     const pinned = group.orders.some(order => order.routePinned);
     const fullLoad = group.fullLoad;
     const first = group.orders[0];
+    const unreadComment = group.orders.some(order => global.userCommentClass?.(order));
     const warnings = typeof masterWarnings === 'function' ? group.orders.map(masterWarnings).filter(Boolean).join('') : '';
     const pickupOrderIds = options.allPickupOrders?.map(order => order.id).join(',') || ids;
     const regroupButton = options.focus && options.ungrouped && (options.samePickupCount || 0) > 1
@@ -465,7 +470,7 @@
       warnings, displayNumber, vehicleId, pickupOrderIds, regroupButton, options
     });
     return `<div class="route-block ${options.insidePickupGroup ? 'inside-pickup-group' : ''} ${pinned ? 'pinned-block' : ''} ${fullLoad ? 'full-load-block' : ''} ${resolved ? 'resolved-backlog-block' : ''}" data-group-key="${escHtml(group.key)}" data-pickup-move-key="${escHtml(pickupMoveKey(group))}" data-order-ids="${escHtml(ids)}" data-vehicle-id="${escHtml(vehicleId)}">
-      <article class="bubble grouped-bubble ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''}" data-id="${escHtml(first.id)}">
+      <article class="bubble grouped-bubble ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''}${unreadComment ? ' user-comment-unread' : ''}" data-id="${escHtml(first.id)}" data-order-ids="${escHtml(ids)}">
         <span class="drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : options.insidePickupGroup ? 'Az egész felrakási blokk húzása' : 'Húzás'}">${resolved ? '✓' : '☷'}</span>
         <div class="bubble-control-row">
           <button type="button" class="pin-button ${pinned ? 'active' : ''}" onclick="event.stopPropagation();v37TogglePin('${escHtml(ids)}','${escHtml(vehicleId)}')" title="${pinned ? 'Rögzítés feloldása' : 'Pozíció rögzítése'}">⚑</button>
@@ -479,7 +484,7 @@
         <div class="bubble-main-line order-number-line"><b>Rendelésszám:</b><span>${escHtml(orderNos.join(', ') || 'Nincs megadva')}</span></div>
         <div class="tags"><span class="tag">${group.orders.length} rendelés</span><span class="tag">${itemCount} tétel</span>${longReasons.map(reason => `<span class="tag long">${escHtml(reason)}</span>`).join('')}${pinned ? '<span class="tag pin-tag">Rögzítve</span>' : ''}${fullLoad ? '<span class="tag full-load-tag">Teljes autó</span>' : ''}${resolved ? '<span class="tag resolved-tag">✓ Elintézve</span>' : ''}${options.ungrouped && (options.samePickupCount || 0) > 1 ? '<span class="tag ungrouped-tag">Külön mozgatható</span>' : ''}</div>
         ${manualItemsOfGroup(group) ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${escHtml(manualItemsOfGroup(group))}</div>` : ''}
-        <div class="bubble-actions"><button onclick="editOrder('${escHtml(first.id)}')">Szerkesztés</button><button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button>${group.orders.some(order => order.sourceMail) ? `<button onclick="openSourceMail('${escHtml(first.id)}')">Csatolmány</button>` : ''}<button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button><button class="secondary" onclick="openMediaGallery('${escHtml(ids)}')">📎 Mentett fotók</button></div>
+        <div class="bubble-actions"><button onclick="editOrder('${escHtml(first.id)}')">Szerkesztés</button><button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button>${group.orders.some(hasOutlookSource) ? `<button onclick="openSourceMail('${escHtml((group.orders.find(hasOutlookSource) || first).id)}')">Csatolmány</button>` : ''}<button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button><button class="secondary" onclick="openMediaGallery('${escHtml(ids)}')">📎 Mentett fotók</button></div>
         <button class="complete-button ${complete ? 'done' : ''}" onclick="v37ToggleGroupComplete('${escHtml(ids)}')">${complete ? '✓' : '○'}</button>
         <button class="trash" onclick="v33DeleteGroup('${escHtml(ids)}')">🗑</button>
       </article>
@@ -547,8 +552,22 @@
     if (!element || typeof L === 'undefined') return;
     if (focusMap) focusMap.remove();
     focusMap = L.map(element, { zoomControl: true }).setView([47.45, 19.04], 9);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(focusMap);
+    const map = focusMap, date = selectedDate();
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
     let events = state.routePlans?.[selectedDate()]?.[vehicleId] || [];
+    const currentPlanner = global.V66Planner || global.V65Planner || global.V64Planner;
+    const snapshot = currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
+    const isCurrent = () => focusMap === map && selectedDate() === date
+      && snapshot === currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
+    let changed = false;
+    if (currentPlanner?.routePlanNeedsRefreshV55?.(vehicleId, events)) {
+      const vehicle = (state.vehicles || []).find(item => item.id === vehicleId);
+      if (vehicle && typeof currentPlanner.buildManualRouteV55 === 'function') {
+        events = await currentPlanner.buildManualRouteV55(vehicle, date);
+        changed = true;
+      }
+    }
+    if (!isCurrent()) return;
     let pickups = events.filter(event => event.type === 'pickup');
     if (!pickups.length) {
       const seen = new Set(); pickups = [];
@@ -560,22 +579,40 @@
         pickups.push({ name: group.pickupName, address: group.pickupAddress, point: await geo(group.pickupAddress) });
       }
     } else {
-      for (const event of pickups) if (!finitePoint(event.point)) event.point = await geo(event.address);
+      if (currentPlanner?.refreshPickupEventsV55) {
+        const refreshed = await currentPlanner.refreshPickupEventsV55(vehicleId, pickups);
+        pickups = refreshed.events;
+        changed = changed || refreshed.changed;
+      } else {
+        for (const event of pickups) if (!finitePoint(event.point)) event.point = await geo(event.address);
+      }
+    }
+    if (!isCurrent()) return;
+    if (changed) {
+      state.routePlans = state.routePlans || {};
+      state.routePlans[date] = state.routePlans[date] || {};
+      state.routePlans[date][vehicleId] = pickups;
+      save(false);
     }
     const points = [];
-    pickups.filter(event => finitePoint(event.point)).forEach((event, index) => {
+    const markers = currentPlanner?.mapMarkerLayoutV69 ? currentPlanner.mapMarkerLayoutV69(pickups)
+      : pickups.filter(event => finitePoint(event.point)).map((event,index) => ({event,number:index + 1,iconAnchor:[15,15]}));
+    markers.forEach(({event,number,iconAnchor}) => {
       points.push(event.point);
-      const icon = L.divIcon({ className: 'v37-numbered-marker', html: `<span>${index + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] });
-      L.marker(event.point, { icon, title: `${index + 1}. ${event.name}` }).addTo(focusMap).bindPopup(`<b>${index + 1}. Felrakó</b><br>${escHtml(event.name)}<br>${escHtml(event.address || '')}`);
+      const icon = L.divIcon({ className: 'v37-numbered-marker', html: `<span>${number}</span>`, iconSize: [30, 30], iconAnchor });
+      const approximate = state.geoApprox?.[event.address] ? '<br><small>Becsült hely · a pontos címfeloldás még nem sikerült.</small>' : '';
+      L.marker(event.point, { icon, title: `${number}. ${event.name}` }).addTo(map).bindPopup(`<b>${number}. Felrakó</b><br>${escHtml(event.name)}<br>${escHtml(event.address || '')}${approximate}`);
     });
-    if (points.length === 1) focusMap.setView(points[0], 13);
+    if (points.length === 1) map.setView(points[0], 13);
     if (points.length > 1) {
-      const route = await roadRoute(points);
+      let route = null;
+      try { route = await roadRoute(points); } catch (_) {}
+      if (!isCurrent()) return;
       const coords = route ? route.geometry.coordinates.map(coord => [coord[1], coord[0]]) : points;
-      const line = L.polyline(coords, { weight: 5, opacity: 0.82 }).addTo(focusMap);
-      focusMap.fitBounds(line.getBounds(), { padding: [28, 28] });
+      const line = L.polyline(coords, { weight: 5, opacity: 0.82 }).addTo(map);
+      map.fitBounds(line.getBounds(), { padding: [28, 28] });
     }
-    setTimeout(() => focusMap?.invalidateSize(), 80);
+    setTimeout(() => { if (isCurrent()) map.invalidateSize(); }, 80);
   }
 
   /* V60: a kompakt Nézet-sor maga a pickup-move-block, és a data-order-ids
@@ -919,6 +956,7 @@
   global.v56ToggleItems = function (ids, button) {
     const panel = document.querySelector(`.v56-items[data-items-for="${(ids || '').replace(/"/g, '')}"]`);
     if (!panel) return;
+    if (panel.hidden) (ids || '').split(',').filter(Boolean).forEach(id => global.markUserCommentRead?.(id));
     panel.hidden = !panel.hidden;
     const caret = button?.querySelector('.v56-caret');
     if (caret) caret.textContent = panel.hidden ? '▾' : '▴';

@@ -151,8 +151,56 @@ function longReason(name=''){const n=norm(name);let m=n.match(/(?:^|[^0-9])([456
 function canCarryLong(v){return/(plato|kcr|kamion)/.test(norm(v.type))}
 function centralSupplier(name){const group=state.suppliers.filter(s=>norm(s.name)===norm(name));return group.find(s=>s.isCentral)||group[0]||null}
 function renderRoutes(){const vehicles=activeVehicles();$('#routes').innerHTML=vehicles.map(v=>{const list=dayOrders(v.id).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999));return`<section class="route"><header class="route-head"><h2><input value="${esc(v.driverName)}" onchange="renameDriver('${v.id}',this.value)"></h2><small>${esc(v.name)} · ${esc(v.type)} · ${list.length} fuvar</small><div class="route-summary" id="summary-${v.id}"></div></header><div id="map-${v.id}" class="map"></div><div id="route-${v.id}" class="route-list">${bubbles(list)}</div></section>`}).join('')||'<div class="notice">Nincs aktív jármű.</div>';setTimeout(initMaps,30);setTimeout(initSortables,40);setTimeout(updateSummaries,60)}
-function itemNoteValue(it={}){return String(it.itemNote??it.itemRemark??it.tetelMegjegyzes??'')}function itemNoteSummary(o){return(o.items||[]).map((it,i)=>itemNoteValue(it)?`<p class="item-note-preview"><b>${i+1}. tétel megjegyzés:</b> ${esc(itemNoteValue(it))}</p>`:'').join('')}
-function bubbles(list){if(!list.length)return'<div class="notice">Nincs fuvar.</div>';return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')} · ${esc(o.pickupAddress||'')}</p><p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs megadva')}</p>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('')}
+function itemNoteValue(it={}){return String(it.itemNote??it.itemRemark??it.tetelMegjegyzes??'')}
+/* A user által küldött tétel- és szállítólevél-megjegyzések külön jelölést
+   kapnak. A megnyitás profilhelyi olvasottnak számít, ezért az admin és a
+   sofőr saját nézetében egymástól függetlenül tűnik el a jelölés. */
+function isUserCommentSession(){
+  return !!((typeof document!=='undefined' && document.body?.classList.contains('mode-driver')) || (typeof window!=='undefined' && window.V44_2Auth?.isRestrictedUser?.()));
+}
+function userCommentViewerKey(){
+  const auth=typeof window!=='undefined'?window.V44_2Auth:null;
+  const mode=typeof document!=='undefined' && document.body?.classList.contains('mode-admin')?'admin':typeof document!=='undefined' && document.body?.classList.contains('mode-driver')?'driver':'local';
+  const key=auth?.currentUserKey?.() || mode;
+  return `fuvarszervezo_user_comment_seen_v1:${String(key||'local').toLowerCase()}`;
+}
+function readUserCommentSeen(){
+  try{return JSON.parse(localStorage.getItem(userCommentViewerKey())||'{}')||{}}catch(_){return{}}
+}
+function writeUserCommentSeen(seen){try{localStorage.setItem(userCommentViewerKey(),JSON.stringify(seen||{}))}catch(_){} }
+function userCommentStamp(order={}){
+  const stamps=[];
+  for(const item of order.items||[]){
+    if(itemNoteValue(item).trim() && /^(driver|user|test)$/i.test(String(item.itemNoteAuthorRole||item.itemNoteUpdatedByRole||'')))
+      stamps.push(item.itemNoteUpdatedAt||item.itemNoteCommentAt||'');
+  }
+  for(const report of order.deliveryReports||[]){
+    const sender=String(report.createdBy||'').toLowerCase();
+    const driverReport=report.userComment===true || /^(driver|user|test)$/i.test(String(report.createdRole||report.authorRole||'')) || /(?:schmidt\.martin|polgar\.patrik|berki\.mario)@/.test(sender);
+    if(String(report.note||'').trim() && driverReport)
+      stamps.push(report.commentAt||report.at||'');
+  }
+  return stamps.filter(Boolean).sort().pop()||'';
+}
+function userCommentIsUnread(order){
+  const stamp=userCommentStamp(order); if(!stamp)return false;
+  const seen=readUserCommentSeen(); return String(seen[String(order.id)]||'')<String(stamp);
+}
+function userCommentClass(order){return userCommentIsUnread(order)?' user-comment-unread':''}
+function markUserCommentRead(orderId){
+  const order=(state.orders||[]).find(item=>String(item.id)===String(orderId));
+  const stamp=userCommentStamp(order||{}); if(!order||!stamp)return;
+  const seen=readUserCommentSeen();
+  if(String(seen[String(orderId)]||'')>=String(stamp))return;
+  seen[String(orderId)]=stamp; writeUserCommentSeen(seen);
+  if(typeof document!=='undefined') document.querySelectorAll('[data-id],[data-order-ids]').forEach(node=>{
+    const ids=String(node.dataset.orderIds||'').split(',').map(value=>value.trim());
+    if(String(node.dataset.id)===String(orderId) || ids.includes(String(orderId))) node.classList.remove('user-comment-unread');
+  });
+}
+window.userCommentClass=userCommentClass;window.markUserCommentRead=markUserCommentRead;
+function itemNoteSummary(o){return(o.items||[]).map((it,i)=>itemNoteValue(it)?`<p class="item-note-preview"><b>${i+1}. tétel megjegyzés:</b> ${esc(itemNoteValue(it))}</p>`:'').join('')}
+function bubbles(list){if(!list.length)return'<div class="notice">Nincs fuvar.</div>';return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}${userCommentClass(o)}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')} · ${esc(o.pickupAddress||'')}</p><p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs megadva')}</p>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('')}
 window.renameDriver=(id,name)=>{const v=state.vehicles.find(x=>x.id===id);if(v){v.driverName=name.trim()||v.driverName;save()}};
 function initSortables(){activeVehicles().forEach(v=>{const el=$('#route-'+v.id);if(!el)return;new Sortable(el,{group:'vehicles',animation:180,handle:'.drag',onEnd:e=>{const o=state.orders.find(x=>x.id===e.item.dataset.id);if(o)o.vehicleId=e.to.id.replace('route-','');activeVehicles().forEach(x=>{$$('#route-'+x.id+' .bubble').forEach((n,i)=>{const r=state.orders.find(o=>o.id===n.dataset.id);if(r)r.sequence=i+1})});save()}})})}
 /* V61 – EGYSÉGES KERESŐS LENYÍLÓ AZ EGÉSZ OLDALON
@@ -399,8 +447,20 @@ const HU_TOWN_POINTS={szigetszentmiklos:[47.343,19.044],torokbalint:[47.431,18.9
  racalmas:[47.028,18.937],szigetvar:[46.048,17.807],szecseny:[48.081,19.520]};
 const ROMAN_DISTRICT={i:1,ii:2,iii:3,iv:4,v:5,vi:6,vii:7,viii:8,ix:9,x:10,xi:11,xii:12,xiii:13,
  xiv:14,xv:15,xvi:16,xvii:17,xviii:18,xix:19,xx:20,xxi:21,xxii:22,xxiii:23};
+// A két új X. kerületi telephely korábbi seed-pontja csak a kerület
+// közepét jelölte. Ezért a térképen egymásra kerültek, illetve egy új fuvar
+// felvételekor úgy tűnhetett, mintha nem frissült volna a marker.
+function preciseStreetAddress(addr){
+  const t=norm(addr).replace(/[–—]/g,' ');
+  if(/\b1106\s+budapest\b.*\bkada\s+utca\s+149\b/.test(t))return 'ezer-kada';
+  if(/\b1106\s+budapest\b.*\bporcelan\s+(?:u|utca)\s+3\s+9\b/.test(t))return 'proconsul-porcelan';
+  return '';
+}
 function offlineGeo(addr){
   const raw=String(addr||'');if(!raw.trim())return null;
+  // Korábbi útvonaltesztből származó utcai becslés, nem hitelesített
+  // házszámpont. Hálózati találat hiányában is csak becslésként kezeljük.
+  if(preciseStreetAddress(raw)==='ezer-kada')return [47.474,19.169];
   const code=raw.match(/\b(1\d{3})\b/);
   if(code){const c=code[1];const d=c.startsWith('10')?+c[2]:+c.slice(1,3);
     if(BP_DISTRICT_POINTS[d])return BP_DISTRICT_POINTS[d].slice()}
@@ -420,6 +480,9 @@ window.offlineGeo=offlineGeo;
 
 function seedPoint(addr){
   if(!addr)return null;
+  // Ennél a két címnél a régi, csak kerületi seed-pontot nem használjuk;
+  // előbb a pontos cím geokódolása fusson le.
+  if(preciseStreetAddress(addr))return null;
   const want=norm(addr);
   const seed=window.SEED_DATA||{};
   for(const list of [seed.suppliers||[],seed.projects||[]]){
@@ -427,19 +490,47 @@ function seedPoint(addr){
   }
   return null;
 }
-async function geo(addr){if(!addr)return null;if(state.geo[addr])return state.geo[addr];
-  const seeded=seedPoint(addr);
+const streetGeoPendingV69=new Map(),streetGeoRetryV69=new Map();
+async function geo(addr){if(!addr)return null;
+  const precise=preciseStreetAddress(addr);
+  state.geo=state.geo||{};
+  state.geoSources=state.geoSources||{};
+  const cached=state.geo?.[addr];
+  // A korábbi v66/v68 mentésben ezekhez a címekhez a közös X. kerületi pont
+  // kerülhetett a gyorsítótárba. Ezt csak ennél a két címnél érvénytelenítjük;
+  // A hálózati hibából származó becslés nem zárhatja ki végleg a pontosítást.
+  const source=state.geoSources[addr];
+  const legacyDistrict=cached&&+cached[0]===47.483&&+cached[1]===19.145;
+  if(cached&&precise&&!source&&!legacyDistrict)return cached;
+  if(cached&&(!precise||source==='nominatim'||(source==='target-fallback'&&Date.now()<(streetGeoRetryV69.get(precise)||0))))return cached;
+  if(precise&&streetGeoPendingV69.has(addr))return streetGeoPendingV69.get(addr);
+  const seeded=precise?null:seedPoint(addr);
   if(seeded){state.geo[addr]=seeded;return seeded;}
   // Előbb a pontos, hálózati feloldás; ha nem sikerül, a becsült pont jön.
   // Így soha nem marad koordináta nélkül egy magyar cím.
-  const offline=offlineGeo(addr);
-  try{
-    const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=hu&q='+encodeURIComponent(addr));
-    const j=await r.json();
-    if(j[0]){state.geo[addr]=[+j[0].lat,+j[0].lon];save(false);await new Promise(res=>setTimeout(res,1050));return state.geo[addr]}
-  }catch{}
-  if(offline){state.geo[addr]=offline;state.geoApprox=state.geoApprox||{};state.geoApprox[addr]=true;save(false);return offline}
-  return null}
+  const resolve=async()=>{
+    const offline=offlineGeo(addr);
+    const controller=typeof AbortController==='function'?new AbortController():null;
+    const timeout=controller?setTimeout(()=>controller.abort(),6000):null;
+    try{
+      const query=precise==='ezer-kada'?'1106 Budapest, Kada utca 149':precise==='proconsul-porcelan'?'1106 Budapest, Porcelán utca 3-9':addr;
+      const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=hu&q='+encodeURIComponent(query),controller?{signal:controller.signal}:{});
+      if(r.ok===false)throw new Error('Geokódolás nem elérhető');
+      const j=await r.json(),point=j[0]&&[+j[0].lat,+j[0].lon];
+      if(point&&point.every(Number.isFinite)){
+        state.geo[addr]=point;state.geoSources[addr]='nominatim';
+        if(state.geoApprox)delete state.geoApprox[addr];
+        save(false);await new Promise(res=>setTimeout(res,1050));return point;
+      }
+    }catch{}finally{if(timeout!==null)clearTimeout(timeout)}
+    if(precise)streetGeoRetryV69.set(precise,Date.now()+60000);
+    if(offline){state.geo[addr]=offline;state.geoApprox=state.geoApprox||{};state.geoApprox[addr]=true;if(precise)state.geoSources[addr]='target-fallback';save(false);return offline}
+    return null;
+  };
+  const pending=resolve();
+  if(precise)streetGeoPendingV69.set(addr,pending);
+  try{return await pending}finally{if(precise)streetGeoPendingV69.delete(addr)}
+}
 function initMaps(){activeVehicles().forEach(v=>{if(maps[v.id])maps[v.id].remove();maps[v.id]=L.map('map-'+v.id).setView([47.45,19.04],9);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(maps[v.id]);drawMap(v.id)})}
 async function roadRoute(pts){if(pts.length<2)return null;try{const c=pts.map(p=>`${p[1]},${p[0]}`).join(';');const r=await fetch(`https://router.project-osrm.org/route/v1/driving/${c}?overview=full&geometries=geojson`);const j=await r.json();return j.routes?.[0]||null}catch{return null}}
 async function drawMap(id){
@@ -622,12 +713,12 @@ function ensureItemId(it){if(!it._id)it._id=uid();return it._id}
 function openItems(id){const o=state.orders.find(x=>x.id===id);if(!o)return;currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);$('#itemsTitle').textContent=`${o.orderNo} · Tételek`;$('#itemMovePanel').innerHTML=`<p><b>Nem kipipált tételek áthelyezése másik napra</b><br>A teljes dátum megadása után a program megerősítést kér, majd automatikusan áthelyezi a tételeket.</p><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Áthelyezés éve"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div>`;$('#itemsBody').innerHTML=(o.items||[]).map((it,i)=>`<div class="item-row ${it.received?'done':''}"><input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${id}',${i},this.checked)"><div><b class="item-name">${esc(it.name)}</b><br>${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)} ${it.longMaterial?'· hosszú szál':''}<label class="item-note-edit">Tétel megjegyzés<textarea placeholder="Nincs megjegyzés" oninput="updateItemNote('${id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label></div></div>`).join('')||'<div class="notice">Nincs tétel.</div>';bindMoveDateParts();if(!$('#itemsDialog').open)$('#itemsDialog').showModal()}
 function bindMoveDateParts(){const y=$('#moveYear'),m=$('#moveMonth'),d=$('#moveDay');[[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next])=>{el.addEventListener('input',()=>{el.value=el.value.replace(/\D/g,'').slice(0,max);if(el.value.length===max&&next){next.focus();next.select()}if(y.value.length===4&&m.value.length===2&&d.value.length===2)setTimeout(moveUncheckedItemsFromDialog,0)});el.addEventListener('change',()=>{if(y.value&&m.value&&d.value)moveUncheckedItemsFromDialog()})})}
 function moveUncheckedItemsFromDialog(){const o=state.orders.find(x=>x.id===currentItemsOrderId);if(!o)return;const y=$('#moveYear')?.value,m=$('#moveMonth')?.value,d=$('#moveDay')?.value;if(!y||!m||!d)return;const target=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`,dt=new Date(target+'T12:00:00');if(isNaN(dt)||localISO(dt)!==target)return alert('Érvénytelen dátum.');if(target===o.scheduleDate)return alert('Az új dátum nem lehet az eredeti nappal azonos.');const moving=(o.items||[]).filter(i=>!i.received);if(!moving.length)return alert('Nincs áthelyezhető, kipipálatlan tétel.');if(!confirm(`${moving.length} kipipálatlan tétel áthelyezése erre a napra: ${target}?`))return;let targetOrder=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===o.orderNo&&x.vehicleId===o.vehicleId&&x.projectName===o.projectName&&x.pickupName===o.pickupName);if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id};state.orders.push(targetOrder)}moving.forEach(it=>{ensureItemId(it);it.received=false;targetOrder.items.push(it);state.backlog.push({id:uid(),sourceOrderId:o.id,targetOrderId:targetOrder.id,itemId:it._id,orderNo:o.orderNo,supplier:o.pickupName,projectName:o.projectName,code:it.code,name:it.name,itemNote:itemNoteValue(it),movedToDate:target,movedAt:new Date().toISOString()})});o.items=(o.items||[]).filter(i=>i.received);o.completed=o.items.length>0&&o.items.every(i=>i.received);$('#itemsDialog').close();save();alert(`Az áthelyezés elkészült: ${moving.length} tétel → ${target}.`)}
-window.openItems=openItems;window.toggleItem=(id,i,val)=>{const o=state.orders.find(x=>x.id===id);if(!o||!o.items?.[i])return;o.items[i].received=val;o.completed=(o.items||[]).length>0&&o.items.every(x=>x.received);save(false);openItems(id);renderRoutes();renderDriver()};window.updateItemNote=(id,i,val)=>{const o=state.orders.find(x=>x.id===id);if(!o||!o.items?.[i])return;o.items[i].itemNote=val;const itemId=ensureItemId(o.items[i]);state.backlog.filter(b=>b.itemId===itemId).forEach(b=>b.itemNote=val);save(false);renderRoutes();renderOrders();renderBacklog()};
+window.openItems=openItems;window.toggleItem=(id,i,val)=>{const o=state.orders.find(x=>x.id===id);if(!o||!o.items?.[i])return;o.items[i].received=val;o.completed=(o.items||[]).length>0&&o.items.every(x=>x.received);save(false);openItems(id);renderRoutes();renderDriver()};window.updateItemNote=(id,i,val)=>{const o=state.orders.find(x=>x.id===id);if(!o||!o.items?.[i])return;const note=String(val??'');const item=o.items[i];item.itemNote=note;const fromUser=isUserCommentSession();if(note.trim()){item.itemNoteAuthorRole=fromUser?'driver':'admin';item.itemNoteUpdatedByRole=item.itemNoteAuthorRole;item.itemNoteUpdatedAt=new Date().toISOString();item.itemNoteCommentAt=item.itemNoteUpdatedAt}else{delete item.itemNoteAuthorRole;delete item.itemNoteUpdatedByRole;delete item.itemNoteUpdatedAt;delete item.itemNoteCommentAt}const itemId=ensureItemId(item);state.backlog.filter(b=>b.itemId===itemId).forEach(b=>b.itemNote=note);save(false);renderRoutes();renderOrders();renderBacklog()};
 function backlogRecordData(b){const o=state.orders.find(x=>x.id===b.targetOrderId),it=o?.items?.find(i=>i._id===b.itemId);return{...b,orderNo:o?.orderNo||b.orderNo,supplier:o?.pickupName||b.supplier,projectName:o?.projectName||b.projectName,code:it?.code||b.code,name:it?.name||b.name,itemNote:it?itemNoteValue(it):b.itemNote,movedToDate:o?.scheduleDate||b.movedToDate,targetOrderId:o?.id||b.targetOrderId}}
 function renderBacklog(){const q=norm($('#backlogSearch')?.value||''),rows=(state.backlog||[]).map(backlogRecordData).filter(b=>!q||norm(Object.values(b).join(' ')).includes(q));if($('#backlogBody'))$('#backlogBody').innerHTML=rows.map(b=>`<tr class="backlog-row" onclick="openBacklogResult('${b.targetOrderId}','${b.movedToDate}')"><td>${esc(b.orderNo)}</td><td>${esc(b.supplier)}</td><td>${esc(b.projectName)}</td><td>${esc(b.code)}</td><td>${esc(b.name)}</td><td>${esc(b.itemNote)}</td><td>${esc(b.movedToDate)}</td></tr>`).join('')||'<tr><td colspan="7">Nincs találat.</td></tr>'}
 window.openBacklogResult=(id,date)=>{const o=state.orders.find(x=>x.id===id);$('#workDate').value=o?.scheduleDate||date;showPage('planner');render();setTimeout(()=>{const el=document.querySelector(`.bubble[data-id="${id}"]`);if(el){el.classList.add('search-highlight');el.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>el.classList.remove('search-highlight'),7000)}},180)};
-function openCamera(id){const o=state.orders.find(x=>x.id===id);$('#cameraOrderId').value=id;$('#cameraTitle').textContent=`${o.orderNo} · Szállítólevél`;$('#cameraPreview').innerHTML='';$('#cameraNote').value='';$('#cameraInput').value='';$('#cameraDialog').showModal()}
-window.openCamera=openCamera;$('#cameraInput').onchange=e=>{$('#cameraPreview').innerHTML=[...e.target.files].map(f=>`<img src="${URL.createObjectURL(f)}">`).join('')};$('#cameraForm').onsubmit=e=>{e.preventDefault();const o=state.orders.find(x=>x.id===$('#cameraOrderId').value);o.deliveryReports=o.deliveryReports||[];o.deliveryReports.push({at:new Date().toISOString(),note:$('#cameraNote').value,photoCount:$('#cameraInput').files.length,hasAudio:!!audioBlob});$('#cameraDialog').close();save();alert('A fotó és megjegyzés helyben rögzítve.')};
+function openCamera(id){const o=state.orders.find(x=>x.id===id);if(!o)return;window.V69DeliveryCamera?.reset();window.markUserCommentRead?.(id);$('#cameraOrderId').value=id;$('#cameraTitle').textContent=`${o.orderNo} · Szállítólevél`;$('#cameraPreview').innerHTML='';$('#cameraNote').value='';$('#cameraInput').value='';$('#cameraDialog').showModal()}
+window.openCamera=openCamera;$('#chooseCameraFile').onclick=()=>$('#cameraInput').click();$('#cameraInput').onchange=e=>{$('#cameraPreview').innerHTML=[...e.target.files].map(f=>`<img src="${URL.createObjectURL(f)}">`).join('')};$('#cameraForm').onsubmit=e=>{e.preventDefault();const o=state.orders.find(x=>x.id===$('#cameraOrderId').value);o.deliveryReports=o.deliveryReports||[];o.deliveryReports.push({at:new Date().toISOString(),note:$('#cameraNote').value,photoCount:(window.V69DeliveryCamera?.files()||[...$('#cameraInput').files]).length,hasAudio:!!audioBlob});$('#cameraDialog').close();save();alert('A fotó és megjegyzés helyben rögzítve.')};
 function editVehicle(id){const v=state.vehicles.find(x=>x.id===id)||{};$('#vehicleTitle').textContent=v.id?'Jármű szerkesztése':'Új jármű';$('#editVehicleId').value=v.id||'';$('#driverName').value=v.driverName||'';$('#vehicleName').value=v.name||'';$('#vehicleType').innerHTML=VEHICLE_TYPES.map(t=>option(t,t,v.type)).join('');$('#homeCity').value=v.homeCity||'';$('#vehicleActive').checked=v.active!==false;$('#vehicleDialog').showModal()}
 window.editVehicle=editVehicle;$('#vehicleForm').onsubmit=e=>{e.preventDefault();const id=$('#editVehicleId').value,v={id:id||uid(),driverName:$('#driverName').value,name:$('#vehicleName').value,type:$('#vehicleType').value,homeCity:$('#homeCity').value,active:$('#vehicleActive').checked};const i=state.vehicles.findIndex(x=>x.id===id);if(i>=0)state.vehicles[i]=v;else state.vehicles.push(v);$('#vehicleDialog').close();save()}
 function masterFields(){if(masterType==='projects')return[['name','Projekt neve'],['address','Cím'],['defaultRecipientId','Alap átvevő']];if(masterType==='suppliers')return[['name','Cégnév'],['site','Telephely'],['address','Cím'],['pickupNote','Felrakói megjegyzés'],['isCentral','Központi telephely']];return[['project','Projekt'],['name','Átvevő neve'],['phone','Telefon'],['email','E-mail']]}
@@ -660,20 +751,40 @@ function buildDriverWorkbook(rows){const wb=XLSX.utils.book_new(),main=[['Járm�
      F Rendelésszám   G "Projekt:"   H Projekt neve   I "Cím:"
      J Projekt címe   K "Megjegyzés:"   L Megjegyzés   M Átvevő
 
-   A G, I és K oszlop állandó felirat, ahogy a sablonban. A Sorrend oszlop
-   üresen marad – a sablonban is csak elvétve van kitöltve.
-
-   Rendezés: felrakó neve, azon belül projekt neve – ez a sablon sorrendje,
-   így a beillesztés a meglévő sorok közé illeszkedik. */
+   A G, I és K oszlop állandó felirat, ahogy a sablonban.
+   V69: a Sorrend az alkalmazás felrakóblokkjának sorszáma. Egy felrakó
+   minden rendelése ugyanazt a számot kapja, sofőrönként 1-től indulva.
+   A sorok a felületen látható sofőr- és felrakósorrendet követik. */
 const EXPORT_HEADERS_V63 = ['Dátum','Sorrend',' ','Felrakó','Felrakó címe','Rendelésszám',
   'mj1','Projekt neve','mj2','Projekt címe','mj3','Megjegyzés','Átvevő'];
 
+function exportNumberedOrdersV69(date){
+  const orders = state.orders.filter(order => order.scheduleDate === date);
+  const vehicles = activeVehicles();
+  const activeIds = new Set(vehicles.map(vehicle => vehicle.id));
+  const numbered = [];
+  for(const vehicle of vehicles){
+    const list = orders.filter(order => order.vehicleId === vehicle.id)
+      .sort((a,b) => (+a.sequence || 999) - (+b.sequence || 999));
+    // Ugyanaz a csoportosítás adja a főoldal és a Nézet sorszámait is.
+    const units = window.V37Planner.focusPickupUnits(list);
+    units.forEach((unit,index) => unit.allPickupOrders.forEach(order => {
+      numbered.push({ order, driver: vehicle.driverName, sequence: index + 1 });
+    }));
+  }
+  // A kiosztatlan / inaktív járműhöz tartozó fuvarok is megmaradnak az
+  // exportban; alkalmazásbeli felrakósorszámuk még nincs.
+  for(const order of orders.filter(order => !activeIds.has(order.vehicleId))){
+    numbered.push({ order, driver: '', sequence: '' });
+  }
+  return numbered;
+}
+
 function exportRowsV63(date){
-  const byId = Object.fromEntries(activeVehicles().map(v => [v.id, v.driverName]));
-  return state.orders
-    .filter(o => o.scheduleDate === date)
-    .map(o => ({
-      driver: byId[o.vehicleId] || '',
+  return exportNumberedOrdersV69(date)
+    .map(({order:o,driver,sequence}) => ({
+      driver,
+      sequence,
       pickup: o.pickupName || '',
       pickupAddress: o.pickupAddress || '',
       orderNo: o.orderNo || '',
@@ -681,8 +792,7 @@ function exportRowsV63(date){
       dropAddress: o.dropAddress || '',
       note: o.note || '',
       recipient: [o.recipientName, o.recipientPhone].filter(Boolean).join(' ')
-    }))
-    .sort((a,b) => a.pickup.localeCompare(b.pickup,'hu') || a.project.localeCompare(b.project,'hu'));
+    }));
 }
 
 function exportExcel(){
@@ -694,7 +804,7 @@ function exportExcel(){
     [dateValue, '', '', '', '', '', '', '', '', '', '', '', ''],
     [], [],
     EXPORT_HEADERS_V63,
-    ...rows.map(r => [dateValue, '', r.driver, r.pickup, r.pickupAddress, r.orderNo,
+    ...rows.map(r => [dateValue, r.sequence, r.driver, r.pickup, r.pickupAddress, r.orderNo,
       'Projekt:', r.project, 'Cím:', r.dropAddress, 'Megjegyzés:', r.note, r.recipient])
   ];
   const sheet = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
@@ -703,7 +813,7 @@ function exportExcel(){
   XLSX.utils.book_append_sheet(book, sheet, 'Fuvarok');
   XLSX.writeFile(book, `Szallitasok_${date}.xlsx`);
 }
-function exportPdf(){const date=selectedDate(),groups=activeVehicles().map(v=>({v,rows:state.orders.filter(o=>o.scheduleDate===date&&o.vehicleId===v.id)})).filter(g=>g.rows.length);if(!groups.length)return alert('Az aktuális napon nincs exportálható fuvar.');groups.forEach((g,i)=>setTimeout(()=>{const{jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape'});doc.text(`${g.v.driverName} fuvarjai - ${date}`,14,14);doc.autoTable({startY:20,head:[['#','Rendelés','Felrakó','Lerakó','Átvevő','Megjegyzés','Tétel megjegyzések']],body:g.rows.map(o=>[o.sequence,o.orderNo,`${o.pickupName}\n${o.pickupAddress}`,`${o.projectName}\n${o.dropAddress}`,`${o.recipientName||''}\n${o.recipientPhone||''}`,o.note||'',(o.items||[]).map((it,n)=>itemNoteValue(it)?`${n+1}. ${itemNoteValue(it)}`:'').filter(Boolean).join('\n')]),styles:{fontSize:6.5}});doc.save(`${date}_${safeFilePart(g.v.driverName)}.pdf`)},i*350))}
+function exportPdf(){const date=selectedDate(),numbered=exportNumberedOrdersV69(date),groups=activeVehicles().map(v=>({v,rows:numbered.filter(row=>row.order.vehicleId===v.id)})).filter(g=>g.rows.length);if(!groups.length)return alert('Az aktuális napon nincs exportálható fuvar.');groups.forEach((g,i)=>setTimeout(()=>{const{jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape'});doc.text(`${g.v.driverName} fuvarjai - ${date}`,14,14);doc.autoTable({startY:20,head:[['#','Rendelés','Felrakó','Lerakó','Átvevő','Megjegyzés','Tétel megjegyzések']],body:g.rows.map(({order:o,sequence})=>[sequence,o.orderNo,`${o.pickupName}\n${o.pickupAddress}`,`${o.projectName}\n${o.dropAddress}`,`${o.recipientName||''}\n${o.recipientPhone||''}`,o.note||'',(o.items||[]).map((it,n)=>itemNoteValue(it)?`${n+1}. ${itemNoteValue(it)}`:'').filter(Boolean).join('\n')]),styles:{fontSize:6.5}});doc.save(`${date}_${safeFilePart(g.v.driverName)}.pdf`)},i*350))}
 function exportMenu(){const t=prompt('Export: excel vagy pdf','excel');if(norm(t).startsWith('p'))exportPdf();else exportExcel()}
 function backup(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='fuvarszervezo-v11-telefonra.json';a.click()}
 function restoreFile(file){const r=new FileReader();r.onload=()=>{try{const incoming=JSON.parse(r.result),mode=confirm('OK = összevonás, Mégse = teljes csere')?'merge':'replace';if(mode==='replace')state=incoming;else{state.orders=[...state.orders,...(incoming.orders||[]).filter(x=>!state.orders.some(y=>y.id===x.id))];state.projects=[...state.projects,...(incoming.projects||[]).filter(x=>!state.projects.some(y=>norm(y.name)===norm(x.name)))];state.suppliers=[...state.suppliers,...(incoming.suppliers||[]).filter(x=>!state.suppliers.some(y=>norm(y.name)===norm(x.name)&&norm(y.address)===norm(x.address)))];state.recipients=[...state.recipients,...(incoming.recipients||[]).filter(x=>!state.recipients.some(y=>norm(y.name)===norm(x.name)&&norm(y.project)===norm(x.project)))]}save();alert('Adatok betöltve.')}catch(e){alert('Hibás mentési fájl.')}};r.readAsText(file)}
@@ -744,7 +854,7 @@ function render(){applyAfterFourRule();renderRoutes();renderOrders();renderBackl
 
 function bubbles(list){
   if(!list.length)return'<div class="notice">Nincs fuvar.</div>';
-  return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')} · ${esc(o.pickupAddress||'')}</p><p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs megadva')}</p>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button><button class="secondary" onclick="openMediaGallery('${o.id}')">📎 Mentett fotók</button><button class="failed-button" onclick="failOrderToTomorrow('${o.id}')">Nem teljesült – következő munkanapra</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('')
+  return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}${userCommentClass(o)}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')} · ${esc(o.pickupAddress||'')}</p><p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs megadva')}</p>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button><button class="secondary" onclick="openMediaGallery('${o.id}')">📎 Mentett fotók</button><button class="failed-button" onclick="failOrderToTomorrow('${o.id}')">Nem teljesült – következő munkanapra</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('')
 }
 
 async function drawMap(id){
@@ -770,7 +880,7 @@ async function drawMap(id){
 function numericQty(v){const n=parseFloat(String(v??'').replace(',','.').replace(/[^0-9.-]/g,''));return Number.isFinite(n)?n:0}
 function formatQty(v){return Number.isInteger(v)?String(v):String(Math.round(v*1000)/1000).replace('.',',')}
 function openItems(id){
-  const o=state.orders.find(x=>x.id===id);if(!o)return;currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);
+  const o=state.orders.find(x=>x.id===id);if(!o)return;window.markUserCommentRead?.(id);currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);
   $('#itemsTitle').textContent=`${o.orderNo} · Tételek`;
   $('#itemMovePanel').innerHTML=`<p><b>Nem kipipált tételek áthelyezése másik napra</b><br>Írd be a következő felvétel dátumát. A hiányzó darabszám kerül át; üres mező esetén a teljes rendelt mennyiség.</p><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN"></div>`;
   $('#itemsBody').innerHTML=(o.items||[]).map((it,i)=>`<div class="item-row ${it.received?'done':''}"><input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${id}',${i},this.checked)"><div><b class="item-name">${esc(it.name)}</b><br>${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)} ${it.longMaterial?'· hosszú szál':''}<div class="missing-qty-wrap ${it.received?'hidden':''}"><label>Nem kaptam meg – mennyiség<input type="number" min="0" step="any" placeholder="Üres = teljes mennyiség" value="${esc(it.missingQty||'')}" oninput="updateMissingQty('${id}',${i},this.value)"></label><small>Áthelyezéskor ez a mennyiség kerül a következő napra és a Hátralékba.</small></div><label class="item-note-edit">Tétel megjegyzés<textarea placeholder="Nincs megjegyzés" oninput="updateItemNote('${id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label></div></div>`).join('')||'<div class="notice">Nincs tétel.</div>';
@@ -979,7 +1089,7 @@ function bindV21MoveDateParts(){
   update();
 }
 function openItems(id){
-  const o=state.orders.find(x=>x.id===id);if(!o)return;currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);
+  const o=state.orders.find(x=>x.id===id);if(!o)return;window.markUserCommentRead?.(id);currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);
   $('#itemsTitle').textContent=`${o.orderNo} · Tételek`;
   $('#itemMovePanel').innerHTML=`<div class="move-controls"><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Alapértelmezett áthelyezési év"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div><button id="applyMoveDateAll" class="move-items-btn" type="button" title="Minden kipipálatlan tétel áthelyezése a fenti napra">Mindet erre a napra</button></div>`;
   const itemRowsHtml=((o.items||[]).length?`<div class="item-grid-head"><span></span><span>Tétel</span><span>Hiányzik</span><span>Hátralék napja</span></div>`:'')+(o.items||[]).map((it,i)=>{
@@ -1002,8 +1112,8 @@ function openItems(id){
     return `<div class="item-row item-grid ${it.received?'done':''} ${open?'shortage':''}">
       <input type="checkbox" ${it.received?'checked':''} title="Hiánytalanul megkapta" onchange="toggleItem('${o.id}',${i},this.checked)" aria-label="Hiánytalanul megkapta">
       <div class="item-main">
-        <b class="item-name">${esc(it.name)}</b>
-        <div class="item-sub">${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)}${it.longMaterial?' · hosszú szál':''}${rec?` · <span class="item-moved">áthelyezve ${esc(rec.movedToDate)}</span>`:''}</div>
+        <b class="item-name">${esc(it.description||it.productName||it.name||'Tétel')}</b>
+        <div class="item-sub"><span class="v56-item-code">${esc(it.code||'Cikkszám nélkül')}</span> · ${esc(it.qty)} ${esc(it.unit)}${it.longMaterial?' · hosszú szál':''}${rec?` · <span class="item-moved">áthelyezve ${esc(rec.movedToDate)}</span>`:''}</div>
         <label class="item-note-edit"><textarea placeholder="Tétel megjegyzés" oninput="updateItemNote('${o.id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label>
       </div>
       ${qtyCell}
@@ -1016,8 +1126,8 @@ function openItems(id){
   const manualNote=String(o.manualItems||'').trim();
   const noteBlock=manualNote?`<div class="v65-manual-note"><b>Megjegyzés:</b> ${esc(manualNote)}</div>`:'';
   const emptyBlock=((o.items||[]).length||manualNote)?'':'<div class="notice">Nincs tétel.</div>';
-  $('#itemsBody').innerHTML=noteBlock+itemRowsHtml+emptyBlock;
-  bindV21MoveDateParts();if(!$('#itemsDialog').open)$('#itemsDialog').showModal()
+  $('#itemsBody').innerHTML=noteBlock+`<div class="item-attachments-toolbar"><button type="button" class="secondary item-pdf-button" onclick="openOrderPdfAttachments('${o.id}')">PDF mellékletek megnyitása</button><div id="itemAttachments" class="item-attachments"><small>Mellékletek betöltése…</small></div></div>`+itemRowsHtml+emptyBlock;
+  bindV21MoveDateParts();if(!$('#itemsDialog').open)$('#itemsDialog').showModal(); if(window.renderOrderPdfAttachments) window.renderOrderPdfAttachments([o.id],'itemAttachments')
 }
 window.openItems=openItems;
 
@@ -1477,7 +1587,7 @@ function masterWarnings(o){
 }
 function bubbles(list){
   if(!list.length)return'<div class="notice">Nincs fuvar.</div>';
-  return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3>${masterWarnings(o)}<div class="master-highlight"><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')}<br>${supplierAddressSelect(o)}</div><div class="master-highlight drop-highlight"><b>Lerakó:</b> ${esc(o.projectName||'Egyedi úticél')}<br><span class="master-address-value">${esc(o.dropAddress||'Nincs megadva')}</span></div>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button><button class="secondary" onclick="openMediaGallery('${o.id}')">📎 Mentett fotók</button><button class="failed-button" onclick="failOrderToTomorrow('${o.id}')">Nem teljesült – következő munkanapra</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('');
+  return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}${userCommentClass(o)}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3>${masterWarnings(o)}<div class="master-highlight"><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')}<br>${supplierAddressSelect(o)}</div><div class="master-highlight drop-highlight"><b>Lerakó:</b> ${esc(o.projectName||'Egyedi úticél')}<br><span class="master-address-value">${esc(o.dropAddress||'Nincs megadva')}</span></div>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button><button class="secondary" onclick="openMediaGallery('${o.id}')">📎 Mentett fotók</button><button class="failed-button" onclick="failOrderToTomorrow('${o.id}')">Nem teljesült – következő munkanapra</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('');
 }
 
 async function drawMap(id){

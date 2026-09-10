@@ -599,3 +599,38 @@ input,select,textarea{border-color:#d7e2ee;border-radius:10px}
  #planner.active .map{height:230px;min-height:230px;flex-basis:230px}
  #planner.active .route-list{scrollbar-color:var(--driver-border) transparent}
 }
+
+/* V69 — item attachments, readable PDF descriptions, separated controls. */
+.v56-row{gap:8px;flex-wrap:wrap}
+.v56-items-btn,.v56-mail-btn{flex:0 0 auto;min-height:32px;white-space:nowrap;position:relative;z-index:2}
+.v56-mail-btn{margin-left:2px;border:1px solid #c8d8e6!important}
+.v56-items{padding-bottom:12px}
+.v56-item-row>span:first-child{display:flex;flex-direction:column;gap:2px;min-width:0}
+.v56-item-code{font-size:11px;color:#6b7d8d;font-weight:750;letter-spacing:.02em}
+.v56-item-description{font-size:13px;color:#202a34;line-height:1.35}
+.v56-pdf-button{margin-top:10px;padding:8px 11px;font-size:12px;background:#e8f1f8;color:#1d587d;border:1px solid #c8dce9}
+.item-attachments-toolbar{margin:0 0 12px;padding:10px 12px;background:#f3f7fb;border:1px solid #dce8f2;border-radius:10px}
+.item-pdf-button{margin-bottom:8px;font-size:12px}
+.item-attachments{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.item-attachments-title{width:100%;font-size:12px;font-weight:750;color:#526b80}
+.item-pdf-link{font-size:12px;padding:7px 10px}
+@media(max-width:700px){.v56-row{display:grid;grid-template-columns:30px 24px minmax(0,1fr);gap:7px}.v56-row .v56-main{min-width:0}.v56-row .v56-items-btn,.v56-row .v56-mail-btn{grid-column:3;width:100%;margin:0}.v56-row .v56-mail-btn{margin-top:-2px}}
+
+/* V69 — webkamera és fájlválasztás a szállítólevélhez. */
+.camera-file-input{display:none!important}
+.delivery-camera-actions{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.delivery-camera-actions>button{flex:1 1 180px}
+.delivery-camera-live video{display:block;width:100%;max-height:42vh;object-fit:contain;background:#152737;border-radius:12px}
+.delivery-file-preview{min-width:0;margin:0;display:flex;flex-direction:column;gap:5px}
+.delivery-file-preview a{display:block;overflow-wrap:anywhere}
+.delivery-file-preview button{font-size:11px;padding:7px}
+.delivery-pdf-preview{display:grid!important;place-items:center;aspect-ratio:1;border:1px solid #c8dce9;border-radius:12px;background:#e8f1f8;color:#1d587d;padding:10px;font-size:12px}
+#chooseCameraFile{display:block;width:100%;cursor:pointer}
+@media(min-width:1024px){#chooseCameraFile{background:#e8f1f8;color:#1d587d;border:1px solid #c8dce9}}
+
+/* V69 — user-megjegyzés értesítő a fuvarbuborékon. */
+.user-comment-unread{position:relative!important;border-color:#e2a52b!important;box-shadow:0 0 0 3px #ffd66a99,0 9px 24px #a66b162b!important}
+.user-comment-unread::after{content:'Új user-megjegyzés';position:absolute;top:8px;right:10px;padding:4px 8px;border-radius:999px;background:#f5b82e;color:#4d3200;font-size:10px;font-weight:850;letter-spacing:.01em;pointer-events:none}
+.v56-row.user-comment-unread{position:relative;border:2px solid #e2a52b!important;background:#fffaf0!important}
+.mobile-user-row.user-comment-unread{border:2px solid #e2a52b!important;background:#fffaf0!important}
+@media(max-width:560px){.user-comment-unread::after{top:7px;right:7px;font-size:9px}.v57-row-title{padding-right:112px}}

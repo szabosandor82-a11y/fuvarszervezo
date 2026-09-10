@@ -577,14 +577,36 @@
   function v33OpenGroupItems(idsCsv) {
     const orders = idsCsv.split(',').map(id => state.orders.find(order => order.id === id)).filter(Boolean);
     if (!orders.length) return;
+    // Egyetlen rendelésnél ugyanazt a részletes ablakot használjuk, mint a
+    // főoldalon és a sofőri felületen. Így a tételleírás, a hiány/dátum mezők,
+    // a megjegyzés és a PDF-csatolmány minden belépési ponton azonos.
+    if (orders.length === 1 && typeof global.openItems === 'function') {
+      global.openItems(orders[0].id);
+      return;
+    }
+    orders.forEach(order => global.markUserCommentRead?.(order.id));
     currentItemsOrderId = orders[0].id;
     document.querySelector('#itemsTitle').textContent = `${orders.length} rendelés · tételek`;
     document.querySelector('#itemMovePanel').innerHTML = '<p>A tételek rendelési számonként elkülönítve láthatók. Dátumos áthelyezéshez nyisd meg az adott rendelést külön.</p>';
-    document.querySelector('#itemsBody').innerHTML = orders.map(order => {
+    const pdfIds = orders.map(order => order.id).join(',');
+    document.querySelector('#itemsBody').innerHTML = `<div class="item-attachments-toolbar"><button type="button" class="secondary item-pdf-button" onclick="openOrderPdfAttachments('${escHtml(pdfIds)}')">PDF mellékletek megnyitása</button><div id="groupItemAttachments" class="item-attachments"><small>Mellékletek betöltése…</small></div></div>` + orders.map(order => {
       (order.items || []).forEach(item => typeof ensureItemId === 'function' && ensureItemId(item));
-      return `<section class="group-order-section"><div class="group-order-head"><div><b>Rendelés: ${escHtml(order.orderNo || 'Nincs szám')}</b><small>${escHtml(order.pickupName || '')} → ${escHtml(order.projectName || order.dropAddress || '')}</small></div><button type="button" class="secondary" onclick="openItems('${escHtml(order.id)}')">Megnyitás külön</button></div>${(order.items || []).map((item, index) => `<div class="item-row ${item.received ? 'done' : ''}"><input type="checkbox" ${item.received ? 'checked' : ''} onchange="toggleItem('${escHtml(order.id)}',${index},this.checked)"><div><b class="item-name">${escHtml(item.name)}</b><br>${escHtml(item.code)} · ${escHtml(item.qty)} ${escHtml(item.unit)} ${item.longMaterial ? '· hosszú szál' : ''}<div class="missing-qty-wrap ${item.received ? 'hidden' : ''}"><label>Nem kaptam meg – mennyiség<input class="missing-qty-input" type="number" min="0" step="any" value="${escHtml(item.missingQty || '')}" oninput="updateMissingQty('${escHtml(order.id)}',${index},this.value)"></label></div><label class="item-note-edit">Tétel megjegyzés<textarea placeholder="Nincs megjegyzés" oninput="updateItemNote('${escHtml(order.id)}',${index},this.value)">${escHtml(typeof itemNoteValue === 'function' ? itemNoteValue(item) : item.itemNote || '')}</textarea></label></div></div>`).join('') || '<div class="notice">Nincs tétel.</div>'}</section>`;
+      const rows = (order.items || []).map((item, index) => {
+        const record = typeof backlogRecordForItem === 'function' ? backlogRecordForItem(order.id, item._id) : null;
+        const shortage = !!record || item.shortageOpen === true || (item.missingQty !== '' && item.missingQty != null);
+        const open = !item.received && shortage;
+        const qtyCell = open
+          ? `<div class="item-qty-cell"><input class="missing-qty-input" type="number" min="0" step="any" placeholder="mind" aria-label="Nem kapott mennyiség" value="${escHtml(item.missingQty || '')}" oninput="updateMissingQty('${escHtml(order.id)}',${index},this.value)"><span class="item-qty-unit">${escHtml(item.unit || '')} · rendelt: ${escHtml(item.qty)}</span></div>`
+          : (item.received ? '<span class="item-dash">—</span>' : `<button type="button" class="item-shortage-btn" onclick="openShortage('${escHtml(order.id)}','${escHtml(item._id)}')">Hiányzik</button>`);
+        const dateCell = open
+          ? `<div class="item-date-cell"><input type="date" class="item-move-date-input" value="${escHtml(item.moveTargetDate || record?.movedToDate || '')}" aria-label="Hátralék napja" onchange="${record ? `rescheduleMovedItem('${escHtml(order.id)}','${escHtml(item._id)}',this.value)` : `setItemMoveDate('${escHtml(order.id)}','${escHtml(item._id)}',this.value)`}">${record ? `<button type="button" class="item-undo" title="Áthelyezés visszavonása" onclick="undoBacklogMove('${escHtml(order.id)}','${escHtml(item._id)}')">Vissza</button>` : `<button type="button" class="item-undo" title="Mégsem hiányzik" onclick="closeShortage('${escHtml(order.id)}','${escHtml(item._id)}')">Mégsem</button>`}</div>`
+          : '<span class="item-dash">—</span>';
+        return `<div class="item-row item-grid ${item.received ? 'done' : ''} ${open ? 'shortage' : ''}"><input type="checkbox" ${item.received ? 'checked' : ''} title="Hiánytalanul megkapta" onchange="toggleItem('${escHtml(order.id)}',${index},this.checked)"><div class="item-main"><b class="item-name">${escHtml(item.description || item.productName || item.name || 'Tétel')}</b><div class="item-sub"><span class="v56-item-code">${escHtml(item.code || 'Cikkszám nélkül')}</span> · ${escHtml(item.qty)} ${escHtml(item.unit)}${item.longMaterial ? ' · hosszú szál' : ''}</div><label class="item-note-edit"><textarea placeholder="Tétel megjegyzés" oninput="updateItemNote('${escHtml(order.id)}',${index},this.value)">${escHtml(typeof itemNoteValue === 'function' ? itemNoteValue(item) : item.itemNote || '')}</textarea></label></div>${qtyCell}${dateCell}</div>`;
+      }).join('');
+      return `<section class="group-order-section"><div class="group-order-head"><div><b>Rendelés: ${escHtml(order.orderNo || 'Nincs szám')}</b><small>${escHtml(order.pickupName || '')} → ${escHtml(order.projectName || order.dropAddress || '')}</small></div><button type="button" class="secondary" onclick="openItems('${escHtml(order.id)}')">Megnyitás külön</button></div>${rows ? `<div class="item-grid-head"><span></span><span>Tétel</span><span>Hiányzik</span><span>Hátralék napja</span></div>${rows}` : '<div class="notice">Nincs tétel.</div>'}</section>`;
     }).join('');
     if (!document.querySelector('#itemsDialog').open) document.querySelector('#itemsDialog').showModal();
+    if (typeof global.renderOrderPdfAttachments === 'function') global.renderOrderPdfAttachments(orders.map(order => order.id), 'groupItemAttachments');
   }
 
   async function v33FinalizeImport() {

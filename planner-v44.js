@@ -1037,10 +1037,16 @@
     sorrended az érvényes. Ezért a térkép a rendelések aktuális sequence
     értékéből épül, és nem futtatjuk újra a lánc-optimalizálót.
   */
-  async function buildManualRouteV55(vehicle) {
+  function mapRouteSnapshotV69(vehicleId, date = selectedDate()) {
+    return JSON.stringify((state.orders || []).filter(order => order.scheduleDate === date && order.vehicleId === vehicleId)
+      .map(order => [order.id,order.pickupName,order.pickupAddress,order.sequence,order.backlogResolved,order.completed]));
+  }
+
+  async function buildManualRouteV55(vehicle, date = selectedDate()) {
     if (!vehicle) return [];
-    const orders = (typeof dayOrders === 'function' ? dayOrders(vehicle.id) : [])
-      .slice()
+    const snapshot = mapRouteSnapshotV69(vehicle.id, date);
+    const orders = (state.orders || [])
+      .filter(order => order.scheduleDate === date && order.vehicleId === vehicle.id)
       .filter(order => !(global.V37Planner?.isResolvedBacklogOrder?.(order)))
       .sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
     const events = [];
@@ -1050,8 +1056,8 @@
       const key = `${nrm(order.pickupName || '')}|${canonicalAddress(address)}`;
       let event = byStop.get(key);
       if (!event) {
-        const point = state.geo?.[canonicalAddress(address)] || state.geo?.[address]
-          || (typeof geo === 'function' ? await geo(address) : null);
+        const point = typeof geo === 'function' ? await geo(address)
+          : state.geo?.[canonicalAddress(address)] || state.geo?.[address];
         event = {
           type: 'pickup',
           name: order.pickupName || 'Felrakó',
@@ -1064,10 +1070,69 @@
       }
       event.orders.push(order.id);
     }
-    state.routePlans = state.routePlans || {};
-    state.routePlans[selectedDate()] = state.routePlans[selectedDate()] || {};
-    state.routePlans[selectedDate()][vehicle.id] = events;
+    if (snapshot === mapRouteSnapshotV69(vehicle.id, date)) {
+      state.routePlans = state.routePlans || {};
+      state.routePlans[date] = state.routePlans[date] || {};
+      state.routePlans[date][vehicle.id] = events;
+    }
     return events;
+  }
+
+  function currentMapOrdersV55(vehicleId) {
+    return (state.orders || []).filter(order => order.scheduleDate === selectedDate()
+      && order.vehicleId === vehicleId
+      && !(global.V37Planner?.isResolvedBacklogOrder?.(order)));
+  }
+
+  function routePlanNeedsRefreshV55(vehicleId, events) {
+    const pickups = (Array.isArray(events) ? events : []).filter(event => event?.type === 'pickup');
+    const orders = currentMapOrdersV55(vehicleId);
+    const currentIds = new Set(orders.map(order => String(order.id)));
+    const eventIds = new Set(pickups.flatMap(event => Array.isArray(event.orders) ? event.orders.map(id => String(id)) : []));
+    if (currentIds.size !== eventIds.size) return true;
+    for (const id of currentIds) if (!eventIds.has(id)) return true;
+    const byId = new Map(orders.map(order => [String(order.id), order]));
+    for (const event of pickups) {
+      const linked = (event.orders || []).map(id => byId.get(String(id)));
+      if (!linked.length || linked.some(order => !order
+        || canonicalAddress(event.address || '') !== canonicalAddress(order.pickupAddress || ''))) return true;
+    }
+    return false;
+  }
+
+  async function refreshPickupEventsV55(vehicleId, events) {
+    const orders = currentMapOrdersV55(vehicleId);
+    const byId = new Map(orders.map(order => [String(order.id), order]));
+    const refreshed = [];
+    let changed = false;
+    for (const event of (Array.isArray(events) ? events : []).filter(item => item?.type === 'pickup')) {
+      const linked = (event.orders || []).map(id => byId.get(String(id))).find(Boolean);
+      if (!linked) { changed = true; continue; }
+      const address = linked.pickupAddress || '';
+      const point = typeof geo === 'function' ? await geo(address) : event.point;
+      if (canonicalAddress(event.address || '') !== canonicalAddress(address)
+        || event.name !== (linked.pickupName || event.name)
+        || (finitePoint(event.point) && !finitePoint(point))
+        || (finitePoint(point) && (!finitePoint(event.point) || +event.point[0] !== +point[0] || +event.point[1] !== +point[1]))) changed = true;
+      refreshed.push({ ...event, address, name: linked.pickupName || event.name || 'Felrakó',
+        point: finitePoint(point) ? point.slice() : null });
+    }
+    return { events: refreshed, changed };
+  }
+
+  // Azonos (pl. csak kerületre becsült) koordinátánál minden szám külön
+  // látszik. Csak az ikonokat toljuk el képpontokkal, a földrajzi pontot nem.
+  function mapMarkerLayoutV69(events) {
+    const located = events.map((event,index) => ({ event, number: index + 1 }))
+      .filter(item => finitePoint(item.event.point));
+    const key = item => item.event.point.map(value => +value).join(',');
+    const groups = groupBy(located, key);
+    return located.map(item => {
+      const peers = groups.get(key(item));
+      const angle = 2 * Math.PI * peers.indexOf(item) / peers.length;
+      const radius = peers.length > 1 ? Math.max(22, peers.length * 6) : 0;
+      return { ...item, iconAnchor: [16 - Math.cos(angle) * radius, 16 - Math.sin(angle) * radius] };
+    });
   }
 
   // A csúszkás átrendezés után hívandó: az érintett sofőrök térképe azonnal
@@ -1217,36 +1282,58 @@
     return true;
   }
 
+  const mapDrawsV69 = new WeakMap();
+  const mapLayersV69 = new WeakMap();
   async function drawMapV49(vehicleId) {
     if (typeof document === 'undefined' || typeof maps === 'undefined' || !global.L) return;
     const map = maps[vehicleId];
     if (!map) return;
+    const date = selectedDate(), snapshot = mapRouteSnapshotV69(vehicleId, date);
+    const token = {};
+    mapDrawsV69.set(map, token);
+    const isCurrent = () => maps[vehicleId] === map && selectedDate() === date
+      && mapDrawsV69.get(map) === token && snapshot === mapRouteSnapshotV69(vehicleId, date);
     const vehicle = (state.vehicles || []).find(item => item.id === vehicleId);
     // A lakhely CSAK rejtett viszonyítási pont a sorrendhez. A térképen nem
     // jelenik meg, és a vonal az első felrakótól indul.
     let events = (state.routePlans?.[selectedDate()]?.[vehicleId] || []).filter(event => event.type === 'pickup');
-    if (!events.length && (state.orders || []).some(order => order.scheduleDate === selectedDate() && order.vehicleId === vehicleId)) {
+    let rebuilt = false;
+    if (routePlanNeedsRefreshV55(vehicleId, events)) {
+      // A mentett terv régebbi lehet, mint az azóta felvett vagy átírt fuvar.
+      // Ilyenkor a kézi sorrendből építjük újra, különben az új cím nem kerül
+      // fel a térképre.
       // V56: a rajzolás TISZTA OLVASÁS. Korábban itt a lánc-optimalizáló futott,
       // ami újraírta az order.sequence értékeket – ezért állt vissza a kézzel
       // beállított sorrend minden oldalfrissítéskor. A tartalék terv mostantól
       // a meglévő sorszámokból épül, és nem módosít semmit.
-      events = (await buildManualRouteV55(vehicle)).filter(event => event.type === 'pickup');
+      events = (await buildManualRouteV55(vehicle, date)).filter(event => event.type === 'pickup');
+      rebuilt = true;
     }
+    if (!isCurrent()) return;
+    const refreshed = await refreshPickupEventsV55(vehicleId, events);
+    if (!isCurrent()) return;
+    events = refreshed.events;
+    if (rebuilt || refreshed.changed) {
+      state.routePlans = state.routePlans || {};
+      state.routePlans[date] = state.routePlans[date] || {};
+      state.routePlans[date][vehicleId] = events;
+      if (typeof save === 'function') save(false);
+    }
+    for (const layer of mapLayersV69.get(map) || []) map.removeLayer(layer);
+    const layers = [];
+    mapLayersV69.set(map, layers);
     const points = [];
-    let pickupIndex = 0;
-    for (const event of events) {
-      if (!finitePoint(event.point)) continue;
+    for (const {event,number,iconAnchor} of mapMarkerLayoutV69(events)) {
       points.push(event.point);
-      const isPickup = event.type === 'pickup';
-      if (!isPickup) continue;
-      const number = ++pickupIndex;
       const prefix = '';
       const icon = global.L.divIcon({
         className: 'v49-map-marker v49-pickup-marker',
-        html: `<span>${prefix}${number}</span>`, iconSize: [32, 32], iconAnchor: [16, 16]
+        html: `<span>${prefix}${number}</span>`, iconSize: [32, 32], iconAnchor
       });
       const marker = global.L.marker(event.point, { icon, title: `Felrakó: ${event.name || ''}` }).addTo(map);
-      marker.bindPopup(`<b>${number}. Felrakó</b><br>${escapeHtmlV49(event.name)}<br>${escapeHtmlV49(event.address || '')}`);
+      layers.push(marker);
+      const approximate = state.geoApprox?.[event.address] ? '<br><small>Becsült hely · a pontos címfeloldás még nem sikerült.</small>' : '';
+      marker.bindPopup(`<b>${number}. Felrakó</b><br>${escapeHtmlV49(event.name)}<br>${escapeHtmlV49(event.address || '')}${approximate}`);
       marker.on('click', () => scrollToEventBubbleV49(vehicleId, event.orders || []));
     }
     if (points.length === 1) map.setView(points[0], 13);
@@ -1255,11 +1342,13 @@
       if (typeof roadRoute === 'function') {
         try { route = await roadRoute(points); } catch (_) { route = null; }
       }
+      if (!isCurrent()) return;
       if (route?.geometry?.coordinates) coords = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
       const line = global.L.polyline(coords, { weight: 4, opacity: .82 }).addTo(map);
+      layers.push(line);
       map.fitBounds(line.getBounds(), { padding: [20, 20] });
-      state.routeStats = state.routeStats || {}; state.routeStats[selectedDate()] = state.routeStats[selectedDate()] || {};
-      state.routeStats[selectedDate()][vehicleId] = {
+      state.routeStats = state.routeStats || {}; state.routeStats[date] = state.routeStats[date] || {};
+      state.routeStats[date][vehicleId] = {
         km: route ? route.distance / 1000 : points.slice(1).reduce((sum, point, index) => sum + km(points[index], point), 0),
         minutes: route ? route.duration / 60 : 0
       };
@@ -1334,7 +1423,7 @@
 
   function applyVersionLabelV54() {
     if (typeof document === 'undefined') return;
-    const label = 'Fuvarszervező V68';
+    const label = 'Fuvarszervező V69';
     document.title = label;
     document.querySelectorAll('[data-app-version]').forEach(node => { node.textContent = label; });
     const brand = document.querySelector('#brandHome h1');
@@ -1345,7 +1434,7 @@
   // átírhatja a fejlécet. Az első percben visszaállítjuk, ha elcsúszna.
   function guardVersionLabelV55() {
     if (typeof document === 'undefined') return;
-    const label = 'Fuvarszervező V68';
+    const label = 'Fuvarszervező V69';
     let ticks = 0;
     const timer = setInterval(() => {
       const brand = document.querySelector('#brandHome h1');
@@ -1434,6 +1523,10 @@
     scrollToEventBubbleV49,
     drawMapV49,
     buildManualRouteV55,
+    routePlanNeedsRefreshV55,
+    refreshPickupEventsV55,
+    mapMarkerLayoutV69,
+    mapRouteSnapshotV69,
     refreshMapsAfterManualMoveV55,
     balanceActionV44,
     optimizeActionV44,

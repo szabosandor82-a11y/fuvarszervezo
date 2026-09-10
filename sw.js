@@ -1,11 +1,11 @@
-const CACHE_NAME = 'fuvarszervezo-v68-pastel-20260910-1';
+const CACHE_NAME = 'fuvarszervezo-v69-release-20260910-2';
 const APP_ASSETS = [
-  './', './index.html', './styles.css?v=68.0', './app.js?v=52.0', './data.js?v=52.0',
-  './planner-v32.js?v=52.0', './planner-v33.js?v=52.0', './planner-v34.js?v=52.0',
-  './planner-v35.js?v=52.0', './planner-v37.js?v=52.0', './planner-v41.js?v=52.0',
-  './planner-v43.js?v=52.0', './planner-v44.js?v=68.0', './auth-v44-2.js?v=68.0',
-  './online-config.js?v=52.0', './online-v44-2.js?v=52.0',
-  './ole-msg-reader.js?v=52.0', './manifest.webmanifest', './icon-192.png', './icon-512.png'
+  './', './index.html', './styles.css?v=69.0', './app.js?v=69.0', './data.js?v=69.0',
+  './planner-v32.js?v=69.0', './planner-v33.js?v=69.0', './planner-v34.js?v=69.0',
+  './planner-v35.js?v=69.0', './planner-v37.js?v=69.0', './planner-v41.js?v=69.0',
+  './planner-v43.js?v=69.0', './planner-v44.js?v=69.0', './auth-v44-2.js?v=69.0',
+  './online-config.js?v=69.0', './online-v44-2.js?v=69.0',
+  './delivery-camera-v69.js?v=69.0', './ole-msg-reader.js?v=69.0', './manifest.webmanifest', './icon-192.png', './icon-512.png'
 ];
 self.addEventListener('install', event => event.waitUntil(
   caches.open(CACHE_NAME).then(cache => cache.addAll(APP_ASSETS)).then(() => self.skipWaiting())
@@ -17,7 +17,7 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   const local = url.origin === self.location.origin;
-  const appAsset = local && (url.pathname.endsWith('/') || /\/(?:index\.html|styles\.css|app\.js|data\.js|auth-v44-2\.js|online-config\.js|online-v44-2\.js|planner-v(?:32|33|34|35|37|41|43|44)\.js|ole-msg-reader\.js|manifest\.webmanifest|icon-(?:192|512)\.png)$/.test(url.pathname));
+  const appAsset = local && (url.pathname.endsWith('/') || /\/(?:index\.html|styles\.css|app\.js|data\.js|auth-v44-2\.js|online-config\.js|online-v44-2\.js|planner-v(?:32|33|34|35|37|41|43|44)\.js|delivery-camera-v69\.js|ole-msg-reader\.js|manifest\.webmanifest|icon-(?:192|512)\.png)$/.test(url.pathname));
   if (appAsset) {
     event.respondWith(fetch(event.request).then(response => {
       const copy = response.clone(); caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)); return response;

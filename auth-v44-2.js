@@ -24,6 +24,7 @@
   const byId = id => document.getElementById(id);
   const normalizeEmail = value => String(value || '').trim().toLowerCase();
   const safe = value => typeof esc === 'function' ? esc(value || '') : String(value || '').replace(/[&<>"']/g, '');
+  const hasOutlookSource = order => !!(order && (order.sourceMail || order.outlookImport || order.outlookSourceFile || order.outlookPdfFile || /^outlook import/i.test(String(order.note || '')) || (order.deliveryReports || []).some(report => /^Outlook forrás/i.test(String(report.note || '')))));
   const localDate = offset => {
     const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + offset);
     return typeof localISO === 'function' ? localISO(d) : d.toISOString().slice(0, 10);
@@ -86,7 +87,7 @@
   function appVersionLabel() {
     const version = global.V66Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
-    return version ? 'Fuvarszervező V68' : 'Fuvarszervező';
+    return version ? 'Fuvarszervező V69' : 'Fuvarszervező';
   }
   function setAppTitle(text) {
     const label = text || appVersionLabel();
@@ -217,10 +218,12 @@
     const received = items.filter(item => item.received).length;
     const reportPhotos = (order.deliveryReports || []).reduce((sum, report) => sum + (+report.photoCount || +report.fileCount || 0), 0);
     const canTransfer = !order.completed && !transferForOrder(order.id);
+    const commentClass = global.userCommentClass ? global.userCommentClass(order) : '';
+    const hasSourceMail = order.sourceMail ? true : hasOutlookSource(order);
     const pickup = order.pickupName || 'Felrakó';
     const drop = order.projectName || 'Egyedi úticél';
     const detailId = `v57d-${safe(order.id)}`;
-    return `<article class="mobile-user-row ${order.completed ? 'done' : ''}" data-id="${safe(order.id)}">
+    return `<article class="mobile-user-row ${order.completed ? 'done' : ''}${commentClass}" data-id="${safe(order.id)}">
       <div class="v57-row-head">
         <span class="mobile-sequence">${index + 1}</span>
         <div class="v57-row-title">${safe(order.orderNo)} — ${safe(pickup)} — ${safe(drop)}</div>
@@ -231,11 +234,11 @@
       <div class="v57-row-actions">
         <button type="button" onclick="openItems('${safe(order.id)}')">Tételek${items.length ? ` (${received}/${items.length})` : ''}</button>
         <button type="button" class="camera-action" onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>
-        ${order.sourceMail ? `<button type="button" class="mail-action" onclick="openSourceMail('${safe(order.id)}')">Csatolmány</button>` : ''}
+        ${hasSourceMail ? `<button type="button" class="mail-action" onclick="openSourceMail('${safe(order.id)}')">Csatolmány</button>` : ''}
         ${canTransfer ? `<button type="button" class="transfer-action" onclick="openTransferDialog('${safe(order.id)}')">Fuvar átadása</button>` : ''}
       </div>
       ${transferBadge(order)}
-      <div class="v57-row-detail" id="${detailId}" hidden>
+      <div class="v57-row-detail" id="${detailId}" data-order-id="${safe(order.id)}" hidden>
         <div class="mobile-stop pickup"><b>Felrakó</b><span>${safe(pickup)}</span><small>${safe(order.pickupAddress || 'Cím nélkül')}</small></div>
         <div class="mobile-stop drop"><b>Lerakó</b><span>${safe(drop)}</span><small>${safe(order.dropAddress || 'Cím nélkül')}</small></div>
         ${order.pickupNote ? `<p><b>Felrakói megjegyzés:</b> ${safe(order.pickupNote)}</p>` : ''}
@@ -250,7 +253,9 @@
   global.v57ToggleDriverDetail = function (id, button) {
     const panel = document.getElementById(id);
     if (!panel) return;
+    const opening = panel.hidden;
     panel.hidden = !panel.hidden;
+    if (opening) global.markUserCommentRead?.(panel.dataset.orderId);
     button.textContent = panel.hidden ? '▾' : '▴';
     button.setAttribute('aria-expanded', String(!panel.hidden));
   };
@@ -409,14 +414,45 @@
   }
   global.respondTransfer = respondTransfer;
 
+  async function listDeliveryFilesEventually(orderId) {
+    let last = [];
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        last = await global.V44Online.listDeliveryFiles(orderId);
+        if (last.length || attempt === 2) return last;
+      } catch (error) {
+        if (attempt === 2) throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, 350 * (attempt + 1)));
+    }
+    return last;
+  }
+
   /* V60 – az importált levél megnyitása a sofőri felületen.
      A levél szövege a fuvaron van, tehát hálózat nélkül is olvasható; a
      mellékleteket a szállítólevél-tárolóból töltjük be. */
   async function openSourceMail(orderId) {
     if (!canAccessOrder(orderId)) return alert('Ehhez a fuvarhoz nincs jogosultságod.');
-    const order = (state.orders || []).find(item => String(item.id) === String(orderId));
-    const mail = order?.sourceMail;
-    if (!mail) return alert('Ehhez a fuvarhoz nincs mentett levél.');
+    let order = (state.orders || []).find(item => String(item.id) === String(orderId));
+    // A user portal régi munkamenetben is frissítse az Outlook-metaadatokat,
+    // mert az admin által importált levél a szerver payloadjában lehet újabb.
+    if (order && !order.sourceMail && global.V44Online?.fetchOrders) {
+      try {
+        const fresh = (await global.V44Online.fetchOrders()).find(item => String(item.id) === String(orderId));
+        if (fresh) {
+          if (fresh.sourceMail) order.sourceMail = fresh.sourceMail;
+          ['outlookImport', 'outlookSourceFile', 'outlookPdfFile', 'note'].forEach(key => {
+            if (fresh[key] !== undefined) order[key] = fresh[key];
+          });
+        }
+      } catch (error) { console.warn('[V60] forráslevél frissítése sikertelen', error); }
+    }
+    if (!order) return alert('Ehhez a fuvarhoz nincs mentett levél.');
+    const mail = order.sourceMail || {};
+    if (!mail.subject && !mail.body && !hasOutlookSource(order)) {
+      return alert('Ehhez a fuvarhoz nincs mentett Outlook-levél.');
+    }
+    global.markUserCommentRead?.(orderId);
     const host = byId('sourceMailBody');
     if (byId('sourceMailTitle')) byId('sourceMailTitle').textContent = mail.subject || 'Csatolmány';
     if (host) {
@@ -427,7 +463,7 @@
           ${order.orderNo ? `<div><b>Rendelés:</b> ${safe(order.orderNo)}</div>` : ''}
         </div>
         ${order.manualItems ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${safe(order.manualItems)}</div>` : ''}
-        <pre class="mail-body">${safe(mail.body || '(A levélnek nincs szöveges tartalma.)')}</pre>
+        <pre class="mail-body">${safe(mail.body || '(A levélnek nincs mentett szöveges tartalma.)')}</pre>
         ${(mail.attachmentNames || []).length ? `<div class="mail-meta"><b>Mellékletek:</b> ${safe(mail.attachmentNames.join(', '))}</div>` : ''}
         <div id="sourceMailFiles" class="mail-files"><small>Mellékletek betöltése…</small></div>`;
     }
@@ -435,7 +471,7 @@
     const files = byId('sourceMailFiles');
     if (!files) return;
     try {
-      const list = await global.V44Online.listDeliveryFiles(orderId);
+      const list = await listDeliveryFilesEventually(orderId);
       const sources = (list || []).filter(file => /\.(pdf|jpe?g|png)$/i.test(file.file_name || ''));
       files.innerHTML = sources.length
         ? `<div class="mail-files-title">Mellékletek (${sources.length})</div>`
@@ -445,11 +481,35 @@
       files.innerHTML = `<small>A mellékletek nem tölthetők be: ${safe(error.message)}</small>`;
     }
   }
+  async function renderOrderPdfAttachments(orderIds, targetId) {
+    const host = byId(targetId); if (!host) return;
+    const ids = [...new Set((orderIds || []).flatMap(id => String(id || '').split(',')).map(id => id.trim()).filter(Boolean))];
+    try {
+      const lists = await Promise.all(ids.map(id => global.V44Online?.listDeliveryFiles ? listDeliveryFilesEventually(id) : Promise.resolve([])));
+      const files = lists.flat().filter(file => /\.pdf$/i.test(file.file_name || ''));
+      host.innerHTML = files.length
+        ? `<div class="item-attachments-title">PDF mellékletek (${files.length})</div>${files.map(file => `<a class="mail-file item-pdf-link" href="${safe(file.url)}" target="_blank" rel="noopener">📄 ${safe(file.file_name || 'PDF melléklet')}</a>`).join('')}`
+        : '<small>Nincs elérhető PDF-melléklet ehhez a tételhez.</small>';
+    } catch (error) { host.innerHTML = `<small>A PDF-mellékletek nem tölthetők be: ${safe(error.message)}</small>`; }
+  }
+  async function openOrderPdfAttachments(orderIds) {
+    const ids = [...new Set(String(orderIds || '').split(',').map(id => id.trim()).filter(Boolean))];
+    const dialog = byId('sourceMailDialog'); const host = byId('sourceMailBody');
+    if (!dialog || !host) return;
+    ids.forEach(id => global.markUserCommentRead?.(id));
+    if (byId('sourceMailTitle')) byId('sourceMailTitle').textContent = 'PDF mellékletek';
+    host.innerHTML = '<div id="pdfAttachmentDialogFiles" class="mail-files"><small>PDF mellékletek betöltése…</small></div>';
+    dialog.showModal();
+    await renderOrderPdfAttachments(ids, 'pdfAttachmentDialogFiles');
+  }
+  global.renderOrderPdfAttachments = renderOrderPdfAttachments;
+  global.openOrderPdfAttachments = openOrderPdfAttachments;
   global.openSourceMail = openSourceMail;
 
   async function openMediaGallery(orderIds) {
     const ids = String(orderIds || '').split(',').map(id => id.trim()).filter(Boolean);
     if (!ids.length || ids.some(id => !canAccessOrder(id))) return alert('Ehhez a fuvarhoz nincs jogosultságod.');
+    ids.forEach(id => global.markUserCommentRead?.(id));
     const orders = ids.map(id => (state.orders || []).find(item => String(item.id) === id)).filter(Boolean);
     const orderNos = [...new Set(orders.map(order => order.orderNo).filter(Boolean))];
     const host = byId('mediaGalleryBody');
@@ -530,14 +590,15 @@
       if (!canAccessOrder(orderId)) return alert('Ehhez a fuvarhoz nincs jogosultságod.');
       const order = (state.orders || []).find(item => String(item.id) === String(orderId));
       if (!order) return;
-      const files = [...(byId('cameraInput')?.files || [])];
+      const files = global.V69DeliveryCamera?.files() || [...(byId('cameraInput')?.files || [])];
       if (!files.length && !(typeof audioBlob !== 'undefined' && audioBlob)) return alert('Készíts legalább egy fotót vagy hangjegyzetet.');
       const submit = cameraForm.querySelector('button[type="submit"]');
       if (submit) { submit.disabled = true; submit.textContent = 'Fotók feltöltése…'; }
       try {
         const result = await global.V44Online.createDeliveryReport(order, files, byId('cameraNote')?.value || '', typeof audioBlob !== 'undefined' ? audioBlob : null);
         order.deliveryReports = order.deliveryReports || [];
-        order.deliveryReports.push({ id: result.report.id, at: result.report.created_at || new Date().toISOString(), note: byId('cameraNote')?.value || '', photoCount: files.length, fileCount: result.report.fileCount, hasAudio: typeof audioBlob !== 'undefined' && !!audioBlob, createdBy: currentSession?.user?.email });
+        const deliveryNote = byId('cameraNote')?.value || '';
+        order.deliveryReports.push({ id: result.report.id, at: result.report.created_at || new Date().toISOString(), note: deliveryNote, photoCount: files.length, fileCount: result.report.fileCount, hasAudio: typeof audioBlob !== 'undefined' && !!audioBlob, createdBy: currentSession?.user?.email, createdRole: currentProfile?.role || 'driver', userComment: !!deliveryNote.trim(), commentAt: deliveryNote.trim() ? new Date().toISOString() : '' });
         cameraForm.closest('dialog')?.close();
         if (typeof audioBlob !== 'undefined') audioBlob = null;
         if (typeof save === 'function') save();
@@ -635,7 +696,7 @@
     bindUi();
     installGuardsAndHooks();
     await restoreOnlineSession();
-    global.V44_2Auth = { version: VERSION, users: Object.keys(USERS), canAccessOrder, renderDriverPortal, logout, refreshOnlineNow };
+    global.V44_2Auth = { version: VERSION, users: Object.keys(USERS), canAccessOrder, renderDriverPortal, logout, refreshOnlineNow, isRestrictedUser, currentUserKey: () => currentProfile?.role === 'admin' ? 'admin' : currentProfile?.role === 'driver' ? 'driver' : currentProfile?.role || '' };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });

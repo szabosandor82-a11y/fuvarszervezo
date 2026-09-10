@@ -1,0 +1,17 @@
+FUVARSZERVEZŐ V69 – HELYI ELLENŐRZÉS
+
+126/126 korábbi működési ellenőrzés sikeres.
+7/7 célzott térképes és exportsorrend-ellenőrzés sikeres.
+5/5 kamera- és mentési folyamat ellenőrzése sikeres, szimulált eszközzel.
+A futtatott JavaScript-fájlok szintaktikai ellenőrzése sikeres.
+A csomag helyi fájlhivatkozásai és a ZIP sértetlensége ellenőrizve.
+
+Ezek helyi tesztek, szimulált címkeresővel, kamerával és online feltöltéssel.
+A saját laptop kamerájával és az éles bejelentkezéssel telepítés után
+szükséges próba. A valódi böngészős kamerateszt futtatásához szükséges
+böngésző ebben a környezetben nem volt elérhető.
+
+Az Ezerker Kada utcai és Proconsul Porcelán utcai cím pontos térképi
+helyét az élő címkereső válasza alapján frissíti az alkalmazás.
+A két valós cím éles térképi helye itt még nem lett ellenőrizve.
+Elérhetetlen címkeresőnél a tartalékpont becsült helyszínként jelenik meg.

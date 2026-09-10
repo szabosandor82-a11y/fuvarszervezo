@@ -1,0 +1,35 @@
+FUVARSZERVEZŐ V69
+
+A Szállítólevél ablak Kamera megnyitása gombja laptopon és mobilon is
+élő kamera-előnézetet indít, külön Fénykép készítése gombbal. A képek
+a meglévő rendeléshez menthetők. Bezáráskor a kamera leáll.
+Az engedély megtagadásakor vagy hiányzó kamera esetén látható üzenet jelenik meg.
+Külön gombbal fénykép és PDF is kiválasztható, a mobilos natív kameralehetőség
+megmarad. A kiválasztott PDF-ek az előnézetből is megnyithatók.
+A meglévő online feltöltési és jogosultsági ellenőrzések érvényben maradnak.
+
+Az admin- és sofőri/user felület közös, részletes tételablakot használ.
+A tételsorok mindig mutatják a cikkszámot és a PDF-en szereplő tételleírást;
+a hiányzó mennyiség és a hátralék dátuma csak a Hiányzik művelettel nyílik ki.
+
+Az Outlook-levél és a hozzá feltöltött PDF mellékletek a user oldalon is
+megnyithatók, a tételablakokban pedig külön PDF-melléklet gomb érhető el.
+
+A sofőr által írt tétel- vagy szállítólevél-megjegyzés narancssárga, jól
+látható Új user-megjegyzés jelölést kap; a kapcsolódó tétel vagy fuvar
+megnyitásakor a jelölés eltűnik.
+
+A térkép a frissen felvett vagy átírt címeknél újraegyezteti a mentett
+útvonaltervet, így az új felrakó nem marad ki a napi nézetből vagy a Nézet
+ablakból. Az Ezer-Ker Kada utcai és a Proconsul Porcelán utcai címének
+korábbi közös kerületi pontját az alkalmazás újra feloldja cím alapján.
+Ha a címfeloldó nem elérhető, a tartalékpont becsültként látszik, és a
+következő frissítés később újrapróbálja a pontosítást. Az azonos ponton
+lévő felrakók jelölői elkülönülnek. A későn beérkező útvonalválasz nem
+írhatja felül az új térképet.
+
+Az Excel-export Sorrend oszlopa az alkalmazás felrakósorszámait tartalmazza.
+Azonos felrakó minden sora ugyanazt a számot kapja (például 1, 1, 1, 2).
+A számozás sofőrönként újraindul; a kézi sorrend az exportba is átkerül.
+A PDF-export ugyanezt a számozást használja. A kiosztatlan fuvarok az
+Excelben megmaradnak, alkalmazásbeli sorszám nélkül.
