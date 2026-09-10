@@ -1112,6 +1112,11 @@
         <label>Lerakó / projekt${projectNameSelect(entry)}</label>
         <label>Lerakó címe<input data-field="dropAddress" value="${htmlEsc(entry.dropAddress)}" placeholder="A projekt kiválasztásakor automatikusan betöltődik"></label>
       </div>
+      <label class="v65-manual-items ${entry.items.length ? '' : 'needed'}">
+        ${entry.items.length ? 'Kiegészítő megjegyzés a tételekhez' : 'A bizonylatról nem sikerült tételt felismerni – írd be kézzel'}
+        <textarea data-field="manualItems" rows="${entry.items.length ? 2 : 3}"
+          placeholder="Pl. 4 tábla OSB, 2 zsák gipsz – ez a szöveg megjelenik az admin és a sofőri felületen is">${htmlEsc(entry.manualItems || '')}</textarea>
+      </label>
       <details><summary>Tételek (${entry.items.length}) és felismerési adatok</summary>
         ${entry.items.length ? `<div class="v38-items">${entry.items.map(item => `<div><b>${htmlEsc(item.code)}</b><span>${htmlEsc(item.name)}</span><span>${htmlEsc(item.qty)} ${htmlEsc(item.unit)}</span></div>`).join('')}</div>` : '<p>Nincs automatikusan felismert tétel.</p>'}
         ${entry.extractionReason ? `<p><b>Felismerés:</b> ${htmlEsc(entry.extractionReason)}</p>` : ''}
@@ -1289,6 +1294,9 @@ ${entry.subject || ''}`) || project;
       requestedDeadline: entry.requestedDate || '', note: `Outlook import · ${entry.orderType || 'SR0'} · ${entry.sourceName}${entry.pdfName ? ` · ${entry.pdfName}` : ''}`,
       // V60: a levél lényege a fuvaron marad, hogy a sofőr hálózat nélkül is
       // elolvashassa. A mellékletek a szállítólevél-tárolóba kerülnek.
+      // V65: a kézzel felvitt tételszöveg. Akkor kell, ha a bizonylatról nem
+      // sikerült tételt felismerni; az admin és a sofőri felületen is látszik.
+      manualItems: String(entry.manualItems || '').trim(),
       sourceMail: entry.sourceMail ? {
         subject: entry.sourceMail.subject || entry.subject || '',
         from: entry.sourceMail.from || '',

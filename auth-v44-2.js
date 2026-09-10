@@ -84,7 +84,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V64Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V65Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -227,6 +227,7 @@
         <button type="button" class="v57-detail-toggle" aria-expanded="false" title="Címek és megjegyzések"
           onclick="v57ToggleDriverDetail('${detailId}',this)">▾</button>
       </div>
+      ${order.manualItems ? `<div class="v65-manual-note"><b>Felveendő:</b> ${safe(order.manualItems)}</div>` : ''}
       <div class="v57-row-actions">
         <button type="button" onclick="openItems('${safe(order.id)}')">Tételek${items.length ? ` (${received}/${items.length})` : ''}</button>
         <button type="button" class="camera-action" onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>
@@ -425,6 +426,7 @@
           ${mail.fileName ? `<div><b>Fájl:</b> ${safe(mail.fileName)}</div>` : ''}
           ${order.orderNo ? `<div><b>Rendelés:</b> ${safe(order.orderNo)}</div>` : ''}
         </div>
+        ${order.manualItems ? `<div class="v65-manual-note"><b>Kézzel felvitt tételek:</b> ${safe(order.manualItems)}</div>` : ''}
         <pre class="mail-body">${safe(mail.body || '(A levélnek nincs szöveges tartalma.)')}</pre>
         ${(mail.attachmentNames || []).length ? `<div class="mail-meta"><b>Mellékletek:</b> ${safe(mail.attachmentNames.join(', '))}</div>` : ''}
         <div id="sourceMailFiles" class="mail-files"><small>Mellékletek betöltése…</small></div>`;
@@ -436,8 +438,9 @@
       const list = await global.V44Online.listDeliveryFiles(orderId);
       const sources = (list || []).filter(file => /\.(pdf|jpe?g|png)$/i.test(file.file_name || ''));
       files.innerHTML = sources.length
-        ? sources.map(file => `<a class="mail-file" href="${safe(file.url)}" target="_blank" rel="noopener">${safe(file.file_name)}</a>`).join('')
-        : '<small>Nincs megnyitható melléklet.</small>';
+        ? `<div class="mail-files-title">Mellékletek (${sources.length})</div>`
+          + sources.map(file => `<a class="mail-file" href="${safe(file.url)}" target="_blank" rel="noopener"><i class="ti ti-paperclip" aria-hidden="true"></i> ${safe(file.file_name)}</a>`).join('')
+        : '<small>Nincs feltöltött melléklet ehhez a fuvarhoz.</small>';
     } catch (error) {
       files.innerHTML = `<small>A mellékletek nem tölthetők be: ${safe(error.message)}</small>`;
     }

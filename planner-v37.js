@@ -371,9 +371,14 @@
     const displayName = rawName.replace(/\s*\bkp\.?\s*$/i, '').trim() || rawName;
     const address = first.pickupAddress || '';
 
+    const manualNotes = [...new Set(orders.map(order => String(order.manualItems || '').trim()).filter(Boolean))];
     const projects = [...new Set(groups.map(group => group.projectName).filter(Boolean))];
     const dropCount = projects.length || 1;
 
+    const hasSourceMail = orders.some(order => order.sourceMail);
+    const manualBlock = manualNotes.length
+      ? `<div class="v65-manual-note"><b>Kézzel felvitt tételek:</b> ${manualNotes.map(escHtml).join(' · ')}</div>`
+      : '';
     const detail = groups.map(group => {
       const rows = (group.orders || []).flatMap(order => (order.items || []).map(item =>
         `<div class="v56-item-row"><span>${escHtml(item.name || 'Tétel')}</span><span class="v56-item-qty">${escHtml(String(item.qty ?? ''))} ${escHtml(item.unit || '')}</span></div>`));
@@ -391,9 +396,10 @@
         <div class="v56-main">
           <div class="v56-line-top"><b>${escHtml(displayName)}</b>${central ? '<span class="v56-chip">kp</span>' : ''}${longReasons.length ? '<span class="v56-chip v56-chip-warn">szálas</span>' : ''}<span class="v56-addr">${address ? '— ' + escHtml(address) : ''}</span></div>
         </div>
-        <button type="button" class="v56-items-btn" onclick="event.stopPropagation();v56ToggleItems('${escHtml(ids)}',this)" title="Lerakók és tételek">${dropCount} lerakó · ${itemCount} tétel <span class="v56-caret">▾</span></button>
+        <button type="button" class="v56-items-btn" onclick="event.stopPropagation();v56ToggleItems('${escHtml(ids)}',this)" title="Lerakók és tételek">${dropCount} lerakó · ${itemCount} tétel${manualNotes.length ? ' + kézi' : ''} <span class="v56-caret">▾</span></button>
+        ${hasSourceMail ? `<button type="button" class="v56-mail-btn" title="Importált levél és csatolmány" onclick="event.stopPropagation();openSourceMail('${escHtml(first.id)}')">Csatolmány</button>` : ''}
       </article>
-      <div class="v56-items" data-items-for="${escHtml(ids)}" hidden>${detail}</div>
+      <div class="v56-items" data-items-for="${escHtml(ids)}" hidden>${manualBlock}${detail}</div>
       ${fullLoad ? '<div class="v56-forced-drop">Kötelező azonnali lerakás</div>' : ''}
     </section>`;
   }
@@ -431,6 +437,13 @@
     </div>`;
   }
 
+  /* V65: az importnál kézzel felvitt tételszöveg. Akkor keletkezik, ha a
+     bizonylatról nem sikerült tételt felismerni. Az admin és a sofőri
+     felületen egyaránt látszik. */
+  function manualItemsOfGroup(group) {
+    return [...new Set((group.orders || []).map(order => String(order.manualItems || '').trim()).filter(Boolean))].join(' · ');
+  }
+
   function renderGroupBubble(group, index, vehicleId, options = {}) {
     const ids = groupIds(group);
     const orderNos = [...new Set(group.orders.map(order => order.orderNo).filter(Boolean))];
@@ -465,7 +478,8 @@
         <div class="bubble-main-line"><b>Lerakó:</b><span>${escHtml(group.projectName)}${group.dropAddress ? ` · ${escHtml(group.dropAddress)}` : ''}</span></div>
         <div class="bubble-main-line order-number-line"><b>Rendelésszám:</b><span>${escHtml(orderNos.join(', ') || 'Nincs megadva')}</span></div>
         <div class="tags"><span class="tag">${group.orders.length} rendelés</span><span class="tag">${itemCount} tétel</span>${longReasons.map(reason => `<span class="tag long">${escHtml(reason)}</span>`).join('')}${pinned ? '<span class="tag pin-tag">Rögzítve</span>' : ''}${fullLoad ? '<span class="tag full-load-tag">Teljes autó</span>' : ''}${resolved ? '<span class="tag resolved-tag">✓ Elintézve</span>' : ''}${options.ungrouped && (options.samePickupCount || 0) > 1 ? '<span class="tag ungrouped-tag">Külön mozgatható</span>' : ''}</div>
-        <div class="bubble-actions"><button onclick="editOrder('${escHtml(first.id)}')">Szerkesztés</button><button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button><button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button><button class="secondary" onclick="openMediaGallery('${escHtml(ids)}')">📎 Mentett fotók</button></div>
+        ${manualItemsOfGroup(group) ? `<div class="v65-manual-note"><b>Kézzel felvitt tételek:</b> ${escHtml(manualItemsOfGroup(group))}</div>` : ''}
+        <div class="bubble-actions"><button onclick="editOrder('${escHtml(first.id)}')">Szerkesztés</button><button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button>${group.orders.some(order => order.sourceMail) ? `<button onclick="openSourceMail('${escHtml(first.id)}')">Csatolmány</button>` : ''}<button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button><button class="secondary" onclick="openMediaGallery('${escHtml(ids)}')">📎 Mentett fotók</button></div>
         <button class="complete-button ${complete ? 'done' : ''}" onclick="v37ToggleGroupComplete('${escHtml(ids)}')">${complete ? '✓' : '○'}</button>
         <button class="trash" onclick="v33DeleteGroup('${escHtml(ids)}')">🗑</button>
       </article>
@@ -711,7 +725,7 @@
         // útvonalterv épül újra a kézi sequence értékekből, és csak utána
         // rajzolunk. Fordítva a rajzoló üres tervet találna, és
         // újraoptimalizálná az útvonalat, felülírva a te sorrendedet.
-        const buildManual = global.V64Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
+        const buildManual = global.V65Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
         setTimeout(async () => {
           if (typeof buildManual === 'function') {
             try {
