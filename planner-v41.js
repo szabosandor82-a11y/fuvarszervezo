@@ -1097,6 +1097,7 @@
       entry.warnings.push('Tételek nem olvashatók automatikusan');
     }
     if (!entry.orderNo) entry.warnings.push('Rendelésszám nem található');
+    else if (orderNoWaived(entry)) entry.warnings = entry.warnings.filter(w => !/Rendel[eé]ssz[aá]m/i.test(w));
     if (!entry.pickupName) entry.warnings.push('Felrakó nem azonosítható');
     if ((entry.pickupRole || 'supplier') === 'supplier' && !entry.supplierId) entry.warnings.push('Felrakó nincs a beszállítói törzsadatokban');
     if (!entry.pickupAddress) entry.warnings.push('Felrakó címe hiányzik');
@@ -1108,10 +1109,17 @@
   /* V65: az importot blokkoló hiányok. Csak ez a három adat kötelező –
      a tételek nem. Az előnézeten is látszik, hogy ne az importálás után
      derüljön ki, mit kell pótolni. */
+  /* V66: van olyan bizonylat, amin egyszerűen nincs rendelésszám. Ilyenkor
+     elég egy kötőjelet beírni a Rendelésszám mezőbe – a program tudomásul
+     veszi, hogy szándékosan üres, és átengedi az importot. */
+  function orderNoWaived(entry) {
+    return /^[-–—]+$/.test(String(entry?.orderNo || '').trim());
+  }
+
   function blockingFields(entry) {
     const numbers = entry.sourceOrderNos?.length ? entry.sourceOrderNos : orderNumbersOf(entry);
     const missing = [];
-    if (!numbers.length) missing.push('rendelésszám');
+    if (!numbers.length && !orderNoWaived(entry)) missing.push('rendelésszám');
     if (!entry.pickupName) missing.push('felrakó');
     if (!entry.projectName) missing.push('lerakó/projekt');
     return missing;
@@ -1122,7 +1130,8 @@
     return `<article class="v38-preview-card ${entry.approved ? '' : 'disabled'}" data-entry-id="${htmlEsc(entry._id)}">
       <header><label class="check"><input class="v38-approved" type="checkbox" ${entry.approved ? 'checked' : ''}> Importálás</label><span class="v38-category ${entry.category}">${categoryLabel}</span><button class="v38-remove" type="button" title="Eltávolítás">×</button></header>
       <div class="v38-source"><b>${htmlEsc(entry.sourceName)}</b><span>${htmlEsc(entry.orderType || 'SR0')}${entry.isReturn ? ' · visszáru' : ''}</span>${entry.pdfName && entry.pdfName !== entry.sourceName ? `<span>PDF: ${htmlEsc(entry.pdfName)}</span>` : ''}<span class="v38-status ${entry.warnings.length ? 'warn' : 'ok'}">${htmlEsc(statusText(entry))}</span></div>
-      ${blockingFields(entry).length ? `<div class="v65-blocking">Nem importálható – hiányzik: <b>${htmlEsc(blockingFields(entry).join(', '))}</b></div>` : ''}
+      ${blockingFields(entry).length ? `<div class="v65-blocking">Nem importálható – hiányzik: <b>${htmlEsc(blockingFields(entry).join(', '))}</b>${blockingFields(entry).includes('rendelésszám') ? ' · Ha a bizonylaton nincs rendelésszám, írj be egy kötőjelet (-).' : ''}</div>` : ''}
+      ${orderNoWaived(entry) ? '<div class="v66-waived">Rendelésszám nélkül importálva – a mezőben kötőjel áll.</div>' : ''}
       <div class="v38-fields">
         <label>Felvétel dátuma<input data-field="scheduleDate" type="date" value="${htmlEsc(entry.scheduleDate)}"></label>
         ${entry.messageOrderNos?.length > 1 ? `<label class="v43-all-order-nos">Rendelésszámok a levélben<input value="${htmlEsc(entry.messageOrderNos.join(', '))}" readonly></label>` : ''}
@@ -1353,13 +1362,14 @@ ${entry.subject || ''}`) || project;
          nem lehetett tudni, mit kell pótolni. Most megnevezi a hiányzó mezőt.
          A tételek NEM kötelezők – az importot csak ez a három adat blokkolja. */
       const missing = [];
-      if (!numbers.length) missing.push('rendelésszám');
+      if (!numbers.length && !orderNoWaived(entry)) missing.push('rendelésszám');
       if (!entry.pickupName) missing.push('felrakó');
       if (!entry.projectName) missing.push('lerakó/projekt');
       if (missing.length) {
         skipped.push(`${entry.sourceName}: hiányzik – ${missing.join(', ')}`);
         continue;
       }
+      if (!numbers.length && orderNoWaived(entry)) entry.orderNo = '-';
       entry.sourceOrderNos = numbers;
       entry.scheduleDate = normalizeWorkdayISO(entry.scheduleDate || selectedImportDate() || tomorrowISO());
       acceptedEntries.push(entry);
@@ -1531,6 +1541,8 @@ ${entry.subject || ''}`) || project;
     supplierSpecial,
     parsePdfItemsFromLines,
     blockingFields,
+    orderNoWaived,
+    importIdentity,
     refreshEntryWarnings,
     supplierNameSelect,
     projectNameSelect,

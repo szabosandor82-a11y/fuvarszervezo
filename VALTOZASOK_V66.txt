@@ -103,9 +103,29 @@ Mostantol:
   - a regi, semmitmondo "Kihagyva: N" szoveg megszunt
 
 
+7. RENDELESSZAM NELKULI BIZONYLAT - KOTOJEL
+-------------------------------------------
+Van olyan bizonylat, amin egyszeruen nincs rendelesszam. Ilyenkor a program
+jelzi a hianyt, de ha a Rendelesszam mezobe KOTOJELET irsz, atengedi az
+importot.
+
+  - a hianyjelzes szovege megmondja a kiutat is:
+    "Nem importalhato - hianyzik: rendelesszam . Ha a bizonylaton nincs
+     rendelesszam, irj be egy kotojelet (-)."
+  - kotojel utan szurke savval jelzi: "Rendelesszam nelkul importalva"
+  - elfogadott alakok: -, --, hosszu kotojel, szokozokkel is
+  - a "0" es az ures mezo NEM szamit kotojelnek
+
+A kotojel CSAK a rendelesszamot engedi el. A felrako es a lerako tovabbra is
+kotelezo.
+
+Ket rendelesszam nelkuli fuvar nem olvad ossze: mindegyik sajat azonositot
+kap, tehat kulon fuvarkent kerul be.
+
+
 TESZTEK
 -------
-TEST_V66.js   121/121
+TEST_V66.js   126/126
 TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
 
 Valtozatlanul elbukik, de az eredeti V52 csomagban is:

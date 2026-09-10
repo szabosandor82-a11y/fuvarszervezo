@@ -1780,5 +1780,55 @@ function krprWith(target) {
     assert.ok(css.includes('.v65-blocking'), 'nincs stilus a blokkolas-jelzeshez');
   });
 
+  await test('Kotojel a rendelesszam helyen atengedi az importot', async () => {
+    const c = createContext();
+    const base = { pickupName: 'KRPR', projectName: 'Cosmo', sourceOrderNos: [] };
+    assert.deepEqual(c.V41OutlookImport.blockingFields({ ...base, orderNo: '' }), ['rendelésszám'],
+      'ures rendelesszamnal nem jelez');
+    for (const dash of ['-', '–', '—', '  -  ', '--']) {
+      assert.deepEqual(c.V41OutlookImport.blockingFields({ ...base, orderNo: dash }), [],
+        `a kotojel nem engedi at: ${JSON.stringify(dash)}`);
+    }
+    assert.equal(c.V41OutlookImport.orderNoWaived({ orderNo: '-' }), true);
+    assert.equal(c.V41OutlookImport.orderNoWaived({ orderNo: '0' }), false, 'a nulla nem kotojel');
+    assert.equal(c.V41OutlookImport.orderNoWaived({ orderNo: '' }), false, 'az ures mezo nem kotojel');
+  });
+
+  await test('A kotojel csak a rendelesszamot engedi el, a tobbit nem', async () => {
+    const c = createContext();
+    assert.deepEqual(
+      c.V41OutlookImport.blockingFields({ orderNo: '-', pickupName: '', projectName: 'Cosmo', sourceOrderNos: [] }),
+      ['felrakó'], 'a felrako hianyat is elengedte');
+    assert.deepEqual(
+      c.V41OutlookImport.blockingFields({ orderNo: '-', pickupName: 'KRPR', projectName: '', sourceOrderNos: [] }),
+      ['lerakó/projekt'], 'a lerako hianyat is elengedte');
+  });
+
+  await test('A kotojeles fuvarok nem olvadnak ossze', async () => {
+    const c = createContext();
+    const a = c.V41OutlookImport.importIdentity({ _id: 'e1', orderNo: '-', sourceOrderNos: [], orderType: 'SR0' });
+    const b = c.V41OutlookImport.importIdentity({ _id: 'e2', orderNo: '-', sourceOrderNos: [], orderType: 'SR0' });
+    assert.notEqual(a, b, 'ket rendelesszam nelkuli fuvar egy azonositot kapott: ' + a);
+  });
+
+  await test('A hianyzo rendelesszamnal a program elarulja a kiutat', async () => {
+    const v41 = fs.readFileSync(__dirname + '/planner-v41.js', 'utf8');
+    assert.match(v41, /írj be egy kötőjelet/, 'nincs utmutatas a kartyan');
+    assert.ok(v41.includes('v66-waived'), 'nincs jelzes a kotojeles allapotrol');
+    assert.ok(v41.includes('function orderNoWaived'), 'hianyzik a kotojel-felismero');
+    const css = fs.readFileSync(__dirname + '/styles.css', 'utf8');
+    assert.ok(css.includes('.v66-waived'), 'nincs stilus a jelzeshez');
+  });
+
+  await test('A kotojel a figyelmeztetest is megszunteti', async () => {
+    const c = createContext();
+    const entry = { orderNo: '-', pickupName: 'KRPR', pickupAddress: 'cim', supplierId: 'x',
+      pickupRole: 'warehouse', projectName: 'Cosmo', dropAddress: 'cim', items: [],
+      manualItems: 'feladat', warnings: [] };
+    c.V41OutlookImport.refreshEntryWarnings(entry);
+    assert.ok(!entry.warnings.some(w => /Rendelésszám/i.test(w)),
+      'maradt rendelesszam-figyelmeztetes: ' + entry.warnings.join(', '));
+  });
+
   if (!process.exitCode) console.log(`\nV66 elfogadási teszt: ${passed}/${total} sikeres.`);
 })();
