@@ -982,7 +982,7 @@ function openItems(id){
   const o=state.orders.find(x=>x.id===id);if(!o)return;currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);
   $('#itemsTitle').textContent=`${o.orderNo} · Tételek`;
   $('#itemMovePanel').innerHTML=`<div class="move-controls"><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Alapértelmezett áthelyezési év"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div><button id="applyMoveDateAll" class="move-items-btn" type="button" title="Minden kipipálatlan tétel áthelyezése a fenti napra">Mindet erre a napra</button></div>`;
-  $('#itemsBody').innerHTML=`<div class="item-grid-head"><span></span><span>Tétel</span><span>Hiányzik</span><span>Hátralék napja</span></div>`+(o.items||[]).map((it,i)=>{
+  const itemRowsHtml=((o.items||[]).length?`<div class="item-grid-head"><span></span><span>Tétel</span><span>Hiányzik</span><span>Hátralék napja</span></div>`:'')+(o.items||[]).map((it,i)=>{
     /* V58: az alapállapot a letisztult sor. A pipa azt jelenti, hogy a tételt
        HIÁNYTALANUL megkapta – nem kell minden sort végigpipálni ahhoz, hogy
        használható legyen a nézet. A hiányt külön kell jelezni: a "Hiányzik"
@@ -1009,7 +1009,14 @@ function openItems(id){
       ${qtyCell}
       ${dateCell}
     </div>`;
-  }).join('')||'<div class="notice">Nincs tétel.</div>';
+  }).join('');
+  /* V65: van olyan fuvar, ahol nincs konkrét tétel, csak egy elvégzendő
+     feladat. A megjegyzés ezért a Tételek ablak tetején is megjelenik, és ha
+     nincs egyetlen tétel sem, az áll a lista helyén. */
+  const manualNote=String(o.manualItems||'').trim();
+  const noteBlock=manualNote?`<div class="v65-manual-note"><b>Megjegyzés:</b> ${esc(manualNote)}</div>`:'';
+  const emptyBlock=((o.items||[]).length||manualNote)?'':'<div class="notice">Nincs tétel.</div>';
+  $('#itemsBody').innerHTML=noteBlock+itemRowsHtml+emptyBlock;
   bindV21MoveDateParts();if(!$('#itemsDialog').open)$('#itemsDialog').showModal()
 }
 window.openItems=openItems;

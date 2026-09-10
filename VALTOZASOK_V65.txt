@@ -66,9 +66,31 @@ Kulon ellenorizve, hogy a Merkapttal ne keveredjen ossze - mindketto
 1106-os iranyitoszamu, X. keruleti telephely.
 
 
+5. A MEGJEGYZES ATENGEDI AZ IMPORTOT, ES MINDENHOL LATSZIK
+----------------------------------------------------------
+A kezzel beirt szoveg NEM alakul tetelle - marad megjegyzes. Amit tesz:
+
+  - megszunteti a "Tetelek nem olvashatok" jelzest, igy az import nem akad
+    el hianyzo adat miatt
+  - "Megjegyzes:" felirattal, sarga savval megjelenik HAROM helyen:
+       fooldali admin buborek
+       Nezet ablak sora (a gomb "+ kezi" jelolest kap)
+       sofori sor
+  - a TETELEK ablakban is megjelenik, legfelul
+
+Van olyan fuvar, ahol nincs konkret tetel, csak egy elvegzendo feladat
+(pl. berelt allvany visszahozatala). Ilyenkor a Tetelek ablak a megjegyzest
+mutatja a lista helyen, ures oszlopfejlec es "Nincs tetel" felirat nelkul.
+
+Harom eset:
+   tetel + megjegyzes  ->  a megjegyzes felul, alatta a tetellista
+   csak megjegyzes     ->  csak a megjegyzes, tiszta ablak
+   egyik sem           ->  a regi "Nincs tetel." uzenet
+
+
 TESZTEK
 -------
-TEST_V65.js   112/112
+TEST_V65.js   118/118
 TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
 
 Valtozatlanul elbukik, de az eredeti V52 csomagban is:

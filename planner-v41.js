@@ -1089,6 +1089,13 @@
 
   function refreshEntryWarnings(entry) {
     entry.warnings = (entry.warnings || []).filter(warning => !/Rendelésszám|Felrakó|Projekt címe|Lerakó\/projekt|Lerakó címe|már szerepel|duplik/i.test(warning));
+    // V65: a kézzel beírt tételszöveg teljes értékű tételnek számít, ezért
+    // megszünteti a "Tételek nem olvashatók" jelzést.
+    if (String(entry.manualItems || '').trim()) {
+      entry.warnings = entry.warnings.filter(warning => !/T[eé]telek nem olvashat/i.test(warning));
+    } else if (!(entry.items || []).length && !entry.warnings.some(w => /T[eé]telek nem olvashat/i.test(w))) {
+      entry.warnings.push('Tételek nem olvashatók automatikusan');
+    }
     if (!entry.orderNo) entry.warnings.push('Rendelésszám nem található');
     if (!entry.pickupName) entry.warnings.push('Felrakó nem azonosítható');
     if ((entry.pickupRole || 'supplier') === 'supplier' && !entry.supplierId) entry.warnings.push('Felrakó nincs a beszállítói törzsadatokban');
@@ -1503,6 +1510,7 @@ ${entry.subject || ''}`) || project;
     inferProjectHint,
     supplierSpecial,
     parsePdfItemsFromLines,
+    refreshEntryWarnings,
     supplierNameSelect,
     projectNameSelect,
     applyBodyScopeV60,

@@ -745,11 +745,14 @@ function krprWith(target) {
 
   await test('A javítás mindkét felületen elérhető', async () => {
     const app = fs.readFileSync(__dirname + '/app.js', 'utf8');
-    const start = app.lastIndexOf("$('#itemsBody').innerHTML=");
-    const body = app.slice(start, app.indexOf('bindMoveDateParts', start));
+    // A tétellista mostantól az itemRowsHtml változóba épül, és csak a végén
+    // kerül a DOM-ba, ezért onnan kell vizsgálni.
+    const start = app.lastIndexOf('const itemRowsHtml=');
+    const body = app.slice(start, app.indexOf('bindV21MoveDateParts', start));
     assert.ok(body.includes('rescheduleMovedItem'), 'a tételablakban nincs átütemezés');
     assert.ok(body.includes('undoBacklogMove'), 'a tételablakban nincs visszavonás');
     assert.ok(body.includes('item-grid-head'), 'nincs oszlopfejléc');
+    assert.ok(body.includes('itemRowsHtml'), 'a tétellista nem külön változóba épül');
     assert.ok(app.includes("class=\"bl-undo\""), 'a Hátralék fülön nincs Vissza gomb');
     assert.ok(app.includes('window.undoBacklogMove'), 'a visszavonás nincs globálisan elérhető');
   });
@@ -1637,7 +1640,7 @@ function krprWith(target) {
     assert.match(html, /\+ kézi/, 'a gomb nem jelzi a kezi tetelt');
     assert.ok(html.includes('v56-mail-btn'), 'nincs csatolmany gomb a soron');
     const clean = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-    assert.match(clean, /Kézzel felvitt tételek: 4 tábla OSB lap/, 'a kezi tetel szovege hianyzik');
+    assert.match(clean, /Megjegyzés: 4 tábla OSB lap/, 'a megjegyzes szovege hianyzik');
   });
 
   await test('A PROCONSUL kozpontja a Porcelan utcai telephely', async () => {
@@ -1669,6 +1672,79 @@ function krprWith(target) {
     assert.match(String(proconsul?.address || ''), /Porcelán/, 'Proconsul -> ' + proconsul?.address);
     const merkapt = c.V41OutlookImport.bestSupplier('Szállító: Merkapt Zrt 1106 Budapest Maglódi út 14/B');
     assert.match(String(merkapt?.address || ''), /Magl/, 'Merkapt -> ' + merkapt?.address);
+  });
+
+  await test('A kezi tetelszoveg megszunteti a hianyzo tetel jelzest', async () => {
+    const c = createContext();
+    const base = { orderNo: '000898', pickupName: 'Központi raktár', pickupAddress: '2310 Szigetszentmiklós',
+      projectName: 'Cosmo', dropAddress: '1133 Budapest', pickupRole: 'warehouse', supplierId: 'x',
+      items: [], warnings: [] };
+    const without = { ...base, manualItems: '' };
+    c.V41OutlookImport.refreshEntryWarnings(without);
+    assert.ok(without.warnings.some(w => /Tételek nem olvashat/.test(w)), 'nincs jelzes tetel nelkul');
+    const withNote = { ...base, manualItems: '4 tábla OSB lap' };
+    c.V41OutlookImport.refreshEntryWarnings(withNote);
+    assert.equal(withNote.warnings.length, 0, 'maradt jelzes: ' + withNote.warnings.join(', '));
+  });
+
+  await test('A kezi szoveg NEM alakul tetelle', async () => {
+    const v41 = fs.readFileSync(__dirname + '/planner-v41.js', 'utf8');
+    assert.ok(!v41.includes('manualItemsAsItems'), 'maradt tetelle alakitas');
+    assert.ok(v41.includes("items: (entry.items || []).map("), 'a tetellista nem az eredeti');
+    assert.ok(v41.includes("manualItems: String(entry.manualItems || '').trim()"),
+      'a kezi szoveg nem kerul ra a fuvarra');
+  });
+
+  function itemsHtml(items, note) {
+    const src = fs.readFileSync(__dirname + '/app.js', 'utf8');
+    const c = { console, Math, Date, JSON, String, Number, Object, Array, RegExp, Error };
+    c.globalThis = c; c.window = c; c.alert = () => {}; c.confirm = () => true;
+    c.state = { orders: [{ id: 'o1', scheduleDate: 'd', orderNo: '000898', items, manualItems: note }], backlog: [] };
+    c.esc = v => String(v == null ? '' : v);
+    c.itemNoteValue = () => '';
+    let html = '';
+    c.$ = () => ({ get innerHTML() { return html; }, set innerHTML(v) { html = v; }, open: false, showModal() {}, value: '' });
+    c.document = { getElementById: () => ({ open: false }) };
+    c.bindV21MoveDateParts = () => {}; c.ensureItemId = () => {};
+    vm.createContext(c);
+    let i = src.lastIndexOf('function backlogRecordForItem');
+    vm.runInContext(src.slice(i, src.indexOf('\nfunction ', i + 40)), c, { filename: 'rec' });
+    i = src.lastIndexOf('function openItems(id)');
+    vm.runInContext(src.slice(i, src.indexOf('\nwindow.openItems=openItems', i)), c, { filename: 'openItems' });
+    c.openItems('o1');
+    return html;
+  }
+  const flat = x => x.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+  await test('A megjegyzes a Tetelek ablakban is latszik', async () => {
+    const html = itemsHtml([{ _id: 'i1', name: 'Gipsz', code: 'EG006', qty: 15, unit: 'zsák', received: false }],
+      'Raktárosnál jelentkezni');
+    assert.ok(html.includes('v65-manual-note'), 'nincs megjegyzes a Tetelek ablakban');
+    assert.match(flat(html), /^Megjegyzés: Raktárosnál jelentkezni/, 'a megjegyzes nem elol all');
+    assert.ok(flat(html).includes('Gipsz'), 'elveszett a tetel');
+  });
+
+  await test('Tetel nelkuli feladatnal a megjegyzes all a lista helyen', async () => {
+    const html = itemsHtml([], 'Le kell szerelni a bérelt állványt és visszahozni');
+    assert.match(flat(html), /Megjegyzés: Le kell szerelni/, 'nem latszik a feladat');
+    assert.ok(!flat(html).includes('Nincs tétel'), 'a "Nincs tetel" felirat feleslegesen megjelent');
+    assert.ok(!html.includes('item-grid-head'), 'ures oszlopfejlec maradt');
+  });
+
+  await test('Sem tetel, sem megjegyzes eseten a regi uzenet marad', async () => {
+    const html = itemsHtml([], '');
+    assert.match(flat(html), /Nincs tétel/, 'eltunt a "Nincs tetel" uzenet');
+    assert.ok(!html.includes('v65-manual-note'), 'ures megjegyzes-doboz jelent meg');
+  });
+
+  await test('A megjegyzes felirata mindket feluleten azonos', async () => {
+    const auth = fs.readFileSync(__dirname + '/auth-v44-2.js', 'utf8');
+    const v37 = fs.readFileSync(__dirname + '/planner-v37.js', 'utf8');
+    const app = fs.readFileSync(__dirname + '/app.js', 'utf8');
+    for (const [name, text] of [['auth-v44-2.js', auth], ['planner-v37.js', v37], ['app.js', app]]) {
+      assert.ok(text.includes('<b>Megjegyzés:</b>'), name + ': nem "Megjegyzés:" a felirat');
+      assert.ok(!/Felveendő:|Kézzel felvitt tételek:/.test(text), name + ': regi felirat maradt');
+    }
   });
 
   if (!process.exitCode) console.log(`\nV65 elfogadási teszt: ${passed}/${total} sikeres.`);

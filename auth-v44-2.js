@@ -227,7 +227,7 @@
         <button type="button" class="v57-detail-toggle" aria-expanded="false" title="Címek és megjegyzések"
           onclick="v57ToggleDriverDetail('${detailId}',this)">▾</button>
       </div>
-      ${order.manualItems ? `<div class="v65-manual-note"><b>Felveendő:</b> ${safe(order.manualItems)}</div>` : ''}
+      ${order.manualItems ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${safe(order.manualItems)}</div>` : ''}
       <div class="v57-row-actions">
         <button type="button" onclick="openItems('${safe(order.id)}')">Tételek${items.length ? ` (${received}/${items.length})` : ''}</button>
         <button type="button" class="camera-action" onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>
@@ -426,7 +426,7 @@
           ${mail.fileName ? `<div><b>Fájl:</b> ${safe(mail.fileName)}</div>` : ''}
           ${order.orderNo ? `<div><b>Rendelés:</b> ${safe(order.orderNo)}</div>` : ''}
         </div>
-        ${order.manualItems ? `<div class="v65-manual-note"><b>Kézzel felvitt tételek:</b> ${safe(order.manualItems)}</div>` : ''}
+        ${order.manualItems ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${safe(order.manualItems)}</div>` : ''}
         <pre class="mail-body">${safe(mail.body || '(A levélnek nincs szöveges tartalma.)')}</pre>
         ${(mail.attachmentNames || []).length ? `<div class="mail-meta"><b>Mellékletek:</b> ${safe(mail.attachmentNames.join(', '))}</div>` : ''}
         <div id="sourceMailFiles" class="mail-files"><small>Mellékletek betöltése…</small></div>`;
