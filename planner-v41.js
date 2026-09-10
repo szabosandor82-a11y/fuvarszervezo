@@ -1105,11 +1105,24 @@
     entry.warnings = unique(entry.warnings);
   }
 
+  /* V65: az importot blokkoló hiányok. Csak ez a három adat kötelező –
+     a tételek nem. Az előnézeten is látszik, hogy ne az importálás után
+     derüljön ki, mit kell pótolni. */
+  function blockingFields(entry) {
+    const numbers = entry.sourceOrderNos?.length ? entry.sourceOrderNos : orderNumbersOf(entry);
+    const missing = [];
+    if (!numbers.length) missing.push('rendelésszám');
+    if (!entry.pickupName) missing.push('felrakó');
+    if (!entry.projectName) missing.push('lerakó/projekt');
+    return missing;
+  }
+
   function entryCard(entry, index) {
     const categoryLabel = entry.category === 'martin' ? 'Martin / Platós' : 'Dobozos';
     return `<article class="v38-preview-card ${entry.approved ? '' : 'disabled'}" data-entry-id="${htmlEsc(entry._id)}">
       <header><label class="check"><input class="v38-approved" type="checkbox" ${entry.approved ? 'checked' : ''}> Importálás</label><span class="v38-category ${entry.category}">${categoryLabel}</span><button class="v38-remove" type="button" title="Eltávolítás">×</button></header>
       <div class="v38-source"><b>${htmlEsc(entry.sourceName)}</b><span>${htmlEsc(entry.orderType || 'SR0')}${entry.isReturn ? ' · visszáru' : ''}</span>${entry.pdfName && entry.pdfName !== entry.sourceName ? `<span>PDF: ${htmlEsc(entry.pdfName)}</span>` : ''}<span class="v38-status ${entry.warnings.length ? 'warn' : 'ok'}">${htmlEsc(statusText(entry))}</span></div>
+      ${blockingFields(entry).length ? `<div class="v65-blocking">Nem importálható – hiányzik: <b>${htmlEsc(blockingFields(entry).join(', '))}</b></div>` : ''}
       <div class="v38-fields">
         <label>Felvétel dátuma<input data-field="scheduleDate" type="date" value="${htmlEsc(entry.scheduleDate)}"></label>
         ${entry.messageOrderNos?.length > 1 ? `<label class="v43-all-order-nos">Rendelésszámok a levélben<input value="${htmlEsc(entry.messageOrderNos.join(', '))}" readonly></label>` : ''}
@@ -1336,8 +1349,15 @@ ${entry.subject || ''}`) || project;
     const acceptedEntries = [], skipped = [];
     for (const entry of selected) {
       const numbers = entry.sourceOrderNos?.length ? entry.sourceOrderNos : orderNumbersOf(entry);
-      if (!numbers.length || !entry.pickupName || !entry.projectName) {
-        skipped.push(`${entry.sourceName}: hiányzó kötelező adat`);
+      /* V65: korábban csak annyi állt az üzenetben, hogy "Kihagyva: 1", ezért
+         nem lehetett tudni, mit kell pótolni. Most megnevezi a hiányzó mezőt.
+         A tételek NEM kötelezők – az importot csak ez a három adat blokkolja. */
+      const missing = [];
+      if (!numbers.length) missing.push('rendelésszám');
+      if (!entry.pickupName) missing.push('felrakó');
+      if (!entry.projectName) missing.push('lerakó/projekt');
+      if (missing.length) {
+        skipped.push(`${entry.sourceName}: hiányzik – ${missing.join(', ')}`);
         continue;
       }
       entry.sourceOrderNos = numbers;
@@ -1389,7 +1409,7 @@ ${entry.subject || ''}`) || project;
 
     const martinCount = accepted.filter(order => order.importVehicleCategory === 'martin').length;
     const boxCount = accepted.filter(order => order.importVehicleCategory === 'dobozos').length;
-    alert(`${accepted.length} Outlook-rendelés importálva a(z) ${firstDate} napra. Martin / Platós: ${martinCount}, Dobozos: ${boxCount}.${replacementCount ? `\nFrissített korábbi Outlook-import: ${replacementCount}` : ''}${skipped.length ? `\nKihagyva: ${skipped.length}` : ''}\nA Dobozos fuvarok ideiglenesen Máriónál látszanak, a „Fuvar szétosztása” gomb újraosztja őket.`);
+    alert(`${accepted.length} Outlook-rendelés importálva a(z) ${firstDate} napra. Martin / Platós: ${martinCount}, Dobozos: ${boxCount}.${replacementCount ? `\nFrissített korábbi Outlook-import: ${replacementCount}` : ''}${skipped.length ? `\n\nKIHAGYVA (${skipped.length}):\n${skipped.join('\n')}\n\nEzeket az előnézetben pótold, majd importáld újra.` : ''}\nA Dobozos fuvarok ideiglenesen Máriónál látszanak, a „Fuvar szétosztása” gomb újraosztja őket.`);
   }
 
   function clearPreview() {
@@ -1510,6 +1530,7 @@ ${entry.subject || ''}`) || project;
     inferProjectHint,
     supplierSpecial,
     parsePdfItemsFromLines,
+    blockingFields,
     refreshEntryWarnings,
     supplierNameSelect,
     projectNameSelect,
