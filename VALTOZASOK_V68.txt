@@ -1,0 +1,22 @@
+FUVARSZERVEZŐ V68
+
+A kiválasztott 3. pasztell színterv:
+Márió: türkiz (#CCE5E5)
+Patrik: homok (#ECE1CE)
+Martin: orgona (#E5D9EC)
+Sötét, jól olvasható feliratok, egyező színű térképi jelölők.
+
+A főoldal „Hatékony fuvarszervezés” blokkja és képe eltávolítva.
+A sofőroszlopok közvetlenül a fejléc alá kerültek.
+A térképek ismét 230 px magasak az asztali nézetben.
+A mobil modern ikonos kialakítása megmaradt.
+
+A működési logika, azonosítók, vezérlők, eseménykezelők változatlanok.
+A motor belső verziója továbbra is V66. Csak a kijelzett név V68,
+az új megjelenés és annak gyorsítótár-jelölése módosult.
+
+Ellenőrzés: fájl-összehasonlítás, vezérlők és azonosítók egyezése,
+JavaScript szintaxis, helyi fájlhivatkozások, ZIP sértetlensége.
+Élő böngészős teszt és éles feltöltés nem történt.
+
+A teljes ZIP tartalma az eredeti GitHub Pages projekt szerkezetét követi.

@@ -86,7 +86,7 @@
   function appVersionLabel() {
     const version = global.V66Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
-    return version ? 'Fuvarszervező V67' : 'Fuvarszervező';
+    return version ? 'Fuvarszervező V68' : 'Fuvarszervező';
   }
   function setAppTitle(text) {
     const label = text || appVersionLabel();
