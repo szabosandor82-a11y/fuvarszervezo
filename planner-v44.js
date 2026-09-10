@@ -1334,7 +1334,7 @@
 
   function applyVersionLabelV54() {
     if (typeof document === 'undefined') return;
-    const label = `Fuvarszervező V${VERSION}`;
+    const label = 'Fuvarszervező V67';
     document.title = label;
     document.querySelectorAll('[data-app-version]').forEach(node => { node.textContent = label; });
     const brand = document.querySelector('#brandHome h1');
@@ -1345,7 +1345,7 @@
   // átírhatja a fejlécet. Az első percben visszaállítjuk, ha elcsúszna.
   function guardVersionLabelV55() {
     if (typeof document === 'undefined') return;
-    const label = `Fuvarszervező V${VERSION}`;
+    const label = 'Fuvarszervező V67';
     let ticks = 0;
     const timer = setInterval(() => {
       const brand = document.querySelector('#brandHome h1');

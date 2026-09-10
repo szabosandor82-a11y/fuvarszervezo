@@ -1,0 +1,39 @@
+FUVARSZERVEZŐ V67 – GRAFIKAI FRISSÍTÉS
+
+Alap: Fuvarszervezo_V66_Mobile_PWA_GitHub_Pages.zip
+Minta: 5. Prémium asztali + 5. Modern / ikon alapú mobil nézet.
+
+ASZTALI
+Sötét tengerészkék keret és oldalsáv, naplementés kamionos fejléc.
+Kék Márió-, zöld Patrik- és korall Martin-oszlop, világos fuvarlapok.
+A meglévő térképek és görgethető fuvarlisták megmaradtak.
+
+MOBIL
+Világos háttér, lekerekített, nagy ikonos gombok két oszlopban.
+Az admin menü a meglévő menüpontokat mutatja ikonlapokként.
+A sofőri felületen a meglévő Tételek, Szállítólevél, Csatolmány,
+Fuvar átadása és Mentett fotók műveletek kaptak új megjelenést.
+A feltételesen elérhető műveletek továbbra is feltételesen jelennek meg.
+Új Üzenetek vagy Profil funkció nem került a programba.
+
+VÁLTOZATLAN MŰKÖDÉS
+A V66 motor, import, export, törzsadatok, jogosultságok, mentés,
+fuvarszétosztás, optimalizálás és eseménykezelők változatlanok.
+A két JavaScript-fájlban csak a kijelzett alkalmazásnév lett V67.
+A motor belső verzióazonosítója és műveleti üzenetei továbbra is V66.
+A HTML vezérlői, azonosítói és eseményattribútumai változatlanok.
+A PWA neve, színei és a módosított grafikai fájlok gyorsítótár-jelölése frissült.
+A fejléc képe és az ikonok be vannak ágyazva a CSS-be.
+
+ELLENŐRZÉS
+Fájl-összehasonlítás: kizárólag a fenti grafikai és kijelzési eltérések.
+JavaScript szintaxis és helyi fájlhivatkozások: rendben.
+Az eredeti TEST_V66.js működési ellenőrzései sikeresek.
+Egy verziófelirat-ellenőrzés V66-ot vár, ezért a V67 megjelenítési
+verziót eltérésnek jelzi; az eredeti tesztet változatlanul hagytuk.
+Élő bejelentkezési és böngészős vizuális teszt nem történt.
+
+HASZNÁLAT
+A ZIP tartalmát a meglévő GitHub Pages projekt helyére lehet feltölteni.
+A mappaszerkezet az eredeti csomagéval azonos; az index.html a gyökérben van.
+Ebből a munkamenetből élő oldalra nem történt feltöltés.
