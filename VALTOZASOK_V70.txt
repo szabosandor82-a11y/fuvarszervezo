@@ -1,0 +1,104 @@
+FUVARSZERVEZO V70
+=================
+
+A V69 csomagra epul. A hianyzo tesztkeszlet visszakerult (15 tesztfajl,
+133 ellenorzes), es az azonnal elkapott ket hibat is javitottuk.
+
+MODOSITOTT FAJLOK
+-----------------
+auth-v44-2.js   idobelyeg szerinti osszefesules, azonnali mentes, galeria-szures
+app.js          mentesi idobelyeg, hazszam-osszevonas a keresesben
+online-v44-2.js a fajllista jeloli a forrasmellekletet
+planner-v37.js  a Nezet csuszkaja kulon rekeszbe, a Csatolmany utan
+planner-v44.js  verziofelirat a VERSION konstansbol
+data.js         51 cim per-jeles hazszama egybeirva
+styles.css      mobil gombmeretek, csuszka-rekesz
+index.html / manifest / sw.js   verziószam
+TEST_V70.js     133 teszt (a TEST_V66 folytatasa)
+
+
+0. AMIT A VISSZATETT TESZTEK AZONNAL ELKAPTAK
+---------------------------------------------
+  - a felulet V69-et irt, a motor VERSION konstansa 66 maradt: a fejlec
+    betoltes utan visszaugrott volna
+  - a feliratot HAROM helyen beegettek, kikerulve a konstanst
+    (auth-v44-2.js es planner-v44.js)
+Mindharom javitva, a felirat ujra egyetlen forrasbol jon.
+
+
+1. A DATUMVALTAS NEM ALL VISSZA
+-------------------------------
+Hiba: ket rendelest athelyeztel a holnapi naprol a maira, es az egesz oldal
+egy korabbi allapotra frissult vissza.
+
+Ok: a mentes 900 ms-ot var a feltoltessel. Ha kozben frissitesz, elnavigalsz
+vagy a feltoltes hibara fut, a valtozas nem jut fel. Betolteskor viszont az
+initialOnlineLoad FELTETEL NELKUL felulirta a helyi allapotot a
+szerveroldalival - nem volt sem osszefesules, sem idobelyeg-osszehasonlitas.
+
+Javitas harom reszben:
+  - minden mentes idobelyeget tesz a valtozott fuvarokra (localUpdatedAt)
+  - betolteskor rekordonkent a FRISSEBB marad; a csak helyben letezo fuvar
+    is megmarad, es azonnal feltoltodik
+  - a fuggoben levo mentes kikenyszerul, ha a lap hatterbe kerul vagy
+    bezarul (visibilitychange, pagehide, beforeunload)
+
+
+2. MOBIL: BEZARO ES KILEPES GOMB
+--------------------------------
+A bezaro gomb 38 pixel volt, es a fejlec negativ margoval a kepernyo szeleig
+logott - ott a rendszer sajat gesztusai is elveszik az erintest.
+
+  - a bezaro gomb 48x48 pixel, beljebb huzva
+  - a kilepes gomb legalabb 44 pixel magas
+  - biztonsagos margo a kepernyo szelen (env safe-area-inset)
+  - a parbeszedablakok es a fejlec is kapnak oldalso margot
+
+
+3. A NEZET CSUSZKAI
+-------------------
+A fogantyu benne volt a kodban, de lathatatlan: 15 pixeles karakter, hatter
+nelkul, a sor bal szelen.
+
+Mostantol a sor VEGEN all, kulon rekeszben, elvalaszto vonallal a Csatolmany
+gomb utan. Merete 34x36 pixel, keretes, sotetebb - egerrel es ujjal is
+megfoghato. A Tetelek es a Csatolmany gomb kisebb lett, hogy elferjen.
+
+
+4. MENTETT FOTOK VS OUTLOOK-CSATOLMANY
+--------------------------------------
+A ketto ugyanabbol a tarolobol olvasott, es nem szurt forras szerint.
+
+Az Outlook-import "Outlook forras" megjegyzessel tolti fel a mellekleteket.
+A fajllista mostantol lekerdezi a jelentes megjegyzeset, es megjeloli
+(is_source_mail). Ezutan:
+  - Mentett fotok: CSAK a sofor altal keszitett szallitolevel-fotok
+  - Csatolmany: CSAK az importalt level mellekletei, a level aljan
+
+Ha nincs mentett foto, a szoveg elmondja, hogy a level mellekletei a
+Csatolmany gombbal nyilnak.
+
+
+5. A CIMEK PER-JELES HAZSZAMAI
+------------------------------
+51 cimben szerepelt "14/B" alaku hazszam, ami miatt a terkep nem talalta meg
+a pontot. Ezek egybeirva: 14B, 3B, 63G, 50A es tarsai.
+
+A kereses is egyseges: a norm() a hazszamot mindig egybe olvassa, tehat a
+"14/B", a "14 B" es a "14B" ugyanaz. A tartomanyos hazszamot (156-158) nem
+rontja el.
+
+A zaro pontokhoz NEM nyultunk - azok a bizonylatokon is ott vannak, es a
+kereses ugyis levagja oket.
+
+
+TESZTEK
+-------
+TEST_V70.js   133/133
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Hat korabbi teszt varakozasat a V69 sajat valtozasaihoz igazitottuk:
+az export Sorrend oszlopa mostantol kitoltott, es a terkeprajzolo
+osszeveti a mentett tervet az aznapi fuvarokkal.
+
+Futtatas: node TEST_V70.js

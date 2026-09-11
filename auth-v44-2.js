@@ -85,9 +85,9 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V66Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V70Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
-    return version ? 'Fuvarszervező V69' : 'Fuvarszervező';
+    return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
   function setAppTitle(text) {
     const label = text || appVersionLabel();
@@ -347,6 +347,42 @@
     } finally { if (submit) submit.disabled = false; }
   }
 
+  /* V70 – ÖSSZEFÉSÜLÉS IDŐBÉLYEG ALAPJÁN
+
+     Minden helyi módosítás kap egy localUpdatedAt bélyeget. Betöltéskor
+     rekordonként azt tartjuk meg, amelyik frissebb. Így a másik napra
+     áthelyezett fuvar nem ugrik vissza a régi dátumra.
+
+     A szerveren nem létező, de helyben meglévő fuvar is megmarad – az vagy
+     most keletkezett, vagy a feltöltése nem ment át. */
+  function orderStampV70(order) {
+    const value = order?.localUpdatedAt || order?.updated_at || order?.updatedAt || '';
+    const time = Date.parse(value);
+    return Number.isFinite(time) ? time : 0;
+  }
+
+  function mergeOrdersByTimestampV70(localOrders, remoteOrders) {
+    const remoteById = new Map((remoteOrders || []).map(order => [String(order.id), order]));
+    const keptLocalIds = new Set();
+    const orders = [];
+    for (const local of localOrders || []) {
+      const remote = remoteById.get(String(local.id));
+      if (!remote) { orders.push(local); keptLocalIds.add(String(local.id)); continue; }
+      remoteById.delete(String(local.id));
+      if (orderStampV70(local) > orderStampV70(remote)) { orders.push(local); keptLocalIds.add(String(local.id)); }
+      else orders.push(remote);
+    }
+    for (const remote of remoteById.values()) orders.push(remote);
+    return { orders, keptLocalIds };
+  }
+
+  function mergeBacklogByTimestampV70(localBacklog, remoteBacklog, keptLocalIds) {
+    if (!keptLocalIds || !keptLocalIds.size) return remoteBacklog || [];
+    const kept = (localBacklog || []).filter(item => keptLocalIds.has(String(item.targetOrderId)));
+    const keptIds = new Set(kept.map(item => String(item.id)));
+    return [...(remoteBacklog || []).filter(item => !keptIds.has(String(item.id))), ...kept];
+  }
+
   async function initialOnlineLoad() {
     const localOrders = [...(state.orders || [])];
     const [remoteOrders, remoteBacklog] = await Promise.all([global.V44Online.fetchOrders(), global.V44Online.fetchBacklog()]);
@@ -362,7 +398,22 @@
           await global.V44Online.syncOrders(localOrders, currentProfile);
           [state.orders, state.backlog] = await Promise.all([global.V44Online.fetchOrders(), global.V44Online.fetchBacklog()]);
         } else { state.orders = remoteOrders; state.backlog = remoteBacklog; }
-      } else { state.orders = remoteOrders; state.backlog = remoteBacklog; }
+      } else {
+        // V70: NEM írjuk felül vakon a helyi állapotot. Ha egy fuvart helyben
+        // módosítottunk (pl. másik napra raktuk), de a feltöltés még nem ment
+        // át – mert 900 ms-en belül frissítettél, vagy hibára futott –, akkor
+        // a régi szerveroldali állapot nyerne, és a változás elveszne.
+        // Ezért időbélyeg alapján fésülünk: a frissebb rekord marad.
+        const merged = mergeOrdersByTimestampV70(localOrders, remoteOrders);
+        state.orders = merged.orders;
+        state.backlog = mergeBacklogByTimestampV70(state.backlog || [], remoteBacklog, merged.keptLocalIds);
+        if (merged.keptLocalIds.size) {
+          console.info('[V70] Helyben frissebb fuvar megtartva:', merged.keptLocalIds.size);
+          // a helyi többletet azonnal feltöltjük, hogy a szerver is kövesse
+          try { await global.V44Online.syncOrders(state.orders, currentProfile); }
+          catch (error) { console.warn('[V70] A helyi változás feltöltése nem sikerült', error); }
+        }
+      }
       if (typeof save === 'function') save(false);
       if (typeof render === 'function') render();
       await refreshTransfers();
@@ -472,7 +523,10 @@
     if (!files) return;
     try {
       const list = await listDeliveryFilesEventually(orderId);
-      const sources = (list || []).filter(file => /\.(pdf|jpe?g|png)$/i.test(file.file_name || ''));
+      // V70: itt fordítva – csak az Outlook-import forrásmellékletei.
+      const all = (list || []).filter(file => /\.(pdf|jpe?g|png)$/i.test(file.file_name || ''));
+      const sources = all.filter(file => file.is_source_mail).length
+        ? all.filter(file => file.is_source_mail) : all;
       files.innerHTML = sources.length
         ? `<div class="mail-files-title">Mellékletek (${sources.length})</div>`
           + sources.map(file => `<a class="mail-file" href="${safe(file.url)}" target="_blank" rel="noopener"><i class="ti ti-paperclip" aria-hidden="true"></i> ${safe(file.file_name)}</a>`).join('')
@@ -522,7 +576,10 @@
         const files = await global.V44Online.listDeliveryFiles(id);
         return (files || []).map(file => ({ ...file, orderNo: order?.orderNo || '' }));
       }));
-      const files = groups.flat();
+      /* V70: a Mentett fotók CSAK a sofőr által készített szállítóleveleket
+         mutatja. Az Outlook-importból feltöltött forrásmellékletek a
+         Csatolmány gomb mögé tartoznak, nem ide. */
+      const files = groups.flat().filter(file => !file.is_source_mail);
       if (host) host.innerHTML = files.length ? files.map(file => file.mime_type?.startsWith('audio/') ? `<article><audio controls src="${safe(file.url)}"></audio><small>${safe(file.orderNo)} · ${safe(file.file_name || 'Hangjegyzet')}</small></article>` : `<article><a href="${safe(file.url)}" target="_blank" rel="noopener"><img src="${safe(file.url)}" alt="Szállítólevél"></a><small>${safe(file.orderNo)} · ${safe(file.file_name || 'Fotó')}</small></article>`).join('') : '<div class="mobile-empty">Ehhez a fuvarhoz még nincs elmentett fotó.</div>';
     } catch (error) { if (host) host.innerHTML = `<div class="mobile-empty">Betöltési hiba: ${safe(error.message)}</div>`; }
   }
@@ -532,6 +589,7 @@
     if (suppressOnlineSave || !currentProfile || !global.V44Online?.configured()) return;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
+      saveTimer = null;
       try {
         // A mobil állapot csak a felhasználó által látható fuvarokat és az általa frissen
         // létrehozott, jövőbeli hátralékos célfuvarokat tartalmazza. A szerveroldali RPC
@@ -550,6 +608,22 @@
         setSyncStatus({ state: 'error', message: `Mentési hiba: ${error.message}` });
       }
     }, 900);
+  }
+
+  /* V70: ha a lap bezárul vagy háttérbe kerül, a függőben lévő mentést
+     azonnal elindítjuk. Enélkül a 900 ms-es várakozás alatt elnavigálva a
+     változás soha nem jutott fel a szerverre. */
+  function flushPendingSyncV70() {
+    if (!saveTimer) return;
+    clearTimeout(saveTimer); saveTimer = null;
+    if (suppressOnlineSave || !currentProfile || !global.V44Online?.configured()) return;
+    try { global.V44Online.syncOrders(state.orders || [], currentProfile); }
+    catch (error) { console.warn('[V70] Azonnali mentés nem sikerült', error); }
+  }
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushPendingSyncV70(); });
+    global.addEventListener?.('pagehide', flushPendingSyncV70);
+    global.addEventListener?.('beforeunload', flushPendingSyncV70);
   }
 
   function installGuardsAndHooks() {

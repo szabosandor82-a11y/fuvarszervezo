@@ -394,13 +394,13 @@
 
     return `<section class="pickup-move-block v56-row-block ${resolved ? 'resolved-pickup-block' : ''} ${pinned ? 'pinned-block' : ''} ${fullLoad ? 'full-load-block' : ''}" data-pickup-move-key="${escHtml(unit.pickupKey)}" data-order-ids="${escHtml(ids)}">
       <article class="v56-row ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''} ${longReasons.length ? 'has-long' : ''}${unreadComment ? ' user-comment-unread' : ''}" data-id="${escHtml(first.id || ids.split(',')[0] || '')}">
-        <span class="drag v56-drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : 'Húzás'}">☷</span>
         <span class="v56-index">${escHtml(String(index + 1))}</span>
         <div class="v56-main">
           <div class="v56-line-top"><b>${escHtml(displayName)}</b>${central ? '<span class="v56-chip">kp</span>' : ''}${longReasons.length ? '<span class="v56-chip v56-chip-warn">szálas</span>' : ''}<span class="v56-addr">${address ? '— ' + escHtml(address) : ''}</span></div>
         </div>
         <button type="button" class="v56-items-btn" onclick="event.stopPropagation();v56ToggleItems('${escHtml(ids)}',this)" title="Lerakók és tételek">${dropCount} lerakó · ${itemCount} tétel${manualNotes.length ? ' + kézi' : ''} <span class="v56-caret">▾</span></button>
         ${hasSourceMail ? `<button type="button" class="v56-mail-btn" title="Importált levél és csatolmány" onclick="event.stopPropagation();openSourceMail('${escHtml(sourceOrder.id || '')}')">Csatolmány</button>` : ''}
+        <span class="v56-drag-cell"><span class="drag v56-drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : 'Húzás – fogd meg és told fel-le'}" aria-label="Sorrend átrendezése">⋮⋮</span></span>
       </article>
       <div class="v56-items" data-items-for="${escHtml(ids)}" hidden>${manualBlock}${detail}<button type="button" class="v56-pdf-button secondary" onclick="event.stopPropagation();openOrderPdfAttachments('${escHtml(ids)}')">PDF mellékletek megnyitása</button><div class="v56-pdf-status" id="v56-pdf-${escHtml(first.id || ids.split(',')[0] || '')}"></div></div>
       ${fullLoad ? '<div class="v56-forced-drop">Kötelező azonnali lerakás</div>' : ''}
@@ -424,7 +424,6 @@
 
     return `<div class="route-block v56-row-block ${options.insidePickupGroup ? 'inside-pickup-group' : ''} ${pinned ? 'pinned-block' : ''} ${fullLoad ? 'full-load-block' : ''} ${resolved ? 'resolved-backlog-block' : ''}" data-order-ids="${escHtml(ids)}">
       <article class="v56-row ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''} ${longReasons.length ? 'has-long' : ''}${unreadComment ? ' user-comment-unread' : ''}" data-id="${escHtml(first.id)}" data-order-ids="${escHtml(ids)}">
-        <span class="drag v56-drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : 'Húzás'}">☷</span>
         <span class="v56-index">${escHtml(displayNumber)}</span>
         <div class="v56-main">
           <div class="v56-line-top">
@@ -435,6 +434,7 @@
           ${warnings || ''}
         </div>
         <button type="button" class="v56-items-btn" onclick="event.stopPropagation();v56ToggleItems('${escHtml(ids)}',this)" title="Felrakandó tételek">${itemCount} tétel <span class="v56-caret">▾</span></button>
+        <span class="v56-drag-cell"><span class="drag v56-drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : 'Húzás – fogd meg és told fel-le'}" aria-label="Sorrend átrendezése">⋮⋮</span></span>
       </article>
       <div class="v56-items" data-items-for="${escHtml(ids)}" hidden>${items}<button type="button" class="v56-pdf-button secondary" onclick="event.stopPropagation();openOrderPdfAttachments('${escHtml(ids)}')">PDF mellékletek megnyitása</button></div>
       ${fullLoad ? '<div class="v56-forced-drop">Kötelező azonnali lerakás</div>' : ''}
@@ -555,7 +555,7 @@
     const map = focusMap, date = selectedDate();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
     let events = state.routePlans?.[selectedDate()]?.[vehicleId] || [];
-    const currentPlanner = global.V66Planner || global.V65Planner || global.V64Planner;
+    const currentPlanner = global.V70Planner || global.V65Planner || global.V64Planner;
     const snapshot = currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
     const isCurrent = () => focusMap === map && selectedDate() === date
       && snapshot === currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
@@ -762,7 +762,7 @@
         // útvonalterv épül újra a kézi sequence értékekből, és csak utána
         // rajzolunk. Fordítva a rajzoló üres tervet találna, és
         // újraoptimalizálná az útvonalat, felülírva a te sorrendedet.
-        const buildManual = global.V66Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
+        const buildManual = global.V70Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
         setTimeout(async () => {
           if (typeof buildManual === 'function') {
             try {

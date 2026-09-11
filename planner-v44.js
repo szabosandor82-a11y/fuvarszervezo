@@ -1,4 +1,4 @@
-/* Fuvarszervező V66
+/* Fuvarszervező V70
    Sáv-alapú szétosztás és lánc-optimalizált felrakási sorrend.
 
    Kemény szabályok:
@@ -23,7 +23,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '66';
+  const VERSION = '70';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   // Alapértelmezett indulási pontok. A törzsadat (SEED_DATA.vehicles) felülírja
   // őket, ha ott meg van adva a sofőr lakóhelye.
@@ -926,7 +926,7 @@
         if (Number.isFinite(metres)) fallback[from.index][to.index] = metres / 1000;
       }));
     } catch (error) {
-      console.warn('[V66] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
+      console.warn('[V70] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
     }
     return fallback;
   }
@@ -1192,10 +1192,10 @@
       await persistOnlineV49();
       if (typeof render === 'function') render();
       const conflictText = result.conflicts.length ? `\nFigyelem: ${result.conflicts.length} felrakóhelyen egymással ütköző fix sofőrjelölés maradt.` : '';
-      alert(`Fuvarok V66 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
+      alert(`Fuvarok V70 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
       return result;
     } catch (error) {
-      console.error('[V66] Szétosztási hiba', error);
+      console.error('[V70] Szétosztási hiba', error);
       alert(`A fuvarok szétosztása közben hiba történt: ${error?.message || error}`);
       return null;
     }
@@ -1211,10 +1211,10 @@
       if (changed.length) throw new Error('Az optimalizálás sofőrt változtatott.');
       await persistOnlineV49();
       if (typeof render === 'function') render();
-      alert('V66 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
+      alert('V70 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
       return true;
     } catch (error) {
-      console.error('[V66] Optimalizálási hiba', error);
+      console.error('[V70] Optimalizálási hiba', error);
       alert(`Az optimalizálás közben hiba történt: ${error?.message || error}`);
       return false;
     }
@@ -1423,7 +1423,7 @@
 
   function applyVersionLabelV54() {
     if (typeof document === 'undefined') return;
-    const label = 'Fuvarszervező V69';
+    const label = `Fuvarszervező V${VERSION}`;
     document.title = label;
     document.querySelectorAll('[data-app-version]').forEach(node => { node.textContent = label; });
     const brand = document.querySelector('#brandHome h1');
@@ -1434,7 +1434,7 @@
   // átírhatja a fejlécet. Az első percben visszaállítjuk, ha elcsúszna.
   function guardVersionLabelV55() {
     if (typeof document === 'undefined') return;
-    const label = 'Fuvarszervező V69';
+    const label = `Fuvarszervező V${VERSION}`;
     let ticks = 0;
     const timer = setInterval(() => {
       const brand = document.querySelector('#brandHome h1');
@@ -1452,12 +1452,12 @@
     if (balanceButton) {
       balanceButton.onclick = event => { event.preventDefault(); return balanceActionV44(); };
       balanceButton.dataset.algorithmVersion = VERSION;
-      balanceButton.title = 'V66: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
+      balanceButton.title = 'V70: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
     }
     if (optimizeButton) {
       optimizeButton.onclick = event => { event.preventDefault(); return optimizeActionV44(); };
       optimizeButton.dataset.algorithmVersion = VERSION;
-      optimizeButton.title = 'V66: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
+      optimizeButton.title = 'V70: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
     }
     document.getElementById('clearAllMastersBtn')?.addEventListener('click', clearAllMasterDataV44);
     document.getElementById('loadBuiltInMastersBtn')?.addEventListener('click', loadBuiltInMasterDataV44);
@@ -1493,7 +1493,7 @@
   global.clearAllMasterDataV44 = clearAllMasterDataV44;
   global.loadBuiltInMasterDataV44 = loadBuiltInMasterDataV44;
 
-  global.V66Planner = {
+  global.V70Planner = {
     version: VERSION,
     canonicalAddress,
     locationKey,
@@ -1534,22 +1534,24 @@
     clearAllMasterDataV44,
     loadBuiltInMasterDataV44
   };
-  global.V65Planner = global.V66Planner;
-  global.V64Planner = global.V66Planner;
-  global.V63Planner = global.V66Planner;
-  global.V62Planner = global.V66Planner;
-  global.V61Planner = global.V66Planner;
-  global.V60Planner = global.V66Planner;
-  global.V59Planner = global.V66Planner;
-  global.V58Planner = global.V66Planner;
-  global.V57Planner = global.V66Planner;
-  global.V56Planner = global.V66Planner;
-  global.V55Planner = global.V66Planner;
-  global.V54Planner = global.V66Planner;
-  global.V53Planner = global.V66Planner;
-  global.V50Planner = global.V66Planner;
-  global.V49Planner = global.V66Planner;
-  global.V44Planner = global.V66Planner;
+  global.V69Planner = global.V70Planner;
+  global.V66Planner = global.V70Planner;
+  global.V65Planner = global.V70Planner;
+  global.V64Planner = global.V70Planner;
+  global.V63Planner = global.V70Planner;
+  global.V62Planner = global.V70Planner;
+  global.V61Planner = global.V70Planner;
+  global.V60Planner = global.V70Planner;
+  global.V59Planner = global.V70Planner;
+  global.V58Planner = global.V70Planner;
+  global.V57Planner = global.V70Planner;
+  global.V56Planner = global.V70Planner;
+  global.V55Planner = global.V70Planner;
+  global.V54Planner = global.V70Planner;
+  global.V53Planner = global.V70Planner;
+  global.V50Planner = global.V70Planner;
+  global.V49Planner = global.V70Planner;
+  global.V44Planner = global.V70Planner;
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(bindV44, 0), { once: true });

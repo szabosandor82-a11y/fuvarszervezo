@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V66Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V70Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -19,7 +19,13 @@ function normalizeWorkday(value){
 }
 const today=()=>localISO(new Date()),tomorrow=()=>shiftWorkday(today(),1),uid=()=>crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random();
 function esc(v=''){return String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-function norm(s=''){return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[_.,;:()[\]{}\/\\-]+/g,' ').replace(/\s+/g,' ').trim()}
+/* V70: a házszámot a keresés és a térkép szempontjából EGYBE olvassuk.
+   A "14/B", a "14 B" és a "14B" ugyanaz a cím – enélkül a per-jeles alak
+   nem talált a törzsadatra, és a térképen sem jelent meg a pont. */
+function joinHouseNumber(value){
+  return String(value||'').replace(/(\d+)\s*[\/\-]?\s*([a-zA-Z])(?![a-zA-Z0-9])/g,'$1$2');
+}
+function norm(s=''){return joinHouseNumber(String(s)).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[_.,;:()[\]{}\/\\-]+/g,' ').replace(/\s+/g,' ').trim()}
 function last5(v=''){const d=String(v).replace(/\D/g,'');return d.slice(-5).padStart(5,'0')}
 function dateVal(v){if(v===null||v===undefined||v==='')return'';if(v instanceof Date&&!isNaN(v))return localISO(v);if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return d?`${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`:''}const t=String(v).trim();let m=t.match(/^(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})(?:\D|$)/);if(m)return`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;m=t.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})(?:\D|$)/);if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;return''}
 function setDateParts(prefix,value=''){const m=String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);$('#'+prefix+'Year').value=m?.[1]||'';$('#'+prefix+'Month').value=m?.[2]||'';$('#'+prefix+'Day').value=m?.[3]||'';const hidden=$('#'+(prefix==='schedule'?'scheduleDate':'deadline'));if(hidden)hidden.value=m?value:''}
@@ -136,7 +142,20 @@ function reconcileState(reason = '') {
 }
 window.reconcileState = reconcileState;
 
-function save(renderNow=true){reconcileState('mentés');localStorage.setItem(KEY,JSON.stringify(state));if(renderNow)render()}
+/* V70: minden mentés bélyeget tesz a fuvarokra. Ebből derül ki betöltéskor,
+   hogy a helyi vagy a szerveroldali változat frissebb. */
+function stampLocalChanges(){
+  const now=new Date().toISOString();
+  const prev=window.__lastSavedSnapshotV70||{};
+  const next={};
+  for(const o of state.orders||[]){
+    const key=`${o.scheduleDate}|${o.vehicleId}|${o.sequence}|${o.completed?1:0}|${(o.items||[]).length}`;
+    next[o.id]=key;
+    if(prev[o.id]!==key)o.localUpdatedAt=now;
+  }
+  window.__lastSavedSnapshotV70=next;
+}
+function save(renderNow=true){stampLocalChanges();reconcileState('mentés');localStorage.setItem(KEY,JSON.stringify(state));if(renderNow)render()}
 function activeVehicles(){return state.vehicles.filter(v=>v.active)}
 function marioVehicle(){return activeVehicles().find(v=>norm(v.driverName).includes('mario'))||state.vehicles.find(v=>norm(v.driverName).includes('mario'))||null}
 function selectedDate(){return $('#workDate').value||today()}

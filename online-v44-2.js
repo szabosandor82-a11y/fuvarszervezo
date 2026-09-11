@@ -342,6 +342,24 @@
       const signedUrl = !signedPath ? '' : /^https?:/i.test(signedPath) ? signedPath : signedPath.startsWith('/storage/v1') ? `${baseUrl()}${signedPath}` : `${baseUrl()}/storage/v1${signedPath.startsWith('/') ? '' : '/'}${signedPath}`;
       result.push({ ...row, url: signedUrl });
     }
+    /* V70: a fájl mellé odatesszük a jelentés megjegyzését. Ebből derül ki,
+       hogy a sofőr által készített szállítólevél-fotóról van-e szó, vagy az
+       Outlook-importból feltöltött forrásmellékletről – így a Mentett fotók
+       és a Csatolmány nem keveredik. */
+    try {
+      const ids = [...new Set(result.map(row => row.report_id).filter(Boolean))];
+      if (ids.length) {
+        const reports = await dbRequest(`delivery_reports?${qs({ select: 'id,note', id: `in.(${ids.join(',')})` })}`);
+        const noteById = new Map((reports || []).map(report => [String(report.id), String(report.note || '')]));
+        for (const row of result) {
+          row.report_note = noteById.get(String(row.report_id)) || '';
+          row.is_source_mail = /outlook\s*forr[aá]s/i.test(row.report_note);
+        }
+      }
+    } catch (error) {
+      console.warn('[V70] A jelentés-megjegyzések nem tölthetők be', error);
+      for (const row of result) { row.report_note = ''; row.is_source_mail = false; }
+    }
     return result;
   }
 

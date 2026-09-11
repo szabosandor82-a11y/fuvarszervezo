@@ -229,7 +229,11 @@ dialog{background:#fffefd;box-shadow:0 28px 76px #6278872e}dialog::backdrop{back
 .v56-row.has-long{border-left:3px solid #ba7517}
 .v56-row-block.pinned-block .v56-row{border-left:3px solid #534ab7}
 .v56-row.resolved-backlog{background:#f4f2ec}
-.v56-drag{cursor:grab;color:#9a978d;font-size:15px;flex:none;line-height:1}
+.v56-drag-cell{flex:none;display:flex;align-items:stretch;margin-left:4px;
+  padding-left:8px;border-left:1px solid #ddd9cf}
+.v56-drag{display:flex;align-items:center;justify-content:center;width:34px;height:36px;
+  font-size:18px;letter-spacing:-3px;color:#6b675d;background:#f1efe8;border:.5px solid #cfcbbf;
+  border-radius:7px;cursor:grab;touch-action:none;user-select:none}
 .v56-index{flex:none;width:22px;height:22px;border-radius:50%;background:#e6f1fb;color:#0c447c;
   font-size:12px;display:flex;align-items:center;justify-content:center}
 .v56-main{flex:1;min-width:0}
@@ -405,7 +409,7 @@ dialog{background:#fffefd;box-shadow:0 28px 76px #6278872e}dialog::backdrop{back
 .v65-manual-note{margin:6px 0 0;padding:7px 9px;font-size:12px;line-height:1.45;
   background:#fdf6e6;border:.5px solid #e6d3a8;border-left:3px solid #ba7517;border-radius:0;color:#5b4a2a}
 .v65-manual-note b{font-weight:600}
-.v56-mail-btn{flex:none;height:28px;padding:0 9px;font-size:12px;border:.5px solid #a9cf9a;
+.v56-mail-btn{flex:none;height:28px;padding:0 7px;font-size:11px;border:.5px solid #a9cf9a;
   background:#eef7ea;color:var(--ink);border-radius:6px;cursor:pointer}
 .v56-mail-btn:hover{background:#e0f0d8}
 .v65-manual-items{display:block;margin:8px 0 0}
@@ -634,3 +638,28 @@ input,select,textarea{border-color:#d7e2ee;border-radius:10px}
 .v56-row.user-comment-unread{position:relative;border:2px solid #e2a52b!important;background:#fffaf0!important}
 .mobile-user-row.user-comment-unread{border:2px solid #e2a52b!important;background:#fffaf0!important}
 @media(max-width:560px){.user-comment-unread::after{top:7px;right:7px;font-size:9px}.v57-row-title{padding-right:112px}}
+
+/* V70 – MOBIL: elérhető bezáró és kilépés gomb.
+   A fejléc negatív margóval a képernyő széléig lógott, a gomb 38 pixeles
+   volt, és a szélen a rendszer saját gesztusai is elveszik az érintést.
+   Ezért beljebb húzzuk, megnöveljük, és biztonságos margót hagyunk. */
+@media(max-width:760px){
+  .dialog-head{margin:-14px -12px 12px;padding:12px 14px;gap:10px}
+  .close{width:48px!important;height:48px!important;min-width:48px;font-size:26px;
+    margin-right:2px;border-radius:12px;background:#e4edf2;color:var(--navy)}
+  .close:active{background:#cfdde6}
+  #accountBar{gap:8px;flex-wrap:wrap}
+  #accountLogout{min-height:44px;padding:0 14px;font-size:14px;border-radius:10px;
+    margin-right:2px}
+  .topbar{padding-right:14px}
+  /* a lapszélhez tapadó vezérlők mindenhol kapjanak fogást */
+  .search-clear{right:12px;width:40px;height:40px}
+  dialog{padding-left:14px;padding-right:14px}
+}
+@supports(padding:max(0px)){
+  @media(max-width:760px){
+    dialog{padding-left:max(14px,env(safe-area-inset-left));
+      padding-right:max(14px,env(safe-area-inset-right))}
+    .topbar{padding-right:max(14px,env(safe-area-inset-right))}
+  }
+}
