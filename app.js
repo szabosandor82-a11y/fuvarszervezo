@@ -155,7 +155,7 @@ function stampLocalChanges(){
   }
   window.__lastSavedSnapshotV70=next;
 }
-function save(renderNow=true){stampLocalChanges();reconcileState('mentés');pruneOrderAttachmentsV73();localStorage.setItem(KEY,JSON.stringify(state));if(renderNow)render()}
+function save(renderNow=true){stampLocalChanges();reconcileState('mentés');try{pruneOrderAttachmentsV73()}catch(error){console.warn('[V74] melléklet-takarítás',error)}localStorage.setItem(KEY,JSON.stringify(state));if(renderNow)render()}
 function activeVehicles(){return state.vehicles.filter(v=>v.active)}
 function marioVehicle(){return activeVehicles().find(v=>norm(v.driverName).includes('mario'))||state.vehicles.find(v=>norm(v.driverName).includes('mario'))||null}
 function selectedDate(){return $('#workDate').value||today()}
@@ -1145,15 +1145,20 @@ window.cleanOrderNoteV73=cleanOrderNoteV73;
 
    A hely véges, ezért két korlát van: fájlonként 600 kB, és a 10 napnál
    régebbi bejegyzések takarítódnak. */
-const ATTACH_STORE_PREFIX_V73 = 'fuvarAttach:';
-const ATTACH_MAX_BYTES_V73 = 600 * 1024;
-const ATTACH_KEEP_DAYS_V73 = 10;
+/* V74 JAVÍTÁS: ezek korábban const-ok voltak a fájl alján, a save() viszont
+   jóval feljebb van, és a betöltés alatt már meghívódik. Ilyenkor a konstans
+   még nem létezik ("Cannot access ... before initialization"), és az egész
+   alkalmazás elszállt a belépésnél. Függvényként adjuk vissza őket, mert a
+   függvénydeklaráció a fájl elejére emelődik. */
+function attachPrefixV73() { return 'fuvarAttach:'; }
+function attachMaxBytesV73() { return 600 * 1024; }
+function attachKeepDaysV73() { return 10; }
 
-function attachKeyV73(orderId) { return ATTACH_STORE_PREFIX_V73 + String(orderId || ''); }
+function attachKeyV73(orderId) { return attachPrefixV73() + String(orderId || ''); }
 
 function saveOrderAttachmentsV73(orderId, files) {
   if (!orderId || !files?.length) return 0;
-  const kept = files.filter(file => file?.dataUrl && file.dataUrl.length <= ATTACH_MAX_BYTES_V73 * 1.4);
+  const kept = files.filter(file => file?.dataUrl && file.dataUrl.length <= attachMaxBytesV73() * 1.4);
   if (!kept.length) return 0;
   try {
     localStorage.setItem(attachKeyV73(orderId), JSON.stringify({ at: new Date().toISOString(), files: kept }));
@@ -1177,13 +1182,13 @@ window.loadOrderAttachmentsV73 = loadOrderAttachmentsV73;
 window.saveOrderAttachmentsV73 = saveOrderAttachmentsV73;
 
 function pruneOrderAttachmentsV73(aggressive = false) {
-  const limit = Date.now() - ATTACH_KEEP_DAYS_V73 * 86400000;
+  const limit = Date.now() - attachKeepDaysV73() * 86400000;
   const liveIds = new Set((state?.orders || []).map(order => String(order.id)));
   let removed = 0;
   for (let i = localStorage.length - 1; i >= 0; i--) {
     const key = localStorage.key(i);
-    if (!key || !key.startsWith(ATTACH_STORE_PREFIX_V73)) continue;
-    const orderId = key.slice(ATTACH_STORE_PREFIX_V73.length);
+    if (!key || !key.startsWith(attachPrefixV73())) continue;
+    const orderId = key.slice(attachPrefixV73().length);
     let stamp = 0;
     try { stamp = Date.parse(JSON.parse(localStorage.getItem(key)).at) || 0; } catch (error) { stamp = 0; }
     const orphan = !liveIds.has(orderId);

@@ -14,6 +14,24 @@ index.html / manifest / sw.js   verziószam
 TEST_V74.js     208 teszt
 
 
+0. BELEPEST BLOKKOLO HIBA JAVITVA (V74 elso csomag)
+---------------------------------------------------
+A V74 elso csomagjaban a belepes elszallt:
+
+   "Belepesi hiba: Cannot access 'ATTACH_KEEP_DAYS_V73' before initialization"
+
+Ok: a melleklet-tarolo konstansai a fajl VEGEN alltak const-kent, a save()
+viszont a fajl elejen van, es a betoltes kozben mar meghivodik. Ilyenkor a
+konstans meg nem letezik, es az egesz alkalmazas megall.
+
+Javitas: a harom ertek fuggvennye alakult (a fuggvenydeklaracio a fajl
+elejere emelodik), es a mentes takaritasa try-catch moge kerult, hogy egy
+kesobbi hiba se allithassa meg a mentest.
+
+Uj teszt vedi: vegignezi a save()-bol hivott osszes fuggvenyt, es elbukik, ha
+barmelyik olyan konstansra hivatkozik, amit a save() UTAN deklaralunk.
+
+
 1. A KULONBOZO TELEPHELYEK NEM OLVADNAK OSSZE
 ---------------------------------------------
 Ez a V54 ota ismert korlat volt: a csoportkepzo CSAK a cegnevet hasznalta,
@@ -94,7 +112,7 @@ nem foghato, ezt a kurzor is jelzi.
 
 TESZTEK
 -------
-TEST_V74.js   208/208
+TEST_V74.js   210/210
 TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
 
 Ket regi teszt varakozasat at kellett irni: a TEST_V44 azt rogzitette, hogy

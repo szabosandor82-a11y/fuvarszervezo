@@ -2843,7 +2843,7 @@ function krprWith(target) {
       key: i => Object.keys(c.store)[i] };
     c.state = { orders: [{ id: 'o1' }] };
     vm.createContext(c);
-    const i = app.indexOf('const ATTACH_STORE_PREFIX_V73');
+    const i = app.indexOf('function attachPrefixV73');
     vm.runInContext(app.slice(i, app.indexOf('/* V72 – EGY KATTINTÁS')), c, { filename: 'attach' });
     return c;
   }
@@ -2860,7 +2860,7 @@ function krprWith(target) {
 
   await test('A helyi tarolo nem terheli a szinkront', async () => {
     const app = fs.readFileSync(__dirname + '/app.js', 'utf8');
-    assert.ok(app.includes("ATTACH_STORE_PREFIX_V73 = 'fuvarAttach:'"), 'nincs kulon tarolo');
+    assert.ok(app.includes("function attachPrefixV73() { return 'fuvarAttach:'; }"), 'nincs kulon tarolo');
     // a fuvar adatai koze NEM kerul be a fajl, csak kulon localStorage kulcsba
     const v41 = fs.readFileSync(__dirname + '/planner-v41.js', 'utf8');
     assert.ok(!/inlineFiles: entry\.sourceMail/.test(v41), 'a fajl a fuvarra kerul, igy minden szinkron felkuldi');
@@ -2890,8 +2890,8 @@ function krprWith(target) {
 
   await test('A takaritas a mentessel egyutt fut', async () => {
     const app = fs.readFileSync(__dirname + '/app.js', 'utf8');
-    assert.match(app, /function save\(renderNow=true\)\{stampLocalChanges\(\);reconcileState\('mentés'\);pruneOrderAttachmentsV73\(\);/,
-      'a takaritas nem fut a mentessel');
+    assert.match(app, /reconcileState\('mentés'\);try\{pruneOrderAttachmentsV73\(\)\}catch/,
+      'a takaritas nem fut a mentessel, vagy nincs levedve');
   });
 
   await test('A levelablak a szoveget mutatja, nem a levelforrast', async () => {
@@ -2953,6 +2953,61 @@ function krprWith(target) {
     const css = fs.readFileSync(__dirname + '/styles.css', 'utf8');
     assert.match(css, /\.v56-index\{[^}]*cursor:grab/, 'a sorszam nem mutat foghato kurzort');
     assert.ok(!css.includes('.v56-drag-cell{'), 'maradt a regi fogantyu stilusa');
+  });
+
+  await test('A save() nem hivatkozik kesobb deklaralt const-ra', async () => {
+    /* A V74-ben a belepes elszallt: "Cannot access 'ATTACH_KEEP_DAYS_V73'
+       before initialization". A save() a fajl elejen van, a konstansok a
+       vegen - betolteskor a save() lefut, es a const meg nem letezik.
+       Ez a teszt minden save()-bol hivott fuggvenyt vegignez. */
+    const app = fs.readFileSync(__dirname + '/app.js', 'utf8');
+    const saveLine = app.slice(0, app.indexOf('function save(renderNow')).split('\n').length;
+    const called = [...app.slice(app.indexOf('function save(renderNow'),
+      app.indexOf('\n', app.indexOf('function save(renderNow'))).matchAll(/([A-Za-z_$][\w$]*)\(/g)]
+      .map(m => m[1]).filter(name => !['function', 'save', 'if', 'catch', 'try'].includes(name));
+    assert.ok(called.length, 'nem sikerult kiolvasni a save() hivasait');
+
+    for (const name of called) {
+      // a hivott fuggveny torzseben keresett const-ok
+      const start = app.indexOf(`function ${name}(`);
+      if (start < 0) continue;
+      const body = app.slice(start, app.indexOf('\n}', start));
+      for (const ref of [...body.matchAll(/\b([A-Z][A-Z0-9_]{4,})\b/g)].map(m => m[1])) {
+        const decl = app.indexOf(`const ${ref}`);
+        if (decl < 0) continue;
+        const declLine = app.slice(0, decl).split('\n').length;
+        assert.ok(declLine < saveLine,
+          `${name}() a ${ref} konstansra hivatkozik, ami a save() UTAN van deklaralva ` +
+          `(${declLine}. vs ${saveLine}. sor) – betolteskor elszall`);
+      }
+    }
+  });
+
+  await test('A melleklet-takaritas betolteskor sem szall el', async () => {
+    const app = fs.readFileSync(__dirname + '/app.js', 'utf8');
+    // fuggvenykent adjuk vissza az ertekeket, mert a fuggvenydeklaracio elore emelodik
+    for (const fn of ['attachPrefixV73', 'attachMaxBytesV73', 'attachKeepDaysV73']) {
+      assert.ok(app.includes(`function ${fn}()`), fn + ' nem fuggveny');
+    }
+    assert.ok(!/const ATTACH_(STORE_PREFIX|MAX_BYTES|KEEP_DAYS)_V73/.test(app),
+      'maradt kesobb deklaralt konstans');
+    // a mentes akkor se dolhet el, ha a takaritas hibazik
+    assert.match(app, /try\{pruneOrderAttachmentsV73\(\)\}catch/, 'a takaritas hibaja megallitja a mentest');
+
+    const c = { console, JSON, String, Object, Array, Date, RegExp, Error, Math,
+      btoa: v => Buffer.from(v, 'binary').toString('base64') };
+    c.globalThis = c; c.window = c;
+    const store = {};
+    c.localStorage = { setItem(k, v) { store[k] = v; }, getItem: k => store[k] || null,
+      removeItem(k) { delete store[k]; }, get length() { return Object.keys(store).length; },
+      key: i => Object.keys(store)[i] };
+    c.state = { orders: [{ id: 'o1' }] };
+    vm.createContext(c);
+    const i = app.indexOf('function attachPrefixV73');
+    vm.runInContext(app.slice(i, app.indexOf('/* V72 – EGY KATTINTÁS')), c, { filename: 'attach' });
+    assert.doesNotThrow(() => c.pruneOrderAttachmentsV73(), 'a takaritas elszall');
+    assert.equal(c.saveOrderAttachmentsV73('o1', [{ name: 'a.pdf', dataUrl: 'data:application/pdf;base64,QQ==' }]), 1);
+    assert.equal(c.loadOrderAttachmentsV73('o1').length, 1);
   });
 
   if (!process.exitCode) console.log(`\nV74 elfogadási teszt: ${passed}/${total} sikeres.`);
