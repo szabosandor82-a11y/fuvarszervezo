@@ -122,7 +122,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V72Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V73Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -604,16 +604,20 @@
     if (!files) return;
     try {
       const list = await listDeliveryFilesEventually(orderId);
-      // V70: itt fordítva – csak az Outlook-import forrásmellékletei.
+      /* V72: KIZÁRÓLAG az Outlook-import levélmellékletei. Korábban volt egy
+         tartalék ág, ami minden fájlt megmutatott, ha nem találtunk
+         forrásmellékletet – így a sofőr saját szállítólevél-fotói kerültek
+         ide. Azokat a Mentett fotók gomb mutatja, ez a kettő nem keveredhet. */
       const all = (list || []).filter(file => /\.(pdf|jpe?g|png)$/i.test(file.file_name || ''));
-      const sources = all.filter(file => file.is_source_mail).length
-        ? all.filter(file => file.is_source_mail) : all;
+      const sources = all.filter(file => file.is_source_mail);
       files.innerHTML = sources.length
         ? `<div class="mail-files-title">Mellékletek (${sources.length})</div>`
           + sources.map(attachmentLinkV71).join('')
-        : `<small>${(mail.attachmentNames || []).length
-            ? 'A levélnek volt melléklete, de a fájlok nincsenek feltöltve. A mellékletek mentése a V65 óta működik – a korábban importált fuvaroknál a levelet újra kell importálni, ha a fájl is kell.'
-            : 'Ehhez a levélhez nem tartozott melléklet.'}</small>`;
+        : `<small>${mail.attachmentsUnreadable
+            ? 'A levél mellékletét nem sikerült kibontani az importkor – ez továbbított (FW:) leveleknél fordul elő. Mentsd el az EREDETI levelet .msg fájlként, és azt húzd be az importba.'
+            : (mail.attachmentNames || []).length
+              ? 'A levélnek volt melléklete, de a fájlok nincsenek feltöltve. A mellékletek mentése a V65 óta működik – a korábban importált fuvaroknál a levelet újra kell importálni.'
+              : 'Ehhez a levélhez nem tartozott melléklet.'}</small>`;
     } catch (error) {
       files.innerHTML = `<small>A mellékletek nem tölthetők be: ${safe(error.message)}</small>`;
     }

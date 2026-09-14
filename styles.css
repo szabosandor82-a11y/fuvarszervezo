@@ -694,3 +694,5 @@ button.mail-file{font:inherit;cursor:pointer}
 .v57-row-actions button.is-locked{opacity:.45;cursor:not-allowed}
 .driver-date-tabs button.today-tab{font-weight:700}
 .driver-date-tabs button.readonly-tab{opacity:.8}
+.v72-attach-warn{margin:8px 0 0;padding:8px 10px;font-size:12px;line-height:1.5;background:#fdf6e6;
+  border:.5px solid #e6d3a8;border-left:3px solid #ba7517;color:#5b4a2a}

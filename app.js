@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V72Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V73Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -1108,6 +1108,49 @@ function validMoveTargetFromInputs(prefix='move'){
   const target=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`,dt=new Date(target+'T12:00:00');
   return !isNaN(dt)&&localISO(dt)===target?target:'';
 }
+/* V72 – EGY KATTINTÁS = TELJES TARTALOM KIJELÖLVE
+
+   Az egész oldalon érvényes, az admin és a sofőri felületen egyaránt: ha egy
+   írható mezőbe kattintasz, a benne lévő szöveg kijelölődik, tehát gépeléssel
+   azonnal felülírható. Nem kell törölgetni.
+
+   Két dolog szándékosan kimarad:
+     - a TÖBBSOROS megjegyzésmezők (textarea), mert ott egy véletlen gépelés
+       az egész szöveget eldobná
+     - a már fókuszban lévő mező, hogy a második kattintással a kurzort
+       oda tudd tenni, ahova akarod
+
+   A mouseup alapértelmezését elnyomjuk, különben a böngésző az egér
+   felengedésekor visszavenné a kijelölést. */
+const SELECT_ON_FOCUS_TYPES = new Set(['text', 'search', 'number', 'tel', 'email', 'url', 'password']);
+
+function shouldSelectOnFocusV72(el) {
+  if (!el || el.tagName !== 'INPUT' || el.readOnly || el.disabled) return false;
+  return SELECT_ON_FOCUS_TYPES.has((el.type || 'text').toLowerCase());
+}
+
+function installSelectOnFocusV72(root = document) {
+  if (root.__selectOnFocusV72) return;
+  root.__selectOnFocusV72 = true;
+  let justFocused = null;
+  root.addEventListener('focusin', event => {
+    const el = event.target;
+    if (!shouldSelectOnFocusV72(el)) return;
+    justFocused = el;
+    // a kijelölés a következő képkockában marad meg megbízhatóan
+    requestAnimationFrame(() => { try { el.select(); } catch (error) { /* nem kritikus */ } });
+  });
+  root.addEventListener('mouseup', event => {
+    if (event.target === justFocused) { event.preventDefault(); justFocused = null; }
+  });
+  root.addEventListener('focusout', event => { if (event.target === justFocused) justFocused = null; });
+}
+window.installSelectOnFocusV72 = installSelectOnFocusV72;
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => installSelectOnFocusV72());
+  else installSelectOnFocusV72();
+}
+
 /* V71 – EGYSÉGES DÁTUMBEVITEL A TÉTELSOROKBAN
 
    Ugyanaz a viselkedés, mint az űrlapokon: négy számjegy után a kurzor a

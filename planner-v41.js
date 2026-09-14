@@ -1071,7 +1071,19 @@
         const extracted = reader.getAttachment(attachment);
         const content = extracted?.content || extracted?.data;
         if (content) sourceMail.files.push({ name: attachmentName, content });
-      } catch (error) { /* a melléklet kihagyható */ }
+      } catch (error) {
+        console.warn('[V72] melléklet nem olvasható', attachmentName, error);
+        sourceMail.unreadable = sourceMail.unreadable || [];
+        sourceMail.unreadable.push(attachmentName);
+      }
+    }
+    /* V72: ha a levélnek VAN melléklete, de egyet sem tudtunk kibontani, azt
+       jelezzük. Továbbított (FW:) leveleknél előfordul, hogy a beolvasó csak
+       a nyers levélforrást látja – ilyenkor a fuvar a tárgysorból jön létre,
+       de a PDF nem kerül fel, és a Csatolmány üres marad. */
+    const wantedFiles = names.filter(name => /\.(pdf|jpe?g|png)$/i.test(name));
+    if (wantedFiles.length && !sourceMail.files.length) {
+      sourceMail.attachmentsUnreadable = true;
     }
     if (!pdfs.length) return entriesFromMessageBody({ category, sourceName: file.name, subject, body, attachmentNames: names, sourceMail });
 
@@ -1246,6 +1258,7 @@
     return `<article class="v38-preview-card ${entry.approved ? '' : 'disabled'}" data-entry-id="${htmlEsc(entry._id)}">
       <header><label class="check"><input class="v38-approved" type="checkbox" ${entry.approved ? 'checked' : ''}> Importálás</label><span class="v38-category ${entry.category}">${categoryLabel}</span><button class="v38-remove" type="button" title="Eltávolítás">×</button></header>
       <div class="v38-source"><b>${htmlEsc(entry.sourceName)}</b><span>${htmlEsc(entry.orderType || 'SR0')}${entry.isReturn ? ' · visszáru' : ''}</span>${entry.pdfName && entry.pdfName !== entry.sourceName ? `<span>PDF: ${htmlEsc(entry.pdfName)}</span>` : ''}<span class="v38-status ${entry.warnings.length ? 'warn' : 'ok'}">${htmlEsc(statusText(entry))}</span></div>
+      ${entry.sourceMail?.attachmentsUnreadable ? `<div class="v72-attach-warn">A levél mellékletét nem sikerült kibontani (${htmlEsc((entry.sourceMail.attachmentNames || []).join(', '))}). A fuvar importálható, de a Csatolmány üres marad. Továbbított levélnél mentsd el az eredetit, és azt húzd be.</div>` : ''}
       ${blockingFields(entry).length ? `<div class="v65-blocking">Nem importálható – hiányzik: <b>${htmlEsc(blockingFields(entry).join(', '))}</b>${blockingFields(entry).includes('rendelésszám') ? ' · Ha a bizonylaton nincs rendelésszám, írj be egy kötőjelet (-).' : ''}</div>` : ''}
       ${orderNoWaived(entry) ? '<div class="v66-waived">Rendelésszám nélkül importálva – a mezőben kötőjel áll.</div>' : ''}
       <div class="v38-fields">
@@ -1447,6 +1460,7 @@ ${entry.subject || ''}`) || project;
         from: entry.sourceMail.from || '',
         body: String(entry.sourceMail.body || '').slice(0, 6000),
         attachmentNames: entry.sourceMail.attachmentNames || [],
+        attachmentsUnreadable: !!entry.sourceMail.attachmentsUnreadable,
         fileName: entry.sourceMail.fileName || entry.sourceName || ''
       } : null,
       items: (entry.items || []).map(item => ({ ...item, _id: item._id || id(), received: false, missingQty: '' })),

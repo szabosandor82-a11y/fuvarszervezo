@@ -1,0 +1,96 @@
+FUVARSZERVEZO V73
+=================
+
+A V72-re epul. Sofori felulet, mellekletek es beviteli mezok.
+
+MODOSITOTT FAJLOK
+-----------------
+auth-v44-2.js   napfulek felirata, Szallitolevel gomb, Csatolmany szetvalasztas
+planner-v41.js  jelzes a kibonthatatlan melleklerol
+app.js          egy kattintas = teljes tartalom kijelolve
+styles.css      az uj elemek stilusa
+index.html / manifest / sw.js   verziószam
+TEST_V73.js     185 teszt
+
+
+1. A NAPFULEK FELIRATA
+----------------------
+A felirat meg a ketnapos logikat kovette: a lista ELSO elemet hivta
+"Ma"-nak, ami a harom napos nezet ota a TEGNAPI nap. Emiatt a sofor a
+tegnapi fulre lepett abban a hitben, hogy az a mai.
+
+     szept. 11.        csak datum, csak megtekintheto
+     Ma . szept. 14.   az aktualis nap, szerkesztheto
+     szept. 15.        csak datum, csak megtekintheto
+
+
+2. A SZALLITOLEVEL GOMB SOSEM TUNIK EL
+--------------------------------------
+A nem szerkesztheto napon eddig ELTUNT a Szallitolevel es a Fuvar atadasa
+gomb - ez ugy nezett ki, mintha a menu veszett volna el. Ez volt a kovetkezmenye
+az elozo pontban leirt felirathibanak.
+
+Mostantol a gombok LATSZANAK, de le vannak tiltva, es az egerrel folejuk
+allva kiirjak, miert: "Csak az aktualis munkanapon tolthetd fel".
+
+
+3. A CSATOLMANY CSAK A LEVELMELLEKLETEKET MUTATJA
+-------------------------------------------------
+Sajat hiba a V70-bol: a szuroben maradt egy TARTALEK ag, ami MINDEN fajlt
+megmutatott, ha nem talalt levelmellekletet. Igy a sofor sajat
+szallitolevel-fotoi kerultek a Csatolmany ala.
+
+A tartalek ag kikerult. A ket lista soha nem fedi egymast:
+
+   CSATOLMANY     az Outlook-level mellekletei
+   MENTETT FOTOK  a sofor szallitolevel-kepei
+
+Ha nincs levelmelleklet, a Csatolmany NEM tolti ki a sofor fotoival, hanem
+megmondja, miert ures.
+
+
+4. JELZES A KIBONTHATATLAN MELLEKLETROL
+---------------------------------------
+Egy tovabbitott (FW:) levelnel a Csatolmany ures maradt, pedig a mellekletek
+neve latszott. Ok: a beolvaso ezt az MSG-t nem tudta feldolgozni - a level
+szovege helyett a nyers levelforrast kapta (Received:, Content-Type:
+multipart/mixed). Ha a szoveget nem tudta kibontani, a mellekleteket sem.
+
+A fuvar igy a TARGYSORBOL jott letre, ahol ott a rendelesszam - de melleklet
+nelkul.
+
+Mostantol:
+  - az import elonezete figyelmeztet, ha van melleklet, de egyet sem sikerul
+    kibontani, es megmondja, mit tegyel
+  - a Csatolmany ablak is ezt irja ki a korabbi felrevezeto szoveg helyett
+  - a melleklet-feltoltes hibaja mar nem csak a konzolba kerul
+
+KERULOUT tovabbitott levelnel: nyisd meg a tovabbitott levelben levo csatolt
+uzenetet, es AZT mentsd el .msg fajlkent - az eredeti szerkezetu levelekkel a
+program jol boldogul.
+
+MEGJEGYZES: a gyokerok javitasahoz szukseg van a konkret .msg fajlra.
+
+
+5. EGY KATTINTAS = TELJES TARTALOM KIJELOLVE
+--------------------------------------------
+Az egesz oldalon, admin es sofori feluleten egyarant: ha egy irhato mezobe
+kattintasz, a benne levo szoveg kijelolodik, tehat gepelessel azonnal
+felulirhato.
+
+Nem mezonkent van bekotve, hanem egy kozos figyelovel - igy a kesobb
+megjeleno mezokre (parbeszedablakok, importelonezet) is magatol ervenyes.
+
+Ket dolog szandekosan kimarad:
+  - a TOBBSOROS megjegyzesmezok, mert ott egy veletlen gepeles az egesz
+    szoveget eldobna
+  - a masodik kattintas: ha mar a mezoben vagy, a kurzort oda teheted, ahova
+    akarod
+
+
+TESZTEK
+-------
+TEST_V73.js   185/185
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Futtatas: node TEST_V73.js
