@@ -1,4 +1,4 @@
-FUVARSZERVEZŐ V70
+FUVARSZERVEZŐ V71
 
 FRISSÍTÉS
 1. Bontsd ki a v69.zip fájlt.
@@ -11,8 +11,8 @@ FRISSÍTÉS
 A csomag tartalmazza az alkalmazás eddigi online beállításait.
 Ehhez a frissítéshez nem szükséges adatbázis-módosítás.
 
-A változtatások a VALTOZASOK_V70.txt fájlban olvashatók.
-A helyi ellenőrzések eredménye az ELLENORZES_V70.txt fájlban található.
+A változtatások a VALTOZASOK_V71.txt fájlban olvashatók.
+A helyi ellenőrzések eredménye az ELLENORZES_V71.txt fájlban található.
 
 A laptopos kamerához a böngészőben engedélyezni kell a kamera használatát.
 A fénykép az élőkép alatti gombbal készül el, majd a Mentés a rendeléshez

@@ -1,0 +1,137 @@
+FUVARSZERVEZO V71
+=================
+
+A V70-re epul. Foleg az Outlook import felismereset javitja, ot valos
+bizonylat alapjan.
+
+MODOSITOTT FAJLOK
+-----------------
+planner-v41.js  NRPR tipus, dupla beolvasas, cikkszam, szalanyag, elgepeles,
+                ezres elvalaszto
+app.js          a cegnev a KOZPONTI telephelyet adja
+index.html / manifest / sw.js   verziószam
+TEST_V71.js     148 teszt
+
+
+1. DUPLA-TRIPLA BEOLVASAS A RAKTARKOZINEL
+-----------------------------------------
+Hiba: egy raktarkozi bizonylat ket-harom sorkent jelent meg az import
+elonezeteben, es harom rendelesszam kerult a mezobe.
+
+Ok - sajat hiba a V64-bol: a raktarkozi bizonylaton minden tetelblokk folott
+ott a FORRAS rendeles ("Rendeles: 2026-BR0/000921"). Ezek nem kulon fuvarok,
+csak hivatkozasok. Amikor felvettuk a BR0 tipust, a felismero ezeket is
+rendelesszamnak vette.
+
+Javitas: a bizonylat SAJAT szama a fejlecben all. A program a fejlecben
+talalt tipust tekinti mervadonak, es csak az azonos tipusu hivatkozasokat
+tartja meg. Ha egy fajlban tenylegesen ket raktarkozi van, az tovabbra is
+ket sort ad.
+
+
+2. NRPR - KONSZIGNACIOS RAKTAR
+------------------------------
+Uj bizonylattipus, mindenben a KRPR-rel azonos: felrako a kozponti raktar,
+lerako a Cel raktar hasab projektje.
+
+A felismert tipusok: SR0, BR0, KRPR, NRPR, PRPR.
+
+Teszt vedi: ha valaki uj KRPR-agat ir es kihagyja belole az NRPR-t, elbukik.
+
+
+3. SZOKOZOS EZRES ELVALASZTO
+----------------------------
+Az NRPR bizonylaton "1 000 db" alaku mennyiseg szerepel. A felismero ebbol
+000-t olvasott - EZER darab helyett NULLAT vitt volna.
+
+Javitas: a sorban eloszor osszevonjuk az ezres elvalasztot, de csak a
+"szamjegy + szokoz + pontosan harom szamjegy" alakot. A "105 M10x30mm" es a
+"(100/doboz) 500" erintetlen marad. A tizedesvesszo (12,5 m2) valtozatlan.
+
+Ellenorizve: a bizonylat vegosszege (3 000 db) pontosan kijon.
+
+
+4. SZAMMAL KEZDODO CIKKSZAM
+---------------------------
+A sorszam nelkuli tetelsoroknal a felismero BETUT vart a kod elejen, ezert a
+"77702D02" alaku kodokat kihagyta. A Moxy berlemenyes bizonylat igy NULLA
+tetelt adott.
+
+Javitas: a cikkszam kezdodhet szammal is. A berlemenyes bizonylat mostantol
+4 tetelt ad, a Cosmo 8 helyett 10-et.
+
+
+5. HAMIS SZALANYAG-JELOLES
+--------------------------
+Hat idom kapott "szalas" cimket, mert a nevukben szerepel a "csovekhez" szo
+("AquaPlus PP-R tokos csatlakozo D 50 mm / 1 1/2" csovekhez"). Ezek husz
+centis muanyag idomok.
+
+Ennek gyakorlati kovetkezmenye volt: a szalas anyag KOTELEZOEN Martinhoz
+kerul, tehat ez a hat idom elvitte volna hozza az egesz felrakot.
+
+Uj szabaly: szalanyag az, aminek a neveben szokent szerepel a "szal", VAGY
+hosszu targy (cso, rud, profil, lec, deszka, fureszaru) ES legalabb 4 meteres
+hossz all mellette. A "csovekhez", "csoidom", "csobilincs" nem eleg.
+Tiz esetre ellenorizve.
+
+
+6. ELGEPELT PROJEKTNEV
+----------------------
+A bizonylaton "Budapest_Waterfont City_V.utem" all, hianyzo r-rel. A program
+emiatt a Budapest_City_pearl_II.utem projektre vitte volna az anyagot - rossz
+epitkezesre.
+
+Javitas: elgepeles-turo szoegyezes. Az elteres CSAK hat betunel hosszabb
+szavaknal megengedett, es csak egyetlen karakternyi. A rovid szavak (city,
+utem) onmagukban nem donthetnek, mert tobb projektben is szerepelnek, es
+legalabb egy hosszu, jellemzo szonak illeszkednie kell.
+
+Ellenorizve, hogy a hasonlo nevek ne keveredjenek: City pearl, Waterfront,
+Cosmo, Moxy - mind a sajatjat kapja.
+
+
+7. A CEGNEV A KOZPONTI TELEPHELYET ADJA
+---------------------------------------
+A Lambda a fuvarurlapon megint az Akna utcat kapta. A hiba NEM az importban
+volt - az mar eddig is a Hengermalmot adta -, hanem a fuvarurlap keresojeben:
+ha csak a cegnevet irtad be, a lista ELSO elemet vette.
+
+Javitas: a cegnev megadasa a KOZPONTI telephelyet adja, es a lenyiloban is az
+all elol. A cim megadasa valtozatlanul erosebb: ha kifejezetten az Akna utcat
+valasztod, azt kapod.
+
+   Lambda      -> Hengermalom ut 47A
+   Szatmari    -> Kesmark utca 9
+   Gienger     -> Dulo utca 31-35.
+   Proconsul   -> Porcelan u. 3-9.
+   Merkapt     -> Maglodi ut 14B
+
+
+AZ OT VALOS BIZONYLAT VEGEREDMENYE
+----------------------------------
+   KRPR Cosmo       000872  -> Cosmo Residence          10 tetel
+   KRPR Moxy VU     000866  -> Moxy VUC                  5 tetel
+   KRPR berlemeny   000871  -> Moxy berlemenyek          4 tetel
+   KRPR WFC5        000873  -> Waterfront City V.utem    2 tetel
+   PRPR szigeteles  000505  -> Cosmo Residence           1 tetel
+   NRPR csavar      000036  -> Waterfront City V.utem    6 tetel, 3000 db
+
+
+TESZTEK
+-------
+TEST_V71.js   148/148
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Futtatas: node TEST_V71.js
+
+
+MEGJEGYZES A DATUMVALTASHOZ (V70-bol)
+-------------------------------------
+Az athelyezett fuvar ott marad, ahova raktad: minden mentes idobelyeget tesz
+ra, betolteskor a frissebb rekord nyer, es a fuggoben levo mentes kikenyszerul
+oldalelhagyaskor.
+
+Amit itt nem lehetett merni: a valodi Supabase-kor. Ha a tabla nem ismeri a
+localUpdatedAt oszlopot, a mezo elveszhet feltolteskor. Elesben ellenorizheto:
+rakj at egy fuvart, frissits azonnal, es nezd meg, ott marad-e.

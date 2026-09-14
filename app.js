@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V70Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V71Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -600,7 +600,21 @@ function renderMasters(){const q=norm($('#masterSearch').value),arr=state[master
 function supplierOptions(sel=''){return'<option value="">Egyedi / nincs kiválasztva</option>'+state.suppliers.sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(s=>option(s.id,`${s.name}${s.isCentral?' ★ központ':''} · ${s.address}`,sel)).join('')}
 function projectOptions(sel=''){return'<option value="">Egyedi úticél</option>'+state.projects.sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(p=>option(p.id,p.name,sel)).join('')}
 function recipientOptions(project,sel=''){return'<option value="">Nincs átvevő</option>'+state.recipients.filter(r=>!project||norm(r.project)===norm(project)).map(r=>option(r.id,`${r.name} · ${r.phone||''}`,sel)).join('')}
-function supplierDisplay(s){return s?`${s.name} · ${s.address}`:''}function findSupplierByInput(v){const n=norm(v);return state.suppliers.find(s=>norm(supplierDisplay(s))===n)||state.suppliers.find(s=>norm(s.name)===n)||uniquePartial(state.suppliers,v,s=>supplierDisplay(s))||null}/* V60 – a lerakó nem csak projekt lehet.
+function supplierDisplay(s){return s?`${s.name} · ${s.address}`:''}/* V71: ha csak a CÉGNEVET adjuk meg, a KÖZPONTI telephely nyer.
+   Korábban a lista első eleme jött, ezért a Lambda az Akna utcát kapta a
+   Hengermalom helyett, a Szatmári pedig Baját. A cím megadása változatlanul
+   erősebb: ha a "cégnév · cím" alak egyezik, az a telephely jön. */
+function centralFirst(list){
+  return list.slice().sort((a,b)=>(b.isCentral?1:0)-(a.isCentral?1:0))[0]||null;
+}
+function findSupplierByInput(v){
+  const n=norm(v);
+  const exact=state.suppliers.find(s=>norm(supplierDisplay(s))===n);
+  if(exact)return exact;
+  const byName=state.suppliers.filter(s=>norm(s.name)===n);
+  if(byName.length)return centralFirst(byName);
+  return uniquePartial(state.suppliers,v,s=>supplierDisplay(s))||null;
+}/* V60 – a lerakó nem csak projekt lehet.
 
    Visszáru és bérelt eszköz visszaszállítása esetén a cél egy BESZÁLLÍTÓ
    telephelye (pl. Székely Szerszám). Ezért a lerakó legördülőjében a
@@ -632,7 +646,11 @@ window.dropTargetOptions=dropTargetOptions;
    Mostantól mindkét mező mindkét fajtát kínálja, "Visszáru" jelöléssel. */
 function pickupTargetOptions(){
   const out=[];
-  for(const su of state.suppliers.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu')||String(a.address||'').localeCompare(String(b.address||''),'hu'))){
+  // V71: egy cégen belül a központ áll elöl, hogy az legyen a kézenfekvő.
+  for(const su of state.suppliers.slice().sort((a,b)=>
+      a.name.localeCompare(b.name,'hu')
+      ||(b.isCentral?1:0)-(a.isCentral?1:0)
+      ||String(a.address||'').localeCompare(String(b.address||''),'hu'))){
     if(su.active===false||!su.name)continue;
     out.push({kind:'supplier',ref:su,label:supplierDisplay(su),address:su.address||'',
       hint:su.isCentral?'központ':(su.site||'telephely')});
@@ -647,7 +665,8 @@ window.pickupTargetOptions=pickupTargetOptions;
 
 function findPickupTargetByInput(v){
   const n=norm(v);if(!n)return null;
-  const supplier=state.suppliers.find(su=>norm(supplierDisplay(su))===n)||state.suppliers.find(su=>norm(su.name)===n);
+  const supplier=state.suppliers.find(su=>norm(supplierDisplay(su))===n)
+    ||centralFirst(state.suppliers.filter(su=>norm(su.name)===n));
   if(supplier)return{kind:'supplier',ref:supplier,address:supplier.address||''};
   const project=state.projects.find(p=>norm(p.name)===n);
   if(project)return{kind:'project',ref:project,address:project.address||''};

@@ -68,11 +68,35 @@
     const refs = [];
     // V63: a BR0 (belső rendelés) eddig kimaradt, ezért az ilyen bizonylatokról
     // a program semmit nem ismert fel – sem a rendelésszámot, sem a tételeket.
-    for (const match of text.matchAll(/\b(20\d{2})\s*-\s*(SR0|BR0|KRPR|PRPR)\s*\/\s*([0-9]{4,12})\b/gi)) {
+    for (const match of text.matchAll(/\b(20\d{2})\s*-\s*(SR0|BR0|KRPR|NRPR|PRPR)\s*\/\s*([0-9]{4,12})\b/gi)) {
       const ref = { year: match[1], type: match[2].toUpperCase(), no: match[3], full: `${match[1]}-${match[2].toUpperCase()}/${match[3]}`, index: match.index ?? -1 };
       if (!refs.some(existing => existing.full === ref.full)) refs.push(ref);
     }
+    /* V71: a raktárközi bizonylat tételblokkjai fölött ott a FORRÁS rendelés
+       ("Rendelés: 2026-BR0/000921"). Ezek nem külön fuvarok, csak hivatkozások.
+       Korábban rendelésszámként kerültek be, ezért ugyanaz a bizonylat két-három
+       sorként jelent meg, és három szám került a rendelésszám mezőbe.
+
+       A bizonylat SAJÁT száma a fejlécben áll. Ezért a fejlécben talált típust
+       tekintjük mérvadónak, és csak az azonos típusú hivatkozásokat tartjuk meg. */
+    const headerType = headerOrderTypeV71(text, refs);
+    if (headerType) {
+      const own = refs.filter(ref => String(ref.type).toUpperCase() === headerType);
+      if (own.length) return own;
+    }
     return refs;
+  }
+
+  /* A bizonylat saját típusa: a fejlécben (az első tételsor előtt) álló
+     hivatkozás típusa. Ha ott nincs, a legelső találaté. */
+  function headerOrderTypeV71(text, refs) {
+    if (!refs || !refs.length) return '';
+    const raw = String(text || '');
+    const firstItem = raw.search(/^\s*(?:\d+\s*\.|Rendel[eé]s\s*:)/m);
+    const head = firstItem > 0 ? raw.slice(0, firstItem) : raw.slice(0, 1500);
+    const inHead = head.match(/\b20\d{2}\s*-\s*(SR0|BR0|KRPR|NRPR|PRPR)\s*\/\s*[0-9]{4,12}\b/i);
+    if (inHead) return inHead[1].toUpperCase();
+    return String(refs[0].type || '').toUpperCase();
   }
 
   function extractOrderRefs(...sources) {
@@ -157,7 +181,7 @@
   function meaningfulBodyText(body = '') {
     const out = [];
     for (const raw of String(body || '').split(/\r?\n/)) {
-      const line = raw.replace(/\s+/g, ' ').trim();
+      const line = joinThousandsV71(raw.replace(/\s+/g, ' ').trim());
       if (!line) continue;
       if (BODY_STOP_RE.test(line)) break;
       out.push(line);
@@ -219,13 +243,13 @@
   function parseBodyItems(text = '') {
     const items = [];
     for (const raw of linesOf(text)) {
-      const line = raw.replace(/\s+/g, ' ').trim();
-      let match = line.match(/^([A-Z0-9._\/-]{3,})\s*[-–]\s*(.+?)\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
-      if (!match) match = line.match(/^([A-Z0-9._\/-]{3,})\s+(.+)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\s*(?:[oö]sszesen)?$/i);
+      const line = joinThousandsV71(raw.replace(/\s+/g, ' ').trim());
+      let match = line.match(/^([A-Z0-9._\/-]{3,})\s*[-–]\s*(.+?)\s*[-–]\s*(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+      if (!match) match = line.match(/^([A-Z0-9._\/-]{3,})\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\s*(?:[oö]sszesen)?$/i);
       if (!match) continue;
       const [, code, name, qty, unit] = match;
-      const materialSearch = nrm(`${name} ${qty}${unit}`);
-      items.push({ code, name: name.trim(), qty: qty.replace(',', '.'), unit, itemNote: '', longMaterial: /cso|fureszaru|deszka|szal|tekercs/.test(materialSearch), received: false });
+      const materialSearch = nrm(`${name} ${qty} ${unit}`);
+      items.push({ code, name: name.trim(), qty: normalizeQtyV71(qty), unit, itemNote: '', longMaterial: /cso|fureszaru|deszka|szal|tekercs/.test(materialSearch), received: false });
     }
     return items;
   }
@@ -318,6 +342,38 @@
     return [...new Set([base, singular].filter(Boolean))];
   }
 
+  /* V71 – ELGÉPELÉS-TŰRŐ SZÓEGYEZÉS
+
+     A bizonylaton előfordul elírás: "Budapest_Waterfont City_V.ütem" a
+     "Budapest_Waterfront_City_V.ütem" helyett. A pontos egyezés ilyenkor nem
+     talál, viszont a rövid, gyakori szavak ("city", "ütem") más projektre is
+     illenek – így a City pearl nyert a Waterfront helyett.
+
+     Ezért a hosszú, jellemző szavaknál egyetlen karakternyi eltérést
+     megengedünk (betoldás, hiány vagy csere). A rövid szavakra nem, mert ott
+     egy karakter már más szót jelenthet. */
+  function closeEnoughV71(a, b) {
+    if (a === b) return true;
+    if (Math.min(a.length, b.length) < 6) return false;
+    if (Math.abs(a.length - b.length) > 1) return false;
+    let i = 0, j = 0, diff = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) { i++; j++; continue; }
+      if (++diff > 1) return false;
+      if (a.length > b.length) i++;
+      else if (b.length > a.length) j++;
+      else { i++; j++; }
+    }
+    return diff + (a.length - i) + (b.length - j) <= 1;
+  }
+
+  function tokenInColumnV71(token, column) {
+    const stem = token.replace(/(ek|ok|ak|k)$/, '');
+    if (column.includes(stem)) return true;
+    // szavanként hasonlítunk, hogy az elgépelt alak is illeszkedjen
+    return column.split(' ').some(word => closeEnoughV71(word, token) || closeEnoughV71(word, stem));
+  }
+
   function transferNameMatch(columnText, projectName) {
     const columnKeys = transferNameKeys(columnText);
     const nameKeys = transferNameKeys(projectName);
@@ -327,8 +383,17 @@
       for (const column of columnKeys) {
         if (column.includes(name)) best = Math.max(best, name.length * 3);
         const tokens = name.split(' ').filter(token => token.length >= 4);
-        if (tokens.length && tokens.every(token => column.includes(token.replace(/(ek|ok|ak|k)$/, '')))) {
+        if (!tokens.length) continue;
+        if (tokens.every(token => column.includes(token.replace(/(ek|ok|ak|k)$/, '')))) {
           best = Math.max(best, tokens.join('').length * 2);
+          continue;
+        }
+        // elgépelés-tűrő: minden szónak illeszkednie kell, és legalább egy
+        // hosszú, jellemző szónak is (6+ karakter), hogy a "city"/"ütem"
+        // önmagában ne döntsön
+        if (tokens.every(token => tokenInColumnV71(token, column))
+            && tokens.some(token => token.length >= 6)) {
+          best = Math.max(best, tokens.join('').length);
         }
       }
     }
@@ -656,7 +721,7 @@
 
   function projectLabelWindow(pdfText = '', pdfLines = [], mode = 'SR0') {
     const lines = (pdfLines?.length ? pdfLines : linesOf(pdfText));
-    const target = mode === 'KRPR' || mode === 'BR0' || mode === 'PRPR'
+    const target = mode === 'KRPR' || mode === 'NRPR' || mode === 'BR0' || mode === 'PRPR'
       ? /c[eé]l\s*rakt[aá]r/i
       : /projekt\s*n[eé]v|(?:^|\s)rakt[aá]r\s*:/i;
     const found = [];
@@ -717,7 +782,7 @@
     const supplierOrder = /szallito\s+rendeles/.test(head);
     // V64: a belső rendelés (BR0) mindenben a raktárközivel azonos.
     const warehouseTransfer = /raktarkozi|belso rendeles/.test(head)
-      || refs.some(ref => ref.type === 'KRPR' || ref.type === 'BR0' || ref.type === 'PRPR');
+      || refs.some(ref => ref.type === 'KRPR' || ref.type === 'NRPR' || ref.type === 'BR0' || ref.type === 'PRPR');
     const confirmation = /visszaigazolas|rendeles\s+visszaigazolas|megrendeles\s+visszaigazolasa|ajanlat/.test(head) && !supplierOrder && !warehouseTransfer;
     return { primary: supplierOrder || warehouseTransfer, supplierOrder, warehouseTransfer, confirmation, refs };
   }
@@ -740,25 +805,68 @@
     return result;
   }
 
+  /* V71 – SZÁLANYAG FELISMERÉSE
+
+     A korábbi szabály puszta szórészletként kereste a "cso" szót, ezért az
+     "AquaPlus PP-R tokos csatlakozó D 50 mm / 1 1/2" CSÖVEKHEZ" nevű idom is
+     szálanyagnak minősült – pedig húsz centis műanyag idom. Emiatt az egész
+     felrakó kötelezően Martinhoz került volna.
+
+     Az új szabály kétféleképpen jelöl szálanyagot:
+       - a névben szóként szerepel a "szál" / "szálas", VAGY
+       - hosszú tárgy (cső, rúd, profil, léc, deszka, fűrészáru) ÉS legalább
+         4 méteres hossz szerepel mellette.
+     A "csövekhez", "csőidom", "csőbilincs" nem minősül hosszú tárgynak. */
+  const LONG_OBJECT_V71 = /\b(cso|csovek|rud|rudak|profil|lec|deszka|fureszaru|palca|szelveny|zartszelveny)\b/;
+  const LONG_LENGTH_V71 = /\b([4-9]|1[0-2])\s*(m|fm|meter)\b|\b(4000|5000|5500|6000)\s*mm\b/;
+  function isLongMaterialV71(text) {
+    const value = String(text || '');
+    if (/\bszal(as|ak|anyag)?\b/.test(value)) return true;
+    return LONG_OBJECT_V71.test(value) && LONG_LENGTH_V71.test(value);
+  }
+
+  /* V71: a bizonylaton az ezres elválasztó szóköz lehet ("1 000 db"), a
+     tizedesjel pedig vessző ("12,5 m2"). Egységes alakra hozzuk. */
+  function normalizeQtyV71(value) {
+    return String(value || '').replace(/[\s\u00a0]/g, '').replace(',', '.');
+  }
+
+  /* A sorban a szóközös ezres elválasztót ELŐRE összevonjuk ("1 000" -> "1000").
+     Enélkül a mohó névrész elnyelné az egyest, és 1000 helyett 000 lenne a
+     mennyiség. Csak számjegy + szóköz + pontosan három számjegy alakot von
+     össze, tehát a "105 M10x30mm" és a "(100/doboz) 500" érintetlen marad. */
+  function joinThousandsV71(line) {
+    let out = String(line || '');
+    for (let i = 0; i < 3; i++) {
+      const next = out.replace(/(\d)[ \u00a0](\d{3})(?![0-9])/g, '$1$2');
+      if (next === out) break;
+      out = next;
+    }
+    return out;
+  }
+
   function parsePdfItemsFromLines(lines) {
     const items = [];
     for (let raw of lines || []) {
-      const line = String(raw || '').replace(/\s+/g, ' ').trim();
+      const line = joinThousandsV71(String(raw || '').replace(/\s+/g, ' ').trim());
       if (!line || /egys[eé]g[aá]r|engedm[eé]ny|nett[oó]|[oö]sszesen|alapbizonylat|rendel[eé]s\s*:/i.test(line)) continue;
       let code = '', name = '', qty = '', unit = '';
-      let match = line.match(/^\s*\d+\s*\.\s*([A-Z0-9._\/-]+)\s+(.+)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+      let match = line.match(/^\s*\d+\s*\.\s*([A-Z0-9._\/-]+)\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
       if (match) [, code, name, qty, unit] = match;
       if (!match) {
-        match = line.match(/^\s*\d+\s+([A-Z0-9._\/-]{3,})\s+(.+)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+        match = line.match(/^\s*\d+\s+([A-Z0-9._\/-]{3,})\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
         if (match) [, code, name, qty, unit] = match;
       }
       if (!match) {
-        match = line.match(/^\s*([A-Z][A-Z0-9._\/-]{2,})\s+(.+)\s+(\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+        // V71: a cikkszám kezdődhet SZÁMMAL is (pl. 77702D02), nem csak betűvel.
+        //      Legalább egy betűt vagy két számjegyet várunk, hogy a fejlécsorok
+        //      és a dátumok ne illeszkedjenek rá.
+        match = line.match(/^\s*((?=[A-Z0-9._\/-]*[A-Z0-9])[A-Z0-9][A-Z0-9._\/-]{2,})\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
         if (match) [, code, name, qty, unit] = match;
       }
       if (!match || /^huf$/i.test(code) || name.length < 3) continue;
-      const materialSearch = nrm(`${name} ${qty}${unit}`);
-      items.push({ code: code.replace(/^\./, ''), name: name.trim(), qty: qty.replace(',', '.'), unit, itemNote: '', longMaterial: /(?:^|\s)(?:4|5|6)\s*m(?:\s|$)|cso|fureszaru|deszka|szal/.test(materialSearch), received: false });
+      const materialSearch = nrm(`${name} ${qty} ${unit}`);
+      items.push({ code: code.replace(/^\./, ''), name: name.trim(), qty: normalizeQtyV71(qty), unit, itemNote: '', longMaterial: isLongMaterialV71(materialSearch), received: false });
     }
     return items;
   }
@@ -835,7 +943,7 @@
     // V63: a belső rendelés (BR0) szerkezetileg ugyanaz, mint a raktárközi:
     // Forrás raktár / Cél raktár hasáb. A felrakó a központi raktár, a lerakó
     // a cél oszlopban álló projekt.
-    if (orderType === 'KRPR' || orderType === 'BR0') {
+    if (orderType === 'KRPR' || orderType === 'NRPR' || orderType === 'BR0') {
       pickup = { ...CENTRAL_WAREHOUSE, reason: `${orderType}: felrakó a központi raktár` };
       // A lerakó KIZÁRÓLAG a Cél raktár hasábjából jöhet. A bal hasábban álló
       // "Stand 98 Kft. Új Központi Raktár" korábban minden KRPR-nél megnyerte
@@ -1282,7 +1390,7 @@
       || exactProjects.find(item => String(item.address || '').trim())
       || exactProjects[0]
       || (state.projects || []).find(item => entry.dropAddress && nrm(item.address) === nrm(entry.dropAddress));
-    if ((entry.orderType === 'KRPR' || entry.orderType === 'BR0') && (!project?.address || !entry.dropAddress)) {
+    if ((entry.orderType === 'KRPR' || entry.orderType === 'NRPR' || entry.orderType === 'BR0') && (!project?.address || !entry.dropAddress)) {
       project = projectWithAddressFromMaster(project || { id: entry.projectId || '', name: entry.projectName || '' }, `${entry.sourcePdfText || ''}
 ${entry.sourceBody || ''}
 ${entry.subject || ''}`) || project;
@@ -1302,7 +1410,7 @@ ${entry.subject || ''}`) || project;
     const existingSupplier = ensureSupplierMaster(entry);
     const { supplier, project } = masterIdsForEntry(entry);
     const resolvedSupplier = supplier || existingSupplier;
-    if ((entry.orderType === 'KRPR' || entry.orderType === 'BR0') && project?.address && !entry.dropAddress) {
+    if ((entry.orderType === 'KRPR' || entry.orderType === 'NRPR' || entry.orderType === 'BR0') && project?.address && !entry.dropAddress) {
       entry.projectId = project.id || entry.projectId || '';
       entry.projectName = project.name || entry.projectName || '';
       entry.dropAddress = project.address;
@@ -1541,6 +1649,11 @@ ${entry.subject || ''}`) || project;
     supplierSpecial,
     parsePdfItemsFromLines,
     blockingFields,
+    normalizeQtyV71,
+    transferNameMatch,
+    closeEnoughV71,
+    isLongMaterialV71,
+    headerOrderTypeV71,
     orderNoWaived,
     importIdentity,
     refreshEntryWarnings,
