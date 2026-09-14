@@ -1,0 +1,99 @@
+FUVARSZERVEZO V72
+=================
+
+A V71-re epul. Sofori felulet, datumbevitel es mellekletek.
+
+MODOSITOTT FAJLOK
+-----------------
+app.js          harmas datummezo a tetelsorban, Backspace-visszalepes
+auth-v44-2.js   harom munkanap, szerkesztes-korlatozas, melleklet megnyitasa,
+                nyitonap, Mentett fotok gomb
+planner-v37.js  szallitolevel-jeloles a buborekon es a gombon
+styles.css      az uj elemek stilusa
+index.html / manifest / sw.js   verziószam
+TEST_V72.js     173 teszt
+
+
+1. DATUMBEVITEL A TETELEKNEL
+----------------------------
+Hiba: a hatralek datumanal a nap mezo "csak egy karaktert vett be", es a
+tetel a honap ELSEJERE kerult.
+
+Ok: a tetel melletti mezo NATIV datummezo volt, azonnali athelyezessel. A
+bongeszo viszont mar akkor kuld change esemenyt, amikor a nap elso
+szamjegyet beirod - a "2026-09-1" ervenyes datumnak latszik.
+
+Javitas: harom kulon mezo (EEEE-HH-NN). A kurzor magatol ugrik tovabb,
+ures mezoben a Backspace visszalep, es az athelyezes CSAK akkor indul, ha
+mind a harom ki van toltve es valodi datumot ad (2026-02-31 nem).
+
+A fejlec datummezoibe is bekerult a Backspace-visszalepes, tehat az EGESZ
+oldalon ugyanaz a viselkedes. A sofori oldal ugyanezt a tetelablakot
+hasznalja, ott is ervenyes.
+
+
+2. SZALLITOLEVEL-JELOLES AZ ADMIN FELULETEN
+-------------------------------------------
+Eddig semmi nem mutatta, hogy a sofor feltoltotte-e a szallitolevelet - a
+Mentett fotok gomb akkor is ott volt, ha egy kep sem erkezett. Minden
+fuvart kulon meg kellett nyitni az ellenorzeshez.
+
+Mostantol:
+  - a Mentett fotok gomb ZOLD lesz, es kiirja a darabszamot: "(2)"
+  - a buborekon "Szallitolevel . 2" cimke es zold sav a bal szelen
+  - a Nezet ablak soran ugyanez, chip formaban
+  - a sofori oldalon is jelol
+
+A szam a feltoltott fotok osszege. Az Outlook-mellekletek NEM szamitanak
+bele - azok kozvetlenul a taroloba mennek, nem a fuvar deliveryReports
+mezojebe. Teszt vedi, kulonben minden importalt fuvar zolden jelenne meg.
+
+
+3. A PDF-MELLEKLET MEGNYITASA
+-----------------------------
+Hiba: a Csatolmany ablakban kiirta a PDF-et, de kattintasra nem tortent
+semmi.
+
+Ket oka lehetett:
+  - ha az alairt URL uresen jott vissza, a href="" a lapot toltotte ujra
+  - a kezdokepernyorol inditott (telepitett) alkalmazasban a bongeszo
+    gyakran blokkolja az uj lapot
+
+Javitas: a link mostantol GOMB. Eloszor uj lapon probalja, es ha azt a
+rendszer blokkolja, ugyanabban az ablakban nyitja meg. Ha nincs URL,
+"nem elerheto" felirat all ott, ahelyett hogy csendben nem tortenne semmi.
+
+
+4. A SOFOR HAROM MUNKANAPOT LAT
+-------------------------------
+   elozo munkanap   csak megtekintheto   "Lezart nap"
+   MAI munkanap     SZERKESZTHETO
+   kovetkezo        csak megtekintheto   "Kovetkezo nap - elonezet"
+
+A hetvege mindket iranyban kimarad: penteken a kovetkezo hetfo, hetfon az
+elozo pentek.
+
+A nem szerkesztheto napon megnezheti a fuvart, a teteleket, a fotokat es a
+csatolmanyt, de nem tud szallitolevelet feltolteni, tetelt pipalni, hianyt
+jelezni, hatralekot utemezni vagy fuvart atadni. A gombok meg sem jelennek.
+
+A szabaly EGY helyen van kimondva (isReadOnlyDate), es a muveleti vedelmi
+reteg ervenyesiti - igy egy kesobbi uj gombra is magatol ervenyes lesz.
+
+
+5. A NYITOOLDAL MINDIG A MAI NAPOT MUTATJA
+------------------------------------------
+Az elozo munkanap felvetele utan a lista ELSO eleme a tegnapi nap lett, es
+ervenytelen valasztas eseten a program oda allt vissza - a sofor ejfel utan
+vagy hetvege utan a tegnapi, lezart napon talalta volna magat.
+
+Mostantol a tartalek mindig a MAI munkanap. A napon belul szabadon valthat
+a fulek kozott, de minden ujranyitaskor es belepeskor a mai nap jon elo.
+
+
+TESZTEK
+-------
+TEST_V72.js   173/173
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Futtatas: node TEST_V72.js

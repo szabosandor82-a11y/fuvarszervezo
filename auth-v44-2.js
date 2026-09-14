@@ -15,7 +15,8 @@
 
   let currentSession = null;
   let currentProfile = null;
-  let selectedDriverDate = typeof today === 'function' ? today() : new Date().toISOString().slice(0, 10);
+  let selectedDriverDate = '';   // az első megnyitáskor a mai munkanapra áll
+  let driverDateInitialised = false;
   let transferCache = [];
   let saveTimer = null;
   let suppressOnlineSave = false;
@@ -39,12 +40,33 @@
     }
     return typeof localISO === 'function' ? localISO(d) : d.toISOString().slice(0, 10);
   };
+  /* V71 – A SOFŐR HÁROM MUNKANAPOT LÁT
+
+     Az előző munkanap azért kell, hogy utólag meg tudja nézni, mit vitt –
+     de azt MÁR NEM SZERKESZTHETI, mert az a nap le van zárva. A mai és a
+     következő munkanap szerkeszthető.
+
+     Hétvégén nincs munkavégzés, ezért a lépegetés munkanapokat számol:
+     pénteken a "következő" hétfő, hétfőn az "előző" péntek. */
   const allowedDates = () => {
     const rawToday = localDate(0);
     const current = typeof normalizeWorkday === 'function' ? normalizeWorkday(rawToday) : rawToday;
-    const next = typeof shiftWorkday === 'function' ? shiftWorkday(current, 1) : fallbackShiftWorkday(current, 1);
-    return [current, next];
+    const shift = (date, days) => typeof shiftWorkday === 'function'
+      ? shiftWorkday(date, days) : fallbackShiftWorkday(date, days);
+    const previous = shift(current, -1);
+    const next = shift(current, 1);
+    return [previous, current, next];
   };
+  const currentWorkday = () => {
+    const rawToday = localDate(0);
+    return typeof normalizeWorkday === 'function' ? normalizeWorkday(rawToday) : rawToday;
+  };
+  /* Csak a MAI munkanap szerkeszthető. Az előző már lezárult, a következő
+     pedig még nem aktuális – azt a sofőr csak előre megnézi, hogy tudja,
+     mi vár rá. Ezt egy helyen döntjük el, hogy minden művelet ugyanazt a
+     szabályt kövesse. */
+  const isReadOnlyDate = date => String(date || '') !== currentWorkday();
+  global.isDriverReadOnlyDate = isReadOnlyDate;
   const appUser = email => USERS[normalizeEmail(email)] || null;
   const isAdmin = () => currentProfile?.role === 'admin';
   const isRestrictedUser = () => !!currentProfile && !isAdmin();
@@ -70,22 +92,37 @@
     }
     return [];
   }
+  function orderOf(orderOrId) {
+    return typeof orderOrId === 'string'
+      ? (state.orders || []).find(item => String(item.id) === String(orderOrId))
+      : orderOrId;
+  }
+  /* Láthatóság: a sofőr a három munkanapot látja. */
   function canAccessOrder(orderOrId) {
     if (isAdmin()) return true;
     if (!currentProfile) return false;
-    const order = typeof orderOrId === 'string' ? (state.orders || []).find(item => String(item.id) === String(orderOrId)) : orderOrId;
+    const order = orderOf(orderOrId);
     if (!order || !allowedDates().includes(order.scheduleDate)) return false;
     if (currentProfile.role === 'test') return true;
     const vehicle = vehicleForDriverKey(currentProfile.driver_key);
     return !!vehicle && order.vehicleId === vehicle.id;
   }
+  /* Szerkeszthetőség: az ELŐZŐ munkanap csak olvasható. Ott a fuvar már
+     lezárult, utólag nem módosítható – de megnézni meg lehet. */
+  function canEditOrder(orderOrId) {
+    if (!canAccessOrder(orderOrId)) return false;
+    if (isAdmin()) return true;
+    const order = orderOf(orderOrId);
+    return !!order && !isReadOnlyDate(order.scheduleDate);
+  }
+  global.canEditOrder = canEditOrder;
   function orderDriverKey(order) { return global.V44Online?.driverKeyFromOrder(order) || ''; }
 
   // A verziószám egyetlen forrása a szétosztómotor VERSION konstansa.
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V71Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V72Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -180,7 +217,14 @@
     document.querySelector('nav')?.classList.add('auth-app-hidden');
     byId('driverPortal')?.classList.remove('hidden');
     setAppTitle(appVersionLabel());
-    selectedDriverDate = allowedDates().includes(selectedDriverDate) ? selectedDriverDate : allowedDates()[0];
+    /* A nyitóoldal mindig a MAI napot mutatja. A felhasználó ezen belül
+       válthat a tegnapi vagy a holnapi fülre, de újranyitáskor ismét a mai
+       nap jön elő. */
+    if (!driverDateInitialised) { selectedDriverDate = currentWorkday(); driverDateInitialised = true; }
+    /* V71: ha az eltárolt nap már nem érvényes – például átfordult a nap, vagy
+       hétvége után hétfő lett –, mindig a MAI munkanap nyílik meg, nem a
+       lista első eleme (az a tegnapi volna). */
+    selectedDriverDate = allowedDates().includes(selectedDriverDate) ? selectedDriverDate : currentWorkday();
     await renderDriverPortal();
   }
 
@@ -223,7 +267,9 @@
     const pickup = order.pickupName || 'Felrakó';
     const drop = order.projectName || 'Egyedi úticél';
     const detailId = `v57d-${safe(order.id)}`;
-    return `<article class="mobile-user-row ${order.completed ? 'done' : ''}${commentClass}" data-id="${safe(order.id)}">
+    const locked = isReadOnlyDate(order.scheduleDate) && !isAdmin();
+    return `<article class="mobile-user-row ${order.completed ? 'done' : ''}${commentClass} ${locked ? 'locked-day' : ''}" data-id="${safe(order.id)}">
+      ${locked ? `<div class="locked-note">${order.scheduleDate < currentWorkday() ? 'Lezárt nap' : 'Következő nap – előnézet'} – csak megtekinthető</div>` : ''}
       <div class="v57-row-head">
         <span class="mobile-sequence">${index + 1}</span>
         <div class="v57-row-title">${safe(order.orderNo)} — ${safe(pickup)} — ${safe(drop)}</div>
@@ -233,9 +279,9 @@
       ${order.manualItems ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${safe(order.manualItems)}</div>` : ''}
       <div class="v57-row-actions">
         <button type="button" onclick="openItems('${safe(order.id)}')">Tételek${items.length ? ` (${received}/${items.length})` : ''}</button>
-        <button type="button" class="camera-action" onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>
+        ${locked ? '' : `<button type="button" class="camera-action" onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>`}
         ${hasSourceMail ? `<button type="button" class="mail-action" onclick="openSourceMail('${safe(order.id)}')">Csatolmány</button>` : ''}
-        ${canTransfer ? `<button type="button" class="transfer-action" onclick="openTransferDialog('${safe(order.id)}')">Fuvar átadása</button>` : ''}
+        ${canTransfer && !locked ? `<button type="button" class="transfer-action" onclick="openTransferDialog('${safe(order.id)}')">Fuvar átadása</button>` : ''}
       </div>
       ${transferBadge(order)}
       <div class="v57-row-detail" id="${detailId}" data-order-id="${safe(order.id)}" hidden>
@@ -245,7 +291,7 @@
         ${order.note ? `<p><b>Fuvar megjegyzés:</b> ${safe(order.note)}</p>` : ''}
         ${order.recipientName || order.recipientPhone ? `<p><b>Átvevő:</b> ${safe(order.recipientName || '')}${order.recipientPhone ? ` · <a href="tel:${safe(order.recipientPhone)}">${safe(order.recipientPhone)}</a>` : ''}</p>` : ''}
         <div class="mobile-bubble-tags"><span>${items.length} tétel</span>${order.longMaterialReason ? `<span>${safe(order.longMaterialReason)}</span>` : ''}${reportPhotos ? `<span>📎 ${reportPhotos} fájl</span>` : ''}</div>
-        <div class="v57-row-actions"><button type="button" class="secondary" onclick="openMediaGallery('${safe(order.id)}')">Mentett fotók</button></div>
+        <div class="v57-row-actions"><button type="button" class="secondary ${reportPhotos ? 'has-photos' : ''}" onclick="openMediaGallery('${safe(order.id)}')">Mentett fotók${reportPhotos ? ` (${reportPhotos})` : ''}</button></div>
       </div>
     </article>`;
   }
@@ -421,6 +467,7 @@
   }
 
   async function logout() {
+    driverDateInitialised = false;   // a kovetkezo belepes ujra a mai napot nyitja
     try { await global.V44Online.signOut(); } catch (_) {}
     currentSession = null; currentProfile = null; transferCache = [];
     showLogin('Sikeresen kijelentkeztél.');
@@ -482,6 +529,38 @@
   /* V60 – az importált levél megnyitása a sofőri felületen.
      A levél szövege a fuvaron van, tehát hálózat nélkül is olvasható; a
      mellékleteket a szállítólevél-tárolóból töltjük be. */
+  /* V71 – MELLÉKLET MEGNYITÁSA MEGBÍZHATÓAN
+
+     Eddig sima <a target="_blank"> volt. Ez két esetben nem nyílt meg:
+       - ha az aláírt URL üresen jött vissza, a href="" a lapot töltötte újra
+       - a kezdőképernyőről indított (telepített) alkalmazásban a böngésző
+         gyakran blokkolja az új lapot, és nem történik semmi
+
+     Ezért gombot használunk: ha van URL, előbb új lapon próbáljuk, és ha azt
+     a rendszer blokkolja, ugyanabban az ablakban nyitjuk meg. Ha nincs URL,
+     megmondjuk, miért, ahelyett hogy csendben nem történne semmi. */
+  function attachmentLinkV71(file) {
+    const name = safe(file.file_name || 'melléklet');
+    if (!file.url) {
+      return `<span class="mail-file mail-file-missing" title="A fájl hivatkozása nem jött létre">
+        <i class="ti ti-alert-triangle" aria-hidden="true"></i> ${name} — nem elérhető</span>`;
+    }
+    return `<button type="button" class="mail-file" data-url="${safe(file.url)}"
+      onclick="openAttachmentV71(this.dataset.url)">
+      <i class="ti ti-paperclip" aria-hidden="true"></i> ${name}</button>`;
+  }
+
+  global.openAttachmentV71 = function (url) {
+    if (!url) return alert('Ehhez a melléklethez nem jött létre megnyitható hivatkozás. Frissítsd az oldalt, és próbáld újra.');
+    let win = null;
+    try { win = global.open(url, '_blank', 'noopener'); } catch (error) { win = null; }
+    // telepített alkalmazásban az új lap blokkolva lehet – ilyenkor helyben nyitjuk
+    if (!win || win.closed || typeof win.closed === 'undefined') {
+      try { global.location.href = url; }
+      catch (error) { alert('A melléklet nem nyitható meg: ' + error.message); }
+    }
+  };
+
   async function openSourceMail(orderId) {
     if (!canAccessOrder(orderId)) return alert('Ehhez a fuvarhoz nincs jogosultságod.');
     let order = (state.orders || []).find(item => String(item.id) === String(orderId));
@@ -529,7 +608,7 @@
         ? all.filter(file => file.is_source_mail) : all;
       files.innerHTML = sources.length
         ? `<div class="mail-files-title">Mellékletek (${sources.length})</div>`
-          + sources.map(file => `<a class="mail-file" href="${safe(file.url)}" target="_blank" rel="noopener"><i class="ti ti-paperclip" aria-hidden="true"></i> ${safe(file.file_name)}</a>`).join('')
+          + sources.map(attachmentLinkV71).join('')
         : '<small>Nincs feltöltött melléklet ehhez a fuvarhoz.</small>';
     } catch (error) {
       files.innerHTML = `<small>A mellékletek nem tölthetők be: ${safe(error.message)}</small>`;
@@ -542,7 +621,7 @@
       const lists = await Promise.all(ids.map(id => global.V44Online?.listDeliveryFiles ? listDeliveryFilesEventually(id) : Promise.resolve([])));
       const files = lists.flat().filter(file => /\.pdf$/i.test(file.file_name || ''));
       host.innerHTML = files.length
-        ? `<div class="item-attachments-title">PDF mellékletek (${files.length})</div>${files.map(file => `<a class="mail-file item-pdf-link" href="${safe(file.url)}" target="_blank" rel="noopener">📄 ${safe(file.file_name || 'PDF melléklet')}</a>`).join('')}`
+        ? `<div class="item-attachments-title">PDF mellékletek (${files.length})</div>${files.map(attachmentLinkV71).join('')}`
         : '<small>Nincs elérhető PDF-melléklet ehhez a tételhez.</small>';
     } catch (error) { host.innerHTML = `<small>A PDF-mellékletek nem tölthetők be: ${safe(error.message)}</small>`; }
   }
@@ -627,20 +706,32 @@
   }
 
   function installGuardsAndHooks() {
-    const guardOrderFunction = (name, allowedForDrivers) => {
+    /* V71: a harmadik paraméter azt mondja meg, hogy a művelet MÓDOSÍT-e.
+       A módosító műveletek a lezárt (előző munkanapi) fuvaron nem futnak le,
+       a megtekintés viszont igen. */
+    const guardOrderFunction = (name, allowedForDrivers, mutates = false) => {
       const original = global[name];
       if (typeof original !== 'function') return;
       global[name] = function (orderId, ...args) {
         if (!isRestrictedUser()) return original.call(this, orderId, ...args);
         if (!allowedForDrivers || !canAccessOrder(orderId)) return alert('Ehhez a művelethez nincs jogosultságod.');
+        if (mutates && !canEditOrder(orderId)) {
+          return alert('Csak az aktuális munkanap szerkeszthető. Ez a nap csak megtekinthető.');
+        }
         return original.call(this, orderId, ...args);
       };
     };
     guardOrderFunction('openItems', true);
-    guardOrderFunction('openCamera', true);
-    guardOrderFunction('toggleItem', true);
-    guardOrderFunction('updateMissingQty', true);
-    guardOrderFunction('updateItemNote', true);
+    guardOrderFunction('openCamera', true, true);
+    guardOrderFunction('toggleItem', true, true);
+    guardOrderFunction('updateMissingQty', true, true);
+    guardOrderFunction('updateItemNote', true, true);
+    guardOrderFunction('openShortage', true, true);
+    guardOrderFunction('closeShortage', true, true);
+    guardOrderFunction('setItemMoveDate', true, true);
+    guardOrderFunction('rescheduleMovedItem', true, true);
+    guardOrderFunction('undoBacklogMove', true, true);
+    guardOrderFunction('openTransferDialog', true, true);
     guardOrderFunction('editOrder', false);
     guardOrderFunction('deleteOne', false);
     guardOrderFunction('toggleComplete', false);

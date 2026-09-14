@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V71Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V72Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -1108,6 +1108,46 @@ function validMoveTargetFromInputs(prefix='move'){
   const target=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`,dt=new Date(target+'T12:00:00');
   return !isNaN(dt)&&localISO(dt)===target?target:'';
 }
+/* V71 – EGYSÉGES DÁTUMBEVITEL A TÉTELSOROKBAN
+
+   Ugyanaz a viselkedés, mint az űrlapokon: négy számjegy után a kurzor a
+   hónapra ugrik, kettő után a napra, és üres mezőben a Backspace visszalép.
+   Az áthelyezés csak akkor indul, ha mind a három mező ki van töltve, és a
+   hármas valódi dátumot ad. */
+function bindItemDatePartsV71(){
+  document.querySelectorAll('.item-date-parts').forEach(group=>{
+    if(group.dataset.bound==='1')return;
+    group.dataset.bound='1';
+    const [orderId,itemId]=String(group.dataset.itemDate||'').split('::');
+    const inputs=[...group.querySelectorAll('input')];
+    if(inputs.length!==3)return;
+    const [y,m,d]=inputs;
+    const commit=()=>{
+      const year=y.value.padStart(4,'0'),month=m.value.padStart(2,'0'),day=d.value.padStart(2,'0');
+      if(y.value.length!==4||!m.value||!d.value)return;
+      const value=`${year}-${month}-${day}`;
+      const parsed=new Date(value+'T12:00:00');
+      if(isNaN(parsed)||localISO(parsed)!==value)return;   // 02-31 és társai
+      const rec=backlogRecordForItem(orderId,itemId);
+      if(rec)rescheduleMovedItem(orderId,itemId,value);
+      else setItemMoveDate(orderId,itemId,value);
+    };
+    [[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next],index)=>{
+      el.addEventListener('input',()=>{
+        el.value=el.value.replace(/\D/g,'').slice(0,max);
+        if(el.value.length===max&&next){next.focus();next.select()}
+        if(el.value.length===max&&!next)commit();
+      });
+      el.addEventListener('keydown',event=>{
+        if(event.key==='Backspace'&&!el.value&&index>0){inputs[index-1].focus();event.preventDefault()}
+        if(event.key==='Enter'){event.preventDefault();commit()}
+      });
+      el.addEventListener('blur',()=>setTimeout(commit,0));
+    });
+  });
+}
+window.bindItemDatePartsV71=bindItemDatePartsV71;
+
 function bindV21MoveDateParts(){
   const y=$('#moveYear'),m=$('#moveMonth'),d=$('#moveDay');
   const btn=$('#applyMoveDateAll');
@@ -1119,8 +1159,19 @@ function bindV21MoveDateParts(){
     return !!o&&(o.items||[]).some(it=>!it.received&&(it.moveTargetDate||'').trim());
   };
   const update=()=>{btn.disabled=!validMoveTargetFromInputs('move')};
-  [[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next])=>{
+  // V71: ugyanaz a viselkedés, mint a többi dátummezőnél – ugrás előre, és
+  // üres mezőben a Backspace visszalép az előzőre.
+  const parts=[y,m,d];
+  [[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next],index)=>{
     el.addEventListener('input',()=>{el.value=el.value.replace(/\D/g,'').slice(0,max);if(el.value.length===max&&next){next.focus();next.select()}update()});
+    el.addEventListener('keydown',event=>{
+      if(event.key==='Backspace'&&!el.value&&index>0){
+        event.preventDefault();
+        const prev=parts[index-1];
+        prev.focus();
+        if(prev.setSelectionRange)prev.setSelectionRange(prev.value.length,prev.value.length);
+      }
+    });
     el.addEventListener('change',update);
   });
   btn.onclick=applyMoveDateToAllItems;
@@ -1145,7 +1196,28 @@ function openItems(id){
       ? `<div class="item-qty-cell"><input class="missing-qty-input" type="number" min="0" step="any" placeholder="mind" aria-label="Nem kapott mennyiség" value="${esc(it.missingQty||'')}" oninput="updateMissingQty('${o.id}',${i},this.value)"><span class="item-qty-unit">${esc(it.unit||'')} · rendelt: ${esc(it.qty)}</span></div>`
       : (it.received?'<span class="item-dash">—</span>':`<button type="button" class="item-shortage-btn" onclick="openShortage('${o.id}','${esc(it._id)}')">Hiányzik</button>`);
     const dateCell=open
-      ? `<div class="item-date-cell"><input type="date" class="item-move-date-input" value="${esc(it.moveTargetDate||rec?.movedToDate||'')}" aria-label="Hátralék napja" onchange="${rec?`rescheduleMovedItem('${o.id}','${esc(it._id)}',this.value)`:`setItemMoveDate('${o.id}','${esc(it._id)}',this.value)`}">${rec?`<button type="button" class="item-undo" title="Áthelyezés visszavonása" onclick="undoBacklogMove('${o.id}','${esc(it._id)}')">Vissza</button>`:`<button type="button" class="item-undo" title="Mégsem hiányzik" onclick="closeShortage('${o.id}','${esc(it._id)}')">Mégsem</button>`}</div>`
+      ? (() => {
+          /* V71: a natív <input type="date"> mar az elso beirt szamjegynel
+             change esemenyt kuld, ezert a tetel azonnal atkerult a honap
+             ELSEJERE. Helyette harom kulon mezo all: ev, honap, nap.
+             A kurzor magatol ugrik tovabb, es az athelyezes CSAK akkor indul,
+             amikor mind a harom ki van toltve es ervenyes datumot ad. */
+          const current = String(it.moveTargetDate || rec?.movedToDate || '');
+          const [cy, cm, cd] = current ? current.split('-') : ['', '', ''];
+          const fn = rec ? 'rescheduleMovedItem' : 'setItemMoveDate';
+          const key = `${o.id}::${esc(it._id)}`;
+          return `<div class="item-date-cell">
+            <div class="date-parts item-date-parts" data-item-date="${key}">
+              <input inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Hátralék éve" value="${esc(cy)}">
+              <span>–</span>
+              <input inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Hátralék hónapja" value="${esc(cm)}">
+              <span>–</span>
+              <input inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Hátralék napja" value="${esc(cd)}">
+            </div>
+            ${rec ? `<button type="button" class="item-undo" title="Áthelyezés visszavonása" onclick="undoBacklogMove('${o.id}','${esc(it._id)}')">Vissza</button>`
+                  : `<button type="button" class="item-undo" title="Mégsem hiányzik" onclick="closeShortage('${o.id}','${esc(it._id)}')">Mégsem</button>`}
+          </div>`;
+        })()
       : '<span class="item-dash">—</span>';
     return `<div class="item-row item-grid ${it.received?'done':''} ${open?'shortage':''}">
       <input type="checkbox" ${it.received?'checked':''} title="Hiánytalanul megkapta" onchange="toggleItem('${o.id}',${i},this.checked)" aria-label="Hiánytalanul megkapta">
@@ -1165,7 +1237,7 @@ function openItems(id){
   const noteBlock=manualNote?`<div class="v65-manual-note"><b>Megjegyzés:</b> ${esc(manualNote)}</div>`:'';
   const emptyBlock=((o.items||[]).length||manualNote)?'':'<div class="notice">Nincs tétel.</div>';
   $('#itemsBody').innerHTML=noteBlock+`<div class="item-attachments-toolbar"><button type="button" class="secondary item-pdf-button" onclick="openOrderPdfAttachments('${o.id}')">PDF mellékletek megnyitása</button><div id="itemAttachments" class="item-attachments"><small>Mellékletek betöltése…</small></div></div>`+itemRowsHtml+emptyBlock;
-  bindV21MoveDateParts();if(!$('#itemsDialog').open)$('#itemsDialog').showModal(); if(window.renderOrderPdfAttachments) window.renderOrderPdfAttachments([o.id],'itemAttachments')
+  bindV21MoveDateParts();bindItemDatePartsV71();if(!$('#itemsDialog').open)$('#itemsDialog').showModal(); if(window.renderOrderPdfAttachments) window.renderOrderPdfAttachments([o.id],'itemAttachments')
 }
 window.openItems=openItems;
 
