@@ -581,7 +581,7 @@
     const map = focusMap, date = selectedDate();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
     let events = state.routePlans?.[selectedDate()]?.[vehicleId] || [];
-    const currentPlanner = global.V74Planner || global.V65Planner || global.V64Planner;
+    const currentPlanner = global.V75Planner || global.V65Planner || global.V64Planner;
     const snapshot = currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
     const isCurrent = () => focusMap === map && selectedDate() === date
       && snapshot === currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
@@ -655,6 +655,23 @@
       } else if (child.classList.contains('route-block')) result.push(child);
     }
     return result;
+  }
+
+  /* V74 – A SORSZÁM AZONNAL KÖVETI A MOZGATÁST
+
+     A főoldal a húzás után újrarajzolódik, a Nézet ablak viszont nem – ott a
+     sorok a helyükre csúsznak, de a beléjük írt szám a régi maradt. Ezért a
+     mozgatás végén azonnal újraszámozzuk őket, a képernyőn látható sorrend
+     szerint. Így nem kell megvárni egy újranyitást. */
+  function renumberFocusRowsV74(container) {
+    if (!container?.children) return;
+    let index = 0;
+    for (const child of [...container.children]) {
+      if (!child.classList?.contains('pickup-move-block') && !child.classList?.contains('route-block')) continue;
+      index += 1;
+      const badge = child.querySelector?.('.v56-index');
+      if (badge) badge.textContent = String(index);
+    }
   }
 
   function updateSequencesFromContainer(container, vehicleId) {
@@ -771,7 +788,10 @@
       onEnd: event => {
         stopDragScroll();
         const movedIds = String(event.item?.dataset?.orderIds || '').split(',').filter(Boolean);
-        if (focus) updateSequencesFromContainer(element, vehicleId);
+        if (focus) {
+          updateSequencesFromContainer(element, vehicleId);
+          renumberFocusRowsV74(element);
+        }
         else {
           activeVehicles().forEach(vehicle => {
             const container = document.getElementById(`route-${vehicle.id}`);
@@ -788,7 +808,7 @@
         // útvonalterv épül újra a kézi sequence értékekből, és csak utána
         // rajzolunk. Fordítva a rajzoló üres tervet találna, és
         // újraoptimalizálná az útvonalat, felülírva a te sorrendedet.
-        const buildManual = global.V74Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
+        const buildManual = global.V75Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
         setTimeout(async () => {
           if (typeof buildManual === 'function') {
             try {
@@ -997,6 +1017,7 @@
     pickupMoveKey,
     moveSupplierOrdersTogether,
     focusPickupUnits,
+    renumberFocusRowsV74,
     groupedBubbles,
     drawFocusMap,
     renderCompactRowV56,
