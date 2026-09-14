@@ -1106,6 +1106,9 @@
      hogy ne kelljen új infrastruktúra. */
   async function uploadSourceMailFiles(entries, orders) {
     if (!global.V44Online?.createDeliveryReport || typeof File === 'undefined') return;
+    /* V72: a feltöltés hibája eddig csak a konzolba került, ezért úgy tűnt,
+       hogy a melléklet ott van, pedig soha nem jutott fel. Most szólunk. */
+    const failed = [];
     for (let index = 0; index < entries.length; index++) {
       const mail = entries[index]?.sourceMail;
       const order = orders[index];
@@ -1124,8 +1127,13 @@
         await global.V44Online.createDeliveryReport(order, files,
           `Outlook forrás · ${mail.fileName || ''}`.trim());
       } catch (error) {
-        console.warn('[V60] forráslevél feltöltése sikertelen', order.orderNo, error);
+        console.warn('[V72] forráslevél feltöltése sikertelen', order.orderNo, error);
+        failed.push(`${order.orderNo || order.id}: ${error.message}`);
       }
+    }
+    if (failed.length && typeof alert === 'function') {
+      alert('A levél mellékletei nem töltődtek fel, ezért a Csatolmány gombbal nem lesznek megnyithatók:\n\n'
+        + failed.slice(0, 5).join('\n') + (failed.length > 5 ? `\n… és további ${failed.length - 5}` : ''));
     }
   }
 

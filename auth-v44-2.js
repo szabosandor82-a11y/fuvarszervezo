@@ -233,11 +233,13 @@
     if (isAdmin()) await showAdmin(); else await showDriver();
   }
 
+  /* V72: a fülek felirata. A középső a MAI nap, csak azon áll a "Ma" szó;
+     a két szélső csak a dátumot mutatja. Korábban a lista első elemét hívta
+     "Ma"-nak, ami a három napos nézet óta a tegnapi nap volt. */
   function formatDay(date) {
-    const offset = date === allowedDates()[0] ? 'Ma' : 'Holnap';
     const d = new Date(`${date}T12:00:00`);
-    const text = new Intl.DateTimeFormat('hu-HU', { month: 'short', day: 'numeric', weekday: 'short' }).format(d);
-    return `${offset} · ${text}`;
+    const text = new Intl.DateTimeFormat('hu-HU', { month: 'short', day: 'numeric' }).format(d);
+    return date === currentWorkday() ? `Ma · ${text}` : text;
   }
   function transferForOrder(orderId) {
     return transferCache.find(item => String(item.order_id) === String(orderId) && item.status === 'pending') || null;
@@ -279,9 +281,9 @@
       ${order.manualItems ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${safe(order.manualItems)}</div>` : ''}
       <div class="v57-row-actions">
         <button type="button" onclick="openItems('${safe(order.id)}')">Tételek${items.length ? ` (${received}/${items.length})` : ''}</button>
-        ${locked ? '' : `<button type="button" class="camera-action" onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>`}
+        <button type="button" class="camera-action${locked ? ' is-locked' : ''}" ${locked ? `disabled title="Csak az aktuális munkanapon tölthető fel"` : ''} onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>
         ${hasSourceMail ? `<button type="button" class="mail-action" onclick="openSourceMail('${safe(order.id)}')">Csatolmány</button>` : ''}
-        ${canTransfer && !locked ? `<button type="button" class="transfer-action" onclick="openTransferDialog('${safe(order.id)}')">Fuvar átadása</button>` : ''}
+        ${canTransfer ? `<button type="button" class="transfer-action${locked ? ' is-locked' : ''}" ${locked ? `disabled title="Csak az aktuális munkanapon adható át"` : ''} onclick="openTransferDialog('${safe(order.id)}')">Fuvar átadása</button>` : ''}
       </div>
       ${transferBadge(order)}
       <div class="v57-row-detail" id="${detailId}" data-order-id="${safe(order.id)}" hidden>
@@ -326,7 +328,7 @@
     const identity = byId('driverPortalIdentity');
     if (identity) identity.textContent = `${currentProfile.display_name || currentSession?.user?.email} · ${currentProfile.role === 'test' ? 'TESZT' : 'SOFŐR'}`;
     const tabs = byId('driverDateTabs');
-    if (tabs) tabs.innerHTML = allowedDates().map(date => `<button type="button" data-driver-date="${date}" class="${date === selectedDriverDate ? 'active' : ''}">${formatDay(date)}</button>`).join('');
+    if (tabs) tabs.innerHTML = allowedDates().map(date => `<button type="button" data-driver-date="${date}" class="${date === selectedDriverDate ? 'active' : ''} ${date === currentWorkday() ? 'today-tab' : 'readonly-tab'}" title="${date === currentWorkday() ? 'Az aktuális nap – szerkeszthető' : 'Csak megtekinthető'}">${formatDay(date)}</button>`).join('');
     tabs?.querySelectorAll('[data-driver-date]').forEach(button => button.addEventListener('click', async () => { selectedDriverDate = button.dataset.driverDate; await renderDriverPortal(); }));
 
     const vehicles = visibleVehicles();
@@ -609,7 +611,9 @@
       files.innerHTML = sources.length
         ? `<div class="mail-files-title">Mellékletek (${sources.length})</div>`
           + sources.map(attachmentLinkV71).join('')
-        : '<small>Nincs feltöltött melléklet ehhez a fuvarhoz.</small>';
+        : `<small>${(mail.attachmentNames || []).length
+            ? 'A levélnek volt melléklete, de a fájlok nincsenek feltöltve. A mellékletek mentése a V65 óta működik – a korábban importált fuvaroknál a levelet újra kell importálni, ha a fájl is kell.'
+            : 'Ehhez a levélhez nem tartozott melléklet.'}</small>`;
     } catch (error) {
       files.innerHTML = `<small>A mellékletek nem tölthetők be: ${safe(error.message)}</small>`;
     }

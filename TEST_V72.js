@@ -1641,7 +1641,7 @@ function krprWith(target) {
     assert.ok(body.includes('order.manualItems'), 'a levelablakban nincs kezi tetel');
     assert.ok(body.includes('listDeliveryFiles'), 'nem tolti be a mellekleteket');
     assert.ok(body.includes('mail-files-title'), 'nincs melleklet-fejlec');
-    assert.match(body, /Nincs feltoltott melleklet|Nincs feltöltött melléklet/i, 'nincs visszajelzes melleklet nelkul');
+    assert.match(body, /nincsenek feltöltve|nem tartozott melléklet/i, 'nincs visszajelzes melleklet nelkul');
     // V71 óta gomb nyitja, hogy telepített alkalmazásban se blokkolódjon
     assert.ok(body.includes('attachmentLinkV71'), 'a melleklet nem nyithato meg');
   });
@@ -2457,8 +2457,10 @@ function krprWith(target) {
     assert.ok(body.includes('locked-day'), 'nincs jeloles a lezart soron');
     assert.ok(body.includes('Lezárt nap') && body.includes('Következő nap'),
       'nincs magyarazo felirat mindket iranyra');
-    assert.match(body, /locked \? '' : `<button type="button" class="camera-action"/,
-      'a Szallitolevel gomb a lezart napon is megjelenik');
+    // V72 ota a gomb LATSZIK, de le van tiltva – igy nem tunik ugy, hogy eltunt
+    assert.ok(body.includes('class="camera-action${locked'), 'a Szallitolevel gomb feltetelesen jelenik meg');
+    assert.match(body, /disabled title="Csak az aktuális munkanapon tölthető fel"/,
+      'a lezart napon nincs tiltva a gomb');
     const css = fs.readFileSync(__dirname + '/styles.css', 'utf8');
     assert.ok(css.includes('.mobile-user-row.locked-day'), 'nincs stilus a lezart sorhoz');
   });
@@ -2490,6 +2492,57 @@ function krprWith(target) {
     const start = auth.indexOf('async function logout');
     const body = auth.slice(start, start + 400);
     assert.ok(body.includes('driverDateInitialised = false'), 'kilepeskor nem all vissza');
+  });
+
+  await test('A napfuleken csak a MAI napon all a "Ma" szo', async () => {
+    const src = fs.readFileSync(__dirname + '/auth-v44-2.js', 'utf8');
+    const c = { console, Date, String, Number, Object, Array, Math, JSON, RegExp, Error, Intl };
+    c.globalThis = c; c.global = c; c.window = c;
+    c.localISO = d => d.toISOString().slice(0, 10);
+    vm.createContext(c);
+    const i = src.indexOf('const localDate = offset'), j = src.indexOf('const appUser');
+    vm.runInContext(src.slice(i, j) + '\nglobal.allowedDates=allowedDates;global.currentWorkday=currentWorkday;',
+      c, { filename: 'dates' });
+    const k = src.indexOf('function formatDay');
+    vm.runInContext(src.slice(k, src.indexOf('function transferForOrder')), c, { filename: 'format' });
+
+    const [balra, ma, jobbra] = c.allowedDates().map(d => c.formatDay(d));
+    assert.ok(!/Ma|Holnap/.test(balra), 'a bal oldali fulon felirat van: ' + balra);
+    assert.match(ma, /^Ma · /, 'a kozepso fulon nincs "Ma": ' + ma);
+    assert.ok(!/Ma|Holnap/.test(jobbra), 'a jobb oldali fulon felirat van: ' + jobbra);
+    assert.match(balra, /\d/, 'a bal oldali fulon nincs datum');
+    assert.match(jobbra, /\d/, 'a jobb oldali fulon nincs datum');
+  });
+
+  await test('A Szallitolevel gomb sosem tunik el', async () => {
+    const auth = fs.readFileSync(__dirname + '/auth-v44-2.js', 'utf8');
+    const start = auth.indexOf('function userBubble(order, index) {');
+    const body = auth.slice(start, auth.indexOf('\n  }\n', start));
+    assert.ok(body.includes('class="camera-action${locked'), 'a gomb feltetelesen jelenik meg');
+    assert.ok(!/locked \? '' : `<button[^`]*camera-action/.test(body), 'a gomb meg mindig eltunhet');
+    assert.match(body, /disabled title="Csak az aktuális munkanapon tölthető fel"/,
+      'lezart napon nincs magyarazo tiltas');
+    assert.ok(body.includes('transfer-action${locked'), 'a Fuvar atadasa gomb eltunhet');
+    const css = fs.readFileSync(__dirname + '/styles.css', 'utf8');
+    assert.ok(css.includes('button.is-locked'), 'nincs stilus a tiltott gombhoz');
+  });
+
+  await test('A csatolmany uzenete megmondja, miert nincs fajl', async () => {
+    const auth = fs.readFileSync(__dirname + '/auth-v44-2.js', 'utf8');
+    const start = auth.indexOf('async function openSourceMail');
+    const body = auth.slice(start, auth.indexOf('\n  }\n', start));
+    assert.match(body, /volt melléklete, de a fájlok nincsenek feltöltve/,
+      'nem magyarazza meg a regi importot');
+    assert.match(body, /nem tartozott melléklet/, 'nincs uzenet a melleklet nelkuli levelre');
+    assert.ok(body.includes('mail.attachmentNames'), 'nem nezi meg, volt-e egyaltalan melleklet');
+  });
+
+  await test('A melleklet-feltoltes hibaja nem marad csendben', async () => {
+    const v41 = fs.readFileSync(__dirname + '/planner-v41.js', 'utf8');
+    const start = v41.indexOf('async function uploadSourceMailFiles');
+    const body = v41.slice(start, v41.indexOf('function statusText'));
+    assert.ok(body.includes('const failed = []'), 'nincs hibagyujtes');
+    assert.match(body, /nem töltődtek fel/, 'nem szol a felhasznalonak');
   });
 
   if (!process.exitCode) console.log(`\nV72 elfogadási teszt: ${passed}/${total} sikeres.`);

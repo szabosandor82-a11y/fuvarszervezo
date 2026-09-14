@@ -91,9 +91,46 @@ Mostantol a tartalek mindig a MAI munkanap. A napon belul szabadon valthat
 a fulek kozott, de minden ujranyitaskor es belepeskor a mai nap jon elo.
 
 
+6. A NAPFULEK FELIRATA (javitas a fenti 4. ponthoz)
+---------------------------------------------------
+A felirat meg a ketnapos logikat kovette: a lista ELSO elemet hivta
+"Ma"-nak, ami a harom napos nezet ota a TEGNAPI nap. Emiatt a sofor a
+tegnapi fulre lepett abban a hitben, hogy az a mai - es ott nem talalta a
+Szallitolevel gombot.
+
+Mostantol:
+     szept. 11.        csak datum, csak megtekintheto
+     Ma . szept. 14.   az aktualis nap, szerkesztheto
+     szept. 15.        csak datum, csak megtekintheto
+
+
+7. A SZALLITOLEVEL GOMB SOSEM TUNIK EL
+--------------------------------------
+A nem szerkesztheto napon eddig eltunt a Szallitolevel es a Fuvar atadasa
+gomb. Ez ugy nezett ki, mintha a menu veszett volna el.
+
+Mostantol a gombok LATSZANAK, de le vannak tiltva, es az egerrel folejuk
+allva kiirjak, miert: "Csak az aktualis munkanapon tolthetd fel".
+
+
+8. A CSATOLMANY UZENETE
+-----------------------
+A Csatolmany ablakban a level mellekleteinek NEVE megjelent, de a fajlok
+nem voltak megnyithatok. Ok: a mellekletek mentese a V65 ota mukodik, a
+korabban importalt fuvaroknal a fajlok soha nem kerultek fel.
+
+Mostantol az ablak megmondja, mirol van szo:
+  - ha a levelnek volt melleklete, de nincs feltoltve: jelzi, hogy a levelet
+    ujra kell importalni, ha a fajl is kell
+  - ha nem volt melleklet: azt irja ki
+
+Emellett az import mostantol SZOL, ha egy melleklet feltoltese nem sikerul -
+eddig ez csak a konzolba kerult, ezert ugy tunt, hogy a fajl ott van.
+
+
 TESZTEK
 -------
-TEST_V72.js   173/173
+TEST_V72.js   177/177
 TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
 
 Futtatas: node TEST_V72.js
