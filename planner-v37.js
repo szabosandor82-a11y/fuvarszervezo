@@ -59,12 +59,15 @@
       ? (state.suppliers || []).find(item => item.id === source.supplierId)
       : null;
     const name = master?.name || value?.pickupName || source.pickupName || '';
-    const address = value?.pickupAddress || source.pickupAddress || '';
+    /* V73: a CÍM is a kulcs része. Korábban üres címmel hívtuk a
+       canonicalStop-ot, ezért a Szatmári késmárki és nagytétényi telephelye
+       egyetlen egységbe került – pedig két külön helyre kell menni értük. */
+    const address = master?.address || value?.pickupAddress || source.pickupAddress || '';
     if (name) {
       const canonical = global.V35Planner?.canonicalStop
-        ? global.V35Planner.canonicalStop({ name, address: '' })
-        : nrm(name);
-      return `supplier:${canonical || nrm(name)}`;
+        ? global.V35Planner.canonicalStop({ name, address })
+        : `${nrm(name)}@@${nrm(address)}`;
+      return `supplier:${canonical || nrm(name)}@@${nrm(address)}`;
     }
     return `address:${nrm(address || 'ismeretlen felrako')}`;
   };
@@ -373,7 +376,9 @@
     const displayName = rawName.replace(/\s*\bkp\.?\s*$/i, '').trim() || rawName;
     const address = first.pickupAddress || '';
 
-    const manualNotes = [...new Set(orders.map(order => String(order.manualItems || '').trim()).filter(Boolean))];
+    const manualNotes = [...new Set(orders.flatMap(order => [order.note, order.manualItems])
+      .map(value => String(value || '').trim())
+      .filter(value => value && !/^outlook import/i.test(value)))];
     const deliveryPhotos = orders.reduce((sum, order) =>
       sum + (order.deliveryReports || []).reduce((inner, report) =>
         inner + (+report.photoCount || +report.fileCount || 1), 0), 0);
@@ -397,13 +402,12 @@
 
     return `<section class="pickup-move-block v56-row-block ${deliveryPhotos ? 'has-delivery' : ''} ${resolved ? 'resolved-pickup-block' : ''} ${pinned ? 'pinned-block' : ''} ${fullLoad ? 'full-load-block' : ''}" data-pickup-move-key="${escHtml(unit.pickupKey)}" data-order-ids="${escHtml(ids)}">
       <article class="v56-row ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''} ${longReasons.length ? 'has-long' : ''}${unreadComment ? ' user-comment-unread' : ''}" data-id="${escHtml(first.id || ids.split(',')[0] || '')}">
-        <span class="v56-index">${escHtml(String(index + 1))}</span>
+        <span class="v56-index drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : 'Fogd meg és told fel-le a sorrend átrendezéséhez'}" aria-label="Sorrend átrendezése">${escHtml(String(index + 1))}</span>
         <div class="v56-main">
           <div class="v56-line-top"><b>${escHtml(displayName)}</b>${central ? '<span class="v56-chip">kp</span>' : ''}${longReasons.length ? '<span class="v56-chip v56-chip-warn">szálas</span>' : ''}${deliveryPhotos ? `<span class="v56-chip v56-chip-ok" title="A sofőr feltöltötte a szállítólevelet">szállítólevél ${deliveryPhotos}</span>` : ''}<span class="v56-addr">${address ? '— ' + escHtml(address) : ''}</span></div>
         </div>
         <button type="button" class="v56-items-btn" onclick="event.stopPropagation();v56ToggleItems('${escHtml(ids)}',this)" title="Lerakók és tételek">${dropCount} lerakó · ${itemCount} tétel${manualNotes.length ? ' + kézi' : ''} <span class="v56-caret">▾</span></button>
         ${hasSourceMail ? `<button type="button" class="v56-mail-btn" title="Importált levél és csatolmány" onclick="event.stopPropagation();openSourceMail('${escHtml(sourceOrder.id || '')}')">Csatolmány</button>` : ''}
-        <span class="v56-drag-cell"><span class="drag v56-drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : 'Húzás – fogd meg és told fel-le'}" aria-label="Sorrend átrendezése">⋮⋮</span></span>
       </article>
       <div class="v56-items" data-items-for="${escHtml(ids)}" hidden>${manualBlock}${detail}<button type="button" class="v56-pdf-button secondary" onclick="event.stopPropagation();openOrderPdfAttachments('${escHtml(ids)}')">PDF mellékletek megnyitása</button><div class="v56-pdf-status" id="v56-pdf-${escHtml(first.id || ids.split(',')[0] || '')}"></div></div>
       ${fullLoad ? '<div class="v56-forced-drop">Kötelező azonnali lerakás</div>' : ''}
@@ -427,7 +431,7 @@
 
     return `<div class="route-block v56-row-block ${options.insidePickupGroup ? 'inside-pickup-group' : ''} ${pinned ? 'pinned-block' : ''} ${fullLoad ? 'full-load-block' : ''} ${resolved ? 'resolved-backlog-block' : ''}" data-order-ids="${escHtml(ids)}">
       <article class="v56-row ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''} ${longReasons.length ? 'has-long' : ''}${unreadComment ? ' user-comment-unread' : ''}" data-id="${escHtml(first.id)}" data-order-ids="${escHtml(ids)}">
-        <span class="v56-index">${escHtml(displayNumber)}</span>
+        <span class="v56-index drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : 'Fogd meg és told fel-le'}" aria-label="Sorrend átrendezése">${escHtml(displayNumber)}</span>
         <div class="v56-main">
           <div class="v56-line-top">
             <b>${escHtml(displayName)}</b>${central ? '<span class="v56-chip">kp</span>' : ''}${longReasons.length ? '<span class="v56-chip v56-chip-warn">szálas</span>' : ''}${pinned ? '<span class="v56-chip">rögzített</span>' : ''}${fullLoad ? '<span class="v56-chip">teljes autó</span>' : ''}
@@ -437,7 +441,6 @@
           ${warnings || ''}
         </div>
         <button type="button" class="v56-items-btn" onclick="event.stopPropagation();v56ToggleItems('${escHtml(ids)}',this)" title="Felrakandó tételek">${itemCount} tétel <span class="v56-caret">▾</span></button>
-        <span class="v56-drag-cell"><span class="drag v56-drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : 'Húzás – fogd meg és told fel-le'}" aria-label="Sorrend átrendezése">⋮⋮</span></span>
       </article>
       <div class="v56-items" data-items-for="${escHtml(ids)}" hidden>${items}<button type="button" class="v56-pdf-button secondary" onclick="event.stopPropagation();openOrderPdfAttachments('${escHtml(ids)}')">PDF mellékletek megnyitása</button></div>
       ${fullLoad ? '<div class="v56-forced-drop">Kötelező azonnali lerakás</div>' : ''}
@@ -461,8 +464,14 @@
         inner + (+report.photoCount || +report.fileCount || 1), 0), 0);
   }
 
+  /* V73: a megjegyzés a fuvar note mezőjéből jön, mert azt az űrlapon
+     szerkeszteni is lehet. A régi manualItems mezőt is figyeljük, hogy a
+     korábban importált fuvarokon se tűnjön el a szöveg. */
   function manualItemsOfGroup(group) {
-    return [...new Set((group.orders || []).map(order => String(order.manualItems || '').trim()).filter(Boolean))].join(' · ');
+    const values = (group.orders || []).flatMap(order => [order.note, order.manualItems])
+      .map(value => String(value || '').trim())
+      .filter(value => value && !/^outlook import/i.test(value));
+    return [...new Set(values)].join(' · ');
   }
 
   function renderGroupBubble(group, index, vehicleId, options = {}) {
@@ -572,7 +581,7 @@
     const map = focusMap, date = selectedDate();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
     let events = state.routePlans?.[selectedDate()]?.[vehicleId] || [];
-    const currentPlanner = global.V73Planner || global.V65Planner || global.V64Planner;
+    const currentPlanner = global.V74Planner || global.V65Planner || global.V64Planner;
     const snapshot = currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
     const isCurrent = () => focusMap === map && selectedDate() === date
       && snapshot === currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
@@ -779,7 +788,7 @@
         // útvonalterv épül újra a kézi sequence értékekből, és csak utána
         // rajzolunk. Fordítva a rajzoló üres tervet találna, és
         // újraoptimalizálná az útvonalat, felülírva a te sorrendedet.
-        const buildManual = global.V73Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
+        const buildManual = global.V74Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
         setTimeout(async () => {
           if (typeof buildManual === 'function') {
             try {

@@ -1070,7 +1070,15 @@
       try {
         const extracted = reader.getAttachment(attachment);
         const content = extracted?.content || extracted?.data;
-        if (content) sourceMail.files.push({ name: attachmentName, content });
+        if (content) {
+          sourceMail.files.push({ name: attachmentName, content });
+          /* V73: a PDF-et azonnal eltesszük helyben is, hogy a Csatolmány
+             akkor is megnyithassa, ha a szerverre nem jut fel. */
+          if (/\.pdf$/i.test(attachmentName)) {
+            const dataUrl = bytesToDataUrlV73(content, 'application/pdf');
+            if (dataUrl) sourceMail.inlineFiles = (sourceMail.inlineFiles || []).concat([{ name: attachmentName, dataUrl }]);
+          }
+        }
       } catch (error) {
         console.warn('[V72] melléklet nem olvasható', attachmentName, error);
         sourceMail.unreadable = sourceMail.unreadable || [];
@@ -1116,6 +1124,19 @@
   /* V60 – a forráslevél mellékleteinek feltöltése a fuvarhoz.
      A meglévő szállítólevél-tárolót használjuk, "Outlook forrás" jelöléssel,
      hogy ne kelljen új infrastruktúra. */
+  /* Bájtokból adat-URL. Nagy fájlnál kihagyjuk, hogy ne foglaljon feleslegesen. */
+  function bytesToDataUrlV73(content, mime) {
+    try {
+      const bytes = content instanceof Uint8Array ? content : new Uint8Array(content);
+      if (!bytes.length || bytes.length > 600 * 1024) return '';
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 8192) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+      }
+      return `data:${mime};base64,${btoa(binary)}`;
+    } catch (error) { return ''; }
+  }
+
   async function uploadSourceMailFiles(entries, orders) {
     if (!global.V44Online?.createDeliveryReport || typeof File === 'undefined') return;
     /* V72: a feltöltés hibája eddig csak a konzolba került, ezért úgy tűnt,
@@ -1449,7 +1470,15 @@ ${entry.subject || ''}`) || project;
       projectName: entry.projectName, projectId: entry.dropRole === 'project' ? (project?.id || entry.projectId || '') : '', dropAddress: entry.dropAddress,
       pickupRole: entry.pickupRole || 'supplier', dropRole: entry.dropRole || 'project', returnSourceProjectId: entry.returnSourceProjectId || '', returnDestinationSupplierId: entry.returnDestinationSupplierId || '',
       recipientId: recipient?.id || entry.recipientId || '', recipientName: recipient?.name || entry.recipientName || '', recipientPhone: recipient?.phone || entry.recipientPhone || '', recipientEmail: recipient?.email || entry.recipientEmail || '',
-      requestedDeadline: entry.requestedDate || '', note: `Outlook import · ${entry.orderType || 'SR0'} · ${entry.sourceName}${entry.pdfName ? ` · ${entry.pdfName}` : ''}`,
+      requestedDeadline: entry.requestedDate || '',
+      /* V73: a megjegyzés mezőbe a TE szöveged kerül, nem a fájlnév. Eddig
+         "Outlook import · SR0 · levél.msg" állt benne, ami a buborékban
+         elfoglalta a megjegyzés helyét, és szerkeszteni sem lehetett.
+         A forrás felismeréséhez az outlookImport jelző marad. */
+      note: String(entry.manualItems || '').trim(),
+      outlookImport: true,
+      outlookSourceFile: entry.sourceName || '',
+      outlookPdfFile: entry.pdfName || '',
       // V60: a levél lényege a fuvaron marad, hogy a sofőr hálózat nélkül is
       // elolvashassa. A mellékletek a szállítólevél-tárolóba kerülnek.
       // V65: a kézzel felvitt tételszöveg. Akkor kell, ha a bizonylatról nem
@@ -1473,8 +1502,28 @@ ${entry.subject || ''}`) || project;
     };
   }
 
+  /* V73 – A 000000 A "NINCS RENDELÉSSZÁM" GYŰJTŐKÓD
+
+     Visszárunál és hasonló fuvaroknál nincs valódi rendelésszám. Ilyenkor
+     000000 írható be. Ez viszont NEM azonosító: ha egy napon több ilyen
+     fuvar van, azok külön fuvarok, nem egymás frissítései.
+
+     Ezért a 000000 (és a csupa nulla alakok) sem az azonosításban, sem a
+     meglévő fuvar keresésében nem vesznek részt – minden ilyen bejegyzés
+     önálló marad. */
+  function isPlaceholderOrderNo(value) {
+    const text = String(value || '').trim();
+    return !!text && /^0+$/.test(text);
+  }
+
+  function meaningfulOrderNos(numbers) {
+    return (numbers || []).map(String).filter(no => no && !isPlaceholderOrderNo(no));
+  }
+
   function importIdentity(entry) {
-    const numbers = (entry.sourceOrderNos?.length ? entry.sourceOrderNos : orderNumbersOf(entry)).map(String).sort();
+    const raw = (entry.sourceOrderNos?.length ? entry.sourceOrderNos : orderNumbersOf(entry));
+    const numbers = meaningfulOrderNos(raw).sort();
+    // gyűjtőkódnál az entry saját azonosítója dönt, így minden ilyen fuvar külön marad
     return `${entry.isReturn ? 'VISSZARU' : (entry.orderType || 'SR0')}|${numbers.join(',') || entry._id}`;
   }
 
@@ -1508,7 +1557,10 @@ ${entry.subject || ''}`) || project;
 
     const replaceIds = new Set();
     for (const entry of acceptedEntries) {
-      matchingOutlookOrders(entry.sourceOrderNos, entry.orderType, entry.isReturn).forEach(order => replaceIds.add(order.id));
+      // a gyűjtőkódos fuvar soha nem ír felül korábbit
+      const numbers = meaningfulOrderNos(entry.sourceOrderNos);
+      if (!numbers.length) continue;
+      matchingOutlookOrders(numbers, entry.orderType, entry.isReturn).forEach(order => replaceIds.add(order.id));
     }
     const replacementCount = replaceIds.size;
     if (replaceIds.size) {
@@ -1528,6 +1580,14 @@ ${entry.subject || ''}`) || project;
     // V60: a levél mellékleteit feltöltjük a fuvarhoz, hogy a sofőr a saját
     // felületén megnyithassa. Ha nincs kapcsolat, a levél szövege akkor is
     // elérhető marad a fuvaron.
+    /* V73: a helyi mentés a feltöltéstől függetlenül megtörténik. */
+    acceptedEntries.forEach((entry, index) => {
+      const inline = entry?.sourceMail?.inlineFiles;
+      const order = accepted[index];
+      if (inline?.length && order?.id && typeof global.saveOrderAttachmentsV73 === 'function') {
+        global.saveOrderAttachmentsV73(order.id, inline);
+      }
+    });
     uploadSourceMailFiles(acceptedEntries, accepted).catch(error =>
       console.warn('[V60] A levél mellékletének feltöltése nem sikerült', error));
 
@@ -1671,6 +1731,9 @@ ${entry.subject || ''}`) || project;
     supplierSpecial,
     parsePdfItemsFromLines,
     blockingFields,
+    bytesToDataUrlV73,
+    isPlaceholderOrderNo,
+    meaningfulOrderNos,
     normalizeQtyV71,
     transferNameMatch,
     closeEnoughV71,

@@ -54,7 +54,14 @@
     return 'other';
   };
   const findDriver = (key, drivers) => drivers.find(vehicle => driverKey(vehicle) === key) || null;
-  const supplierKey = order => nrm(order?.pickupAddress || order?.pickupName || 'ismeretlen felrako');
+  /* V73: a felrakó kulcsa a NÉV és a CÍM együtt – két telephely nem
+     olvadhat egy buborékba. (Azonos a planner-v33 szabályával.) */
+  const supplierKey = order => {
+    const name = nrm(order?.pickupName || '');
+    const address = nrm(order?.pickupAddress || '');
+    if (name && address) return `${name}@@${address}`;
+    return name || address || 'ismeretlen felrako';
+  };
   const projectKey = order => nrm(order?.dropAddress || order?.projectName || 'ismeretlen lerako');
   const centralOrder = order => /(\bkrpr\b|k[oö]zponti\s*rakt[aá]r|szigetszentmikl[oó]s|keresked[oő]\s*utca)/i.test(`${order?.pickupName || ''} ${order?.pickupAddress || ''}`);
   const categoryForOrder = order => global.V35Planner?.categoryForOrder ? global.V35Planner.categoryForOrder(order) : (nrm(order?.importVehicleCategory || '') || 'dobozos');

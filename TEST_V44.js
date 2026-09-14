@@ -100,16 +100,26 @@ function order(id,name,address,extra={}){return{id,scheduleDate:'2026-08-06',veh
     assert.equal(a.vehicleId,b.vehicleId);
   });
 
-  await test('Kézi húzásnál az aznapi azonos beszállító minden rendelése együtt vált sofőrt és sorrendet',async()=>{
+  await test('Kézi húzásnál az AZONOS CÍMŰ felrakó rendelései mozognak együtt',async()=>{
+    // V73: a felrakó kulcsa a név ÉS a cím. Ugyanannak a cégnek két telephelye
+    // két külön fuvar – oda két külön helyre kell menni.
     const c=createContext();c.state.vehicles=[vehicle('m','Márió'),vehicle('p','Patrik'),vehicle('t','Martin')];
     const a=order('EA','Ezerker','1108 Budapest, Ezerker út 1.',{vehicleId:'m',sequence:1});
-    const b=order('EB','Ezerker','1108 Budapest, Másik cím 2.',{vehicleId:'p',sequence:2});
+    const b=order('EB','Ezerker','1108 Budapest, Ezerker út 1.',{vehicleId:'p',sequence:2});
+    const masikTelephely=order('EC','Ezerker','1106 Budapest, Kada utca 149.',{vehicleId:'p',sequence:3});
     const other=order('X','Más beszállító','1222 Budapest, Gyár utca 15.',{vehicleId:'p',sequence:1});
-    c.state.orders=[a,b,other];
-    assert.equal(c.V37Planner.pickupMoveKey(a),c.V37Planner.pickupMoveKey(b));
-    assert.equal(c.V37Planner.moveSupplierOrdersTogether([a.id],'p',2),2);
+    c.state.orders=[a,b,masikTelephely,other];
+
+    assert.equal(c.V37Planner.pickupMoveKey(a),c.V37Planner.pickupMoveKey(b),
+      'azonos cimen nem egy egyseg');
+    assert.notEqual(c.V37Planner.pickupMoveKey(a),c.V37Planner.pickupMoveKey(masikTelephely),
+      'a masik telephely ugyanazt a kulcsot kapta');
+
+    assert.equal(c.V37Planner.moveSupplierOrdersTogether([a.id],'p',2),2,
+      'nem a ket azonos cimu rendeles mozgott');
     assert.equal(a.vehicleId,'p');assert.equal(b.vehicleId,'p');
     assert.ok(Math.abs(a.sequence-b.sequence)===1);
+    assert.equal(masikTelephely.vehicleId,'p','a masik telephely sofore valtozott, pedig nem kellett volna');
   });
 
   await test('A sofőrök indulási pontja fixen Vác, Kispest és Felcsút',async()=>{

@@ -34,7 +34,20 @@
     if (value.includes('patrik')) return 'patrik';
     return 'other';
   };
-  const supplierKey = order => nrm(order?.pickupName || order?.pickupAddress || 'ismeretlen felrako');
+  /* V73 – A FELRAKÓ A NÉV ÉS A CÍM EGYÜTT
+
+     Eddig csak a cégnév számított, ezért a Szatmári késmárki és nagytétényi
+     telephelyéről érkező rendelések egy buborékba kerültek – pedig két
+     külön helyre kell menni értük.
+
+     Mostantól a cím is a kulcs része. Ha a cím hiányzik, marad a név, hogy a
+     hiányos adatú fuvarok se essenek szét feleslegesen. */
+  const supplierKey = order => {
+    const name = nrm(order?.pickupName || '');
+    const address = nrm(order?.pickupAddress || '');
+    if (name && address) return `${name}@@${address}`;
+    return name || address || 'ismeretlen felrako';
+  };
   const projectKey = order => nrm(order?.dropAddress || order?.projectName || 'ismeretlen lerako');
   const bubbleKey = order => `${supplierKey(order)}||${projectKey(order)}`;
   const isCentralOrder = order => CENTRAL_RE.test(`${order?.pickupName || ''} ${order?.pickupAddress || ''}`);

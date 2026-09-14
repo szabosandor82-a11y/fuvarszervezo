@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V73Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V74Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -155,7 +155,7 @@ function stampLocalChanges(){
   }
   window.__lastSavedSnapshotV70=next;
 }
-function save(renderNow=true){stampLocalChanges();reconcileState('mentés');localStorage.setItem(KEY,JSON.stringify(state));if(renderNow)render()}
+function save(renderNow=true){stampLocalChanges();reconcileState('mentés');pruneOrderAttachmentsV73();localStorage.setItem(KEY,JSON.stringify(state));if(renderNow)render()}
 function activeVehicles(){return state.vehicles.filter(v=>v.active)}
 function marioVehicle(){return activeVehicles().find(v=>norm(v.driverName).includes('mario'))||state.vehicles.find(v=>norm(v.driverName).includes('mario'))||null}
 function selectedDate(){return $('#workDate').value||today()}
@@ -717,9 +717,15 @@ function fillSupplierAddressList(name=''){
   list.innerHTML=locations.map(s=>`<option value="${esc(s.address||'')}">${esc(`${s.isCentral?'Központ · ':''}${s.site||''}${s.pickupNote?`${s.site?' · ':''}${s.pickupNote}`:''}`)}</option>`).join('');
 }
 function setCustomProjectMode(custom){$('#recipientSelectWrap').classList.toggle('hidden',custom)}
-function openOrder(o={}){$('#orderId').value=o.id||'';$('#orderTitle').textContent=o.id?'Fuvar szerkesztése':'Új fuvar';setScheduleParts(o.scheduleDate||selectedDate());setDateParts('deadline',o.requestedDeadline||'');fillSelectors();fillSearchableMasters();$('#vehicleId').value=o.vehicleId||'';$('#orderNo').value=o.orderNo||'';const s=state.suppliers.find(x=>x.id===o.supplierId);$('#supplierId').value=o.supplierId||'';$('#supplierSearch').value=s?supplierDisplay(s):(o.pickupName||'');fillSupplierAddressList(s?.name||o.pickupName||'');$('#pickupAddress').value=o.pickupAddress||'';$('#pickupNote').value=o.pickupNote||'';const p=state.projects.find(x=>x.id===o.projectId);$('#projectId').value=o.projectId||'';$('#projectSearch').value=p?.name||o.projectName||'';$('#dropAddress').value=o.dropAddress||'';$('#recipientId').innerHTML=recipientOptions(o.projectName,o.recipientId);$('#recipientName').value=o.recipientName||'';$('#recipientPhone').value=o.recipientPhone||'';$('#recipientEmail').value=o.recipientEmail||'';setCustomProjectMode(!p);$('#pickupFrom').value=o.pickupFrom||'';$('#pickupTo').value=o.pickupTo||'';$('#dropFrom').value=o.dropFrom||'';$('#dropTo').value=o.dropTo||'';$('#orderNote').value=o.note||'';$('#orderDialog').showModal();setTimeout(()=>$('#scheduleYear').focus(),30)}
+function openOrder(o={}){$('#orderId').value=o.id||'';$('#orderTitle').textContent=o.id?'Fuvar szerkesztése':'Új fuvar';setScheduleParts(o.scheduleDate||selectedDate());setDateParts('deadline',o.requestedDeadline||'');fillSelectors();fillSearchableMasters();$('#vehicleId').value=o.vehicleId||'';$('#orderNo').value=o.orderNo||'';const s=state.suppliers.find(x=>x.id===o.supplierId);$('#supplierId').value=o.supplierId||'';$('#supplierSearch').value=s?supplierDisplay(s):(o.pickupName||'');fillSupplierAddressList(s?.name||o.pickupName||'');$('#pickupAddress').value=o.pickupAddress||'';$('#pickupNote').value=o.pickupNote||'';const p=state.projects.find(x=>x.id===o.projectId);$('#projectId').value=o.projectId||'';$('#projectSearch').value=p?.name||o.projectName||'';$('#dropAddress').value=o.dropAddress||'';$('#recipientId').innerHTML=recipientOptions(o.projectName,o.recipientId);$('#recipientName').value=o.recipientName||'';$('#recipientPhone').value=o.recipientPhone||'';$('#recipientEmail').value=o.recipientEmail||'';setCustomProjectMode(!p);$('#pickupFrom').value=o.pickupFrom||'';$('#pickupTo').value=o.pickupTo||'';$('#dropFrom').value=o.dropFrom||'';$('#dropTo').value=o.dropTo||'';$('#orderNote').value=cleanOrderNoteV73(o);$('#orderDialog').showModal();setTimeout(()=>$('#scheduleYear').focus(),30)}
 window.editOrder=id=>openOrder(state.orders.find(x=>x.id===id));
-$('#orderForm').onsubmit=e=>{e.preventDefault();if(!syncScheduleDate())return alert('Adj meg érvényes szállítási dátumot.');if(!syncDateParts('deadline',false))return alert('Adj meg érvényes kért szállítási határidőt, vagy hagyd üresen.');const old=state.orders.find(x=>x.id===$('#orderId').value),s=findSupplierByInput($('#supplierSearch').value),p=findProjectByInput($('#projectSearch').value),r=state.recipients.find(x=>x.id===$('#recipientId').value);const o={...old,id:old?.id||uid(),scheduleDate:$('#scheduleDate').value,vehicleId:$('#vehicleId').value||marioVehicle()?.id||'',orderNo:last5($('#orderNo').value),requestedDeadline:$('#deadline').value,supplierId:s?.id||'',pickupName:s?.name||$('#supplierSearch').value.trim()||old?.pickupName||'',pickupAddress:$('#pickupAddress').value,pickupNote:$('#pickupNote').value,projectId:p?.id||'',projectName:p?.name||$('#projectSearch').value.trim()||'Egyedi úticél',dropAddress:$('#dropAddress').value,recipientId:p?(r?.id||''):'',recipientName:$('#recipientName').value.trim()||r?.name||'',recipientPhone:$('#recipientPhone').value,recipientEmail:$('#recipientEmail').value,pickupFrom:$('#pickupFrom').value,pickupTo:$('#pickupTo').value,dropFrom:$('#dropFrom').value,dropTo:$('#dropTo').value,note:$('#orderNote').value,items:old?.items||[],completed:old?.completed||false,sequence:old?.sequence||999};const i=state.orders.findIndex(x=>x.id===o.id);if(i>=0)state.orders[i]=o;else state.orders.push(o);$('#orderDialog').close();save()}
+$('#orderForm').onsubmit=e=>{e.preventDefault();if(!syncScheduleDate())return alert('Adj meg érvényes szállítási dátumot.');if(!syncDateParts('deadline',false))return alert('Adj meg érvényes kért szállítási határidőt, vagy hagyd üresen.');const old=state.orders.find(x=>x.id===$('#orderId').value),s=findSupplierByInput($('#supplierSearch').value),p=findProjectByInput($('#projectSearch').value),r=state.recipients.find(x=>x.id===$('#recipientId').value);const o={...old,id:old?.id||uid(),scheduleDate:$('#scheduleDate').value,vehicleId:$('#vehicleId').value||marioVehicle()?.id||'',orderNo:last5($('#orderNo').value),requestedDeadline:$('#deadline').value,supplierId:s?.id||'',pickupName:s?.name||$('#supplierSearch').value.trim()||old?.pickupName||'',pickupAddress:$('#pickupAddress').value,pickupNote:$('#pickupNote').value,projectId:p?.id||'',projectName:p?.name||$('#projectSearch').value.trim()||'Egyedi úticél',dropAddress:$('#dropAddress').value,recipientId:p?(r?.id||''):'',recipientName:$('#recipientName').value.trim()||r?.name||'',recipientPhone:$('#recipientPhone').value,recipientEmail:$('#recipientEmail').value,pickupFrom:$('#pickupFrom').value,pickupTo:$('#pickupTo').value,dropFrom:$('#dropFrom').value,dropTo:$('#dropTo').value,note:$('#orderNote').value,
+  /* V73: a megjegyzés szerkesztésekor a RÉGI importált szöveget is
+     felülírjuk, különben a buborékban a két érték egymás mellett maradna
+     ("ÁTÍRT szöveg · régi importált szöveg"), és úgy tűnne, mintha nem
+     lehetne szerkeszteni. */
+  manualItems:$('#orderNote').value.trim(),
+  items:old?.items||[],completed:old?.completed||false,sequence:old?.sequence||999};const i=state.orders.findIndex(x=>x.id===o.id);if(i>=0)state.orders[i]=o;else state.orders.push(o);$('#orderDialog').close();save()}
 $('#supplierSearch').oninput=()=>{
   // V62: a felrakó lehet projekt is (visszáru forrása).
   const target=findPickupTargetByInput($('#supplierSearch').value);
@@ -1108,6 +1114,87 @@ function validMoveTargetFromInputs(prefix='move'){
   const target=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`,dt=new Date(target+'T12:00:00');
   return !isNaN(dt)&&localISO(dt)===target?target:'';
 }
+/* V73 – A MEGJEGYZÉS MEZŐ SZERKESZTHETŐ ÉS TISZTA
+
+   Az import korábban technikai szöveget írt a megjegyzésbe
+   ("Outlook import · SR0 · level.msg"). Ez elfoglalta a megjegyzés helyét,
+   és a buborékban is az látszott a valódi szöveg helyett.
+
+   Az űrlap mostantól a TE megjegyzésedet mutatja. A régi, technikai
+   szöveget nem írjuk ki – ha csak az volt a mezőben, üresen indul, és
+   szabadon írhatod felül. Ha van kézzel felvitt szöveg a régi mezőben
+   (manualItems), azt hozzuk elő. */
+function cleanOrderNoteV73(order){
+  const note=String(order?.note||'').trim();
+  if(note&&!/^outlook import/i.test(note))return note;
+  const manual=String(order?.manualItems||'').trim();
+  return manual||'';
+}
+window.cleanOrderNoteV73=cleanOrderNoteV73;
+
+/* V73 – A LEVÉL MELLÉKLETE HELYBEN IS ELÉRHETŐ
+
+   Eddig a Csatolmány CSAK a Supabase-tárolóból tudta megnyitni a PDF-et.
+   Ha a feltöltés nem ment át – nem volt kapcsolat, jogosultsági hiba, vagy
+   a levelet a beolvasó nem tudta kibontani –, csak a fájl NEVE látszott,
+   megnyitni nem lehetett.
+
+   Ezért az importkor a PDF-et helyben is eltesszük. Nem a fuvar adatai közé,
+   mert azt minden mentés felküldi a szerverre, és egy napi adag PDF több
+   megabájt volna. Külön tárolóba kerül, ami csak ezen a gépen él.
+
+   A hely véges, ezért két korlát van: fájlonként 600 kB, és a 10 napnál
+   régebbi bejegyzések takarítódnak. */
+const ATTACH_STORE_PREFIX_V73 = 'fuvarAttach:';
+const ATTACH_MAX_BYTES_V73 = 600 * 1024;
+const ATTACH_KEEP_DAYS_V73 = 10;
+
+function attachKeyV73(orderId) { return ATTACH_STORE_PREFIX_V73 + String(orderId || ''); }
+
+function saveOrderAttachmentsV73(orderId, files) {
+  if (!orderId || !files?.length) return 0;
+  const kept = files.filter(file => file?.dataUrl && file.dataUrl.length <= ATTACH_MAX_BYTES_V73 * 1.4);
+  if (!kept.length) return 0;
+  try {
+    localStorage.setItem(attachKeyV73(orderId), JSON.stringify({ at: new Date().toISOString(), files: kept }));
+    return kept.length;
+  } catch (error) {
+    // ha megtelt a tárhely, előbb takarítunk, aztán egyszer újrapróbáljuk
+    pruneOrderAttachmentsV73(true);
+    try { localStorage.setItem(attachKeyV73(orderId), JSON.stringify({ at: new Date().toISOString(), files: kept })); return kept.length; }
+    catch (retryError) { console.warn('[V73] a melléklet helyben nem fért el', retryError); return 0; }
+  }
+}
+
+function loadOrderAttachmentsV73(orderId) {
+  try {
+    const raw = localStorage.getItem(attachKeyV73(orderId));
+    if (!raw) return [];
+    return JSON.parse(raw).files || [];
+  } catch (error) { return []; }
+}
+window.loadOrderAttachmentsV73 = loadOrderAttachmentsV73;
+window.saveOrderAttachmentsV73 = saveOrderAttachmentsV73;
+
+function pruneOrderAttachmentsV73(aggressive = false) {
+  const limit = Date.now() - ATTACH_KEEP_DAYS_V73 * 86400000;
+  const liveIds = new Set((state?.orders || []).map(order => String(order.id)));
+  let removed = 0;
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(ATTACH_STORE_PREFIX_V73)) continue;
+    const orderId = key.slice(ATTACH_STORE_PREFIX_V73.length);
+    let stamp = 0;
+    try { stamp = Date.parse(JSON.parse(localStorage.getItem(key)).at) || 0; } catch (error) { stamp = 0; }
+    const orphan = !liveIds.has(orderId);
+    if (orphan || stamp < limit || (aggressive && stamp < Date.now() - 2 * 86400000)) {
+      localStorage.removeItem(key); removed++;
+    }
+  }
+  return removed;
+}
+window.pruneOrderAttachmentsV73 = pruneOrderAttachmentsV73;
+
 /* V72 – EGY KATTINTÁS = TELJES TARTALOM KIJELÖLVE
 
    Az egész oldalon érvényes, az admin és a sofőri felületen egyaránt: ha egy

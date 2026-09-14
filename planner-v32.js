@@ -38,7 +38,14 @@
   ].filter(Boolean).join(' ');
   const isFullLoadOrder = order => FULL_LOAD_RE.test(orderText(order));
   const isCentralOrder = order => CENTRAL_RE.test(`${order?.pickupName || ''} ${order?.pickupAddress || ''}`);
-  const supplierKey = order => nrm(order?.pickupName || order?.pickupAddress || 'ismeretlen felrako');
+  /* V73: a felrakó kulcsa a NÉV és a CÍM együtt – két telephely nem
+     olvadhat egy buborékba. (Azonos a planner-v33 szabályával.) */
+  const supplierKey = order => {
+    const name = nrm(order?.pickupName || '');
+    const address = nrm(order?.pickupAddress || '');
+    if (name && address) return `${name}@@${address}`;
+    return name || address || 'ismeretlen felrako';
+  };
   const projectKey = order => nrm(order?.dropAddress || order?.projectName || 'ismeretlen lerako');
   const unitKey = order => `${supplierKey(order)}||${projectKey(order)}`;
   const driverKey = vehicle => {

@@ -1,0 +1,104 @@
+FUVARSZERVEZO V74
+=================
+
+A V73-ra epul. Csoportkepzes, importazonositas, mellekletek es a Nezet.
+
+MODOSITOTT FAJLOK
+-----------------
+planner-v32/33/34/35/37/43.js  a felrako kulcsa a nev ES a cim
+planner-v41.js  000000 gyujtokod, helyi melleklet-mentes
+app.js          helyi melleklet-tarolo, megjegyzes szerkesztese
+auth-v44-2.js   levelszoveg tisztitasa, helyi melleklet megnyitasa
+styles.css      a sorszam mint huzofogantyu
+index.html / manifest / sw.js   verziószam
+TEST_V74.js     208 teszt
+
+
+1. A KULONBOZO TELEPHELYEK NEM OLVADNAK OSSZE
+---------------------------------------------
+Ez a V54 ota ismert korlat volt: a csoportkepzo CSAK a cegnevet hasznalta,
+ezert a Szatmari kesmarki es nagytetenyi telephelyerol erkezo rendelesek egy
+buborekba kerultek - pedig ket kulon helyre kell menni ertuk.
+
+A javitas OT fajlt erintett (ugyanaz a hiba mindegyikben), plusz a Nezet
+kulcsat, ami kulon rosszul csinalta: ott a cim SZANDEKOSAN uresen ment a
+kulcskepzobe.
+
+   Szatmari Kft | 1158 Budapest, Kesmark utca 9.        3 rendeles
+   Szatmari Kft | Budapest XXII. ker., Nagytetenyi ut   1 rendeles
+
+Azonos cimen tovabbra is osszevonja oket. A huzas is ehhez igazodik: a ket
+kesmarki egyutt mozog, a nagytetenyi nem megy veluk.
+
+
+2. A 000000 GYUJTOKOD
+---------------------
+Visszarunal es hasonlo fuvaroknal nincs valodi rendelesszam. A csupa nullas
+szam mostantol NEM azonosito: minden ilyen fuvar onallo marad, nem irja felul
+az elozot, es nem is blokkolja az importot.
+
+Elfogadott alakok: 0, 00, 000000, szokozokkel is. A 000001 valodi szam.
+A valodi rendelesszamoknal a regi viselkedes marad: azonos szam = frissites.
+
+
+3. AZ IMPORTALT MEGJEGYZES SZERKESZTHETO
+----------------------------------------
+A megjegyzes KET mezoben elt (note es manualItems). A mentes csak az elsot
+frissitette, a buborek viszont mindkettot mutatta - ezert az atirt szoveg
+melle odairodott a regi:
+
+   "ATIRT szoveg . regi importalt szoveg"
+
+Igy nezett ki ugy, mintha nem lehetne szerkeszteni. A mentes mostantol
+mindket mezot frissiti.
+
+A level TARGYA tobbe nem kerul a megjegyzesbe - oda a TE szoveged kerul.
+
+
+4. A MELLEKLET HELYBEN IS ELERHETO
+----------------------------------
+Eddig a Csatolmany CSAK a Supabase-tarolobol tudta megnyitni a PDF-et. Ha a
+feltoltes nem ment at, csak a fajl NEVE latszott.
+
+Az import mostantol helyben is elteszi a PDF-et, a szervertol fuggetlenul.
+NEM a fuvar adatai koze - azt minden mentes felkuldi, es egy napi adag PDF
+2,7 MB volna -, hanem kulon taroloba, ami csak azon a gepen el.
+
+Ket korlat: fajlonkent 600 kB, es a 10 napnal regebbi (vagy arva) bejegyzesek
+takaritodnak. Ha megtelne a tarhely, elobb takarit, aztan ujraprobalja.
+
+Az ablakban a helyi fajl all elol "Melleklet" cimmel, alatta "Szerverrol".
+
+FIGYELEM: ez az EZUTAN importalt leveleknel mukodik.
+
+
+5. A LEVELSZOVEG, NEM A LEVELFORRAS
+-----------------------------------
+Tovabbitott (FW:) leveleknel a beolvaso a teljes levelforrast adta vissza:
+Received, Content-Type, boundary, X-Mailer. Ez jelent meg a level szovege
+helyett.
+
+Mostantol a fejlecblokk kivagodik, es csak az erdemi szoveg latszik. A rendes
+szerkezetu leveleket nem bantja, es ha csak fejlec van, inkabb az eredetit
+mutatja, mint ures ablakot.
+
+
+6. A NEZETBEN A SORSZAM A HUZOFOGANTYU
+--------------------------------------
+A kulon fogantyugomb megszunt. A sorszamot lehet megfogni es fel-le tolni.
+
+Igy a fogopont ott van, ahol a sorrendet nezed, es egy elemmel kevesebb van a
+soron - a Csatolmany gombnak tobb hely jut. Az elintezett fuvarok sorszama
+nem foghato, ezt a kurzor is jelzi.
+
+
+TESZTEK
+-------
+TEST_V74.js   208/208
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Ket regi teszt varakozasat at kellett irni: a TEST_V44 azt rogzitette, hogy
+azonos beszallito ELTERO cimen is egyutt mozogjon (ez volt a hibas
+viselkedes), ket masik pedig a most eltavolitott fogantyugombot kereste.
+
+Futtatas: node TEST_V74.js

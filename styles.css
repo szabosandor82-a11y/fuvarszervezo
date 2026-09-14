@@ -229,11 +229,6 @@ dialog{background:#fffefd;box-shadow:0 28px 76px #6278872e}dialog::backdrop{back
 .v56-row.has-long{border-left:3px solid #ba7517}
 .v56-row-block.pinned-block .v56-row{border-left:3px solid #534ab7}
 .v56-row.resolved-backlog{background:#f4f2ec}
-.v56-drag-cell{flex:none;display:flex;align-items:stretch;margin-left:4px;
-  padding-left:8px;border-left:1px solid #ddd9cf}
-.v56-drag{display:flex;align-items:center;justify-content:center;width:34px;height:36px;
-  font-size:18px;letter-spacing:-3px;color:#6b675d;background:#f1efe8;border:.5px solid #cfcbbf;
-  border-radius:7px;cursor:grab;touch-action:none;user-select:none}
 .v56-index{flex:none;width:22px;height:22px;border-radius:50%;background:#e6f1fb;color:#0c447c;
   font-size:12px;display:flex;align-items:center;justify-content:center}
 .v56-main{flex:1;min-width:0}
@@ -365,11 +360,6 @@ dialog{background:#fffefd;box-shadow:0 28px 76px #6278872e}dialog::backdrop{back
 }
 
 /* V60 – nagyobb, jól megfogható húzófogantyú a Nézetben */
-.v56-drag{display:flex;align-items:center;justify-content:center;width:30px;height:34px;
-  margin-left:-4px;font-size:19px;color:#8a877d;border-radius:7px;cursor:grab;
-  touch-action:none;user-select:none}
-.v56-drag:hover{background:#efece4;color:#4a4842}
-.v56-drag:active{cursor:grabbing;background:#e4e0d5}
 .v56-row{padding-left:6px}
 
 /* V60 – importált levél a sofőri felületen */
@@ -696,3 +686,11 @@ button.mail-file{font:inherit;cursor:pointer}
 .driver-date-tabs button.readonly-tab{opacity:.8}
 .v72-attach-warn{margin:8px 0 0;padding:8px 10px;font-size:12px;line-height:1.5;background:#fdf6e6;
   border:.5px solid #e6d3a8;border-left:3px solid #ba7517;color:#5b4a2a}
+
+/* V73 – a SORSZÁM a húzófogantyú a Nézetben.
+   A külön fogantyúgomb megszűnt; a szám maga fogható meg, így egy elemmel
+   kevesebb van a soron, és ott van, ahol a sorrendet nézed. */
+.v56-index{cursor:grab;touch-action:none;user-select:none;transition:background .12s,color .12s}
+.v56-index:hover{background:#0c447c;color:#fff;box-shadow:0 0 0 3px #d8e8f8}
+.v56-index:active{cursor:grabbing}
+.v56-row-block.resolved-pickup-block .v56-index{cursor:not-allowed;opacity:.6}

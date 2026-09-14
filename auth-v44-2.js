@@ -122,7 +122,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V73Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V74Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -278,7 +278,7 @@
         <button type="button" class="v57-detail-toggle" aria-expanded="false" title="Címek és megjegyzések"
           onclick="v57ToggleDriverDetail('${detailId}',this)">▾</button>
       </div>
-      ${order.manualItems ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${safe(order.manualItems)}</div>` : ''}
+      ${(() => { const note = [order.note, order.manualItems].map(v => String(v || '').trim()).find(v => v && !/^outlook import/i.test(v)); return note ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${safe(note)}</div>` : ''; })()}
       <div class="v57-row-actions">
         <button type="button" onclick="openItems('${safe(order.id)}')">Tételek${items.length ? ` (${received}/${items.length})` : ''}</button>
         <button type="button" class="camera-action${locked ? ' is-locked' : ''}" ${locked ? `disabled title="Csak az aktuális munkanapon tölthető fel"` : ''} onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>
@@ -563,6 +563,32 @@
     }
   };
 
+  /* V73 – A LEVÉL SZÖVEGE, NEM A FORRÁSA
+
+     Tovabbitott (FW:) leveleknel a beolvaso neha a teljes levelforrast adja
+     vissza: Received, Content-Type, boundary, X-Mailer es tarsai. Ezt nem
+     tesszuk a felhasznalo ele - kivagjuk a fejlecblokkot, es csak az erdemi
+     szoveget mutatjuk. Ha a vegen semmi nem marad, inkabb az eredetit
+     mutatjuk, mint egy ures ablakot. */
+  const MIME_HEADER_RE = /^(received|return-path|delivered-to|dkim-signature|authentication-results|arc-[a-z-]+|x-[a-z-]+|content-type|content-transfer-encoding|content-language|mime-version|message-id|in-reply-to|references|thread-[a-z-]+|boundary|date|from|to|cc|bcc|subject|id|by|for|with|envelope-from)\b\s*[:=]/i;
+
+  function readableMailBodyV73(raw) {
+    const text = String(raw || '');
+    if (!text.trim()) return '';
+    const kept = [];
+    let skipping = false;
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (MIME_HEADER_RE.test(trimmed)) { skipping = true; continue; }
+      if (skipping && (/^\s/.test(line) || /^[=-]{2,}/.test(trimmed) || !trimmed)) continue;
+      skipping = false;
+      kept.push(line);
+    }
+    const cleaned = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    return cleaned || text.trim();
+  }
+  global.readableMailBodyV73 = readableMailBodyV73;
+
   async function openSourceMail(orderId) {
     if (!canAccessOrder(orderId)) return alert('Ehhez a fuvarhoz nincs jogosultságod.');
     let order = (state.orders || []).find(item => String(item.id) === String(orderId));
@@ -594,14 +620,24 @@
           ${mail.fileName ? `<div><b>Fájl:</b> ${safe(mail.fileName)}</div>` : ''}
           ${order.orderNo ? `<div><b>Rendelés:</b> ${safe(order.orderNo)}</div>` : ''}
         </div>
-        ${order.manualItems ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${safe(order.manualItems)}</div>` : ''}
-        <pre class="mail-body">${safe(mail.body || '(A levélnek nincs mentett szöveges tartalma.)')}</pre>
+        ${(() => { const note = [order.note, order.manualItems].map(v => String(v || '').trim()).find(v => v && !/^outlook import/i.test(v)); return note ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${safe(note)}</div>` : ''; })()}
+        <pre class="mail-body">${safe(readableMailBodyV73(mail.body) || '(A levélnek nincs mentett szöveges tartalma.)')}</pre>
         ${(mail.attachmentNames || []).length ? `<div class="mail-meta"><b>Mellékletek:</b> ${safe(mail.attachmentNames.join(', '))}</div>` : ''}
         <div id="sourceMailFiles" class="mail-files"><small>Mellékletek betöltése…</small></div>`;
     }
     byId('sourceMailDialog')?.showModal();
     const files = byId('sourceMailFiles');
     if (!files) return;
+    /* V73: előbb a HELYBEN eltett fájlok – ezek hálózat nélkül is megnyílnak.
+       A szerverről érkezők utánuk jönnek, ha vannak. */
+    const local = typeof global.loadOrderAttachmentsV73 === 'function'
+      ? global.loadOrderAttachmentsV73(orderId) : [];
+    const localHtml = local.length
+      ? `<div class="mail-files-title">Melléklet (${local.length})</div>`
+        + local.map(file => `<button type="button" class="mail-file" data-url="${safe(file.dataUrl)}"
+            onclick="openAttachmentV71(this.dataset.url)"><i class="ti ti-paperclip" aria-hidden="true"></i> ${safe(file.name)}</button>`).join('')
+      : '';
+    if (localHtml) files.innerHTML = localHtml;
     try {
       const list = await listDeliveryFilesEventually(orderId);
       /* V72: KIZÁRÓLAG az Outlook-import levélmellékletei. Korábban volt egy
@@ -610,14 +646,14 @@
          ide. Azokat a Mentett fotók gomb mutatja, ez a kettő nem keveredhet. */
       const all = (list || []).filter(file => /\.(pdf|jpe?g|png)$/i.test(file.file_name || ''));
       const sources = all.filter(file => file.is_source_mail);
-      files.innerHTML = sources.length
-        ? `<div class="mail-files-title">Mellékletek (${sources.length})</div>`
+      files.innerHTML = localHtml + (sources.length
+        ? `<div class="mail-files-title">Szerverről (${sources.length})</div>`
           + sources.map(attachmentLinkV71).join('')
-        : `<small>${mail.attachmentsUnreadable
+        : (localHtml ? '' : `<small>${mail.attachmentsUnreadable
             ? 'A levél mellékletét nem sikerült kibontani az importkor – ez továbbított (FW:) leveleknél fordul elő. Mentsd el az EREDETI levelet .msg fájlként, és azt húzd be az importba.'
             : (mail.attachmentNames || []).length
               ? 'A levélnek volt melléklete, de a fájlok nincsenek feltöltve. A mellékletek mentése a V65 óta működik – a korábban importált fuvaroknál a levelet újra kell importálni.'
-              : 'Ehhez a levélhez nem tartozott melléklet.'}</small>`;
+              : 'Ehhez a levélhez nem tartozott melléklet.'}</small>`));
     } catch (error) {
       files.innerHTML = `<small>A mellékletek nem tölthetők be: ${safe(error.message)}</small>`;
     }
