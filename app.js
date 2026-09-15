@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V75Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V76Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -155,7 +155,43 @@ function stampLocalChanges(){
   }
   window.__lastSavedSnapshotV70=next;
 }
-function save(renderNow=true){stampLocalChanges();reconcileState('mentés');try{pruneOrderAttachmentsV73()}catch(error){console.warn('[V74] melléklet-takarítás',error)}localStorage.setItem(KEY,JSON.stringify(state));if(renderNow)render()}
+/* V76 – A MENTÉS SOHA NEM AKADHAT EL A MELLÉKLETEK MIATT
+
+   A V74-ben bevezetett helyi melléklet-tároló megtöltötte a böngésző
+   tárhelyét, ezért a program SAJÁT adata már nem fért el:
+   "Failed to execute 'setItem': ... exceeded the quota" – és a belépés
+   elszállt.
+
+   A fuvarok adata mindennél fontosabb. Ezért ha megtelt a tárhely, előbb
+   ELDOBJUK a mellékleteket (azok kényelmi másolatok, a szerveren megvannak),
+   és újrapróbáljuk. Csak ha úgy sem fér el, akkor szólunk. */
+function saveStateToStorageV76(){
+  try{ localStorage.setItem(KEY,JSON.stringify(state)); return true; }
+  catch(error){
+    console.warn('[V76] megtelt a tárhely, mellékletek eldobása',error);
+    try{ dropAllOrderAttachmentsV76(); }catch(inner){ /* nem kritikus */ }
+    try{ localStorage.setItem(KEY,JSON.stringify(state)); return true; }
+    catch(retryError){
+      console.error('[V76] a fuvarok mentése nem sikerült',retryError);
+      if(typeof alert==='function'&&!window.__storageWarnedV76){
+        window.__storageWarnedV76=true;
+        alert('Megtelt a böngésző tárhelye, ezért a fuvarok helyben nem mentődtek el.\n'
+          +'Az adat a szerveren megvan. Zárd be a felesleges lapokat, vagy jelentkezz ki és vissza.');
+      }
+      return false;
+    }
+  }
+}
+function dropAllOrderAttachmentsV76(){
+  let removed=0;
+  for(let i=localStorage.length-1;i>=0;i--){
+    const key=localStorage.key(i);
+    if(key&&key.startsWith(attachPrefixV73())){localStorage.removeItem(key);removed++}
+  }
+  return removed;
+}
+window.dropAllOrderAttachmentsV76=dropAllOrderAttachmentsV76;
+function save(renderNow=true){stampLocalChanges();reconcileState('mentés');try{pruneOrderAttachmentsV73()}catch(error){console.warn('[V74] melléklet-takarítás',error)}saveStateToStorageV76();if(renderNow)render()}
 function activeVehicles(){return state.vehicles.filter(v=>v.active)}
 function marioVehicle(){return activeVehicles().find(v=>norm(v.driverName).includes('mario'))||state.vehicles.find(v=>norm(v.driverName).includes('mario'))||null}
 function selectedDate(){return $('#workDate').value||today()}
@@ -1151,10 +1187,40 @@ window.cleanOrderNoteV73=cleanOrderNoteV73;
    alkalmazás elszállt a belépésnél. Függvényként adjuk vissza őket, mert a
    függvénydeklaráció a fájl elejére emelődik. */
 function attachPrefixV73() { return 'fuvarAttach:'; }
-function attachMaxBytesV73() { return 600 * 1024; }
-function attachKeepDaysV73() { return 10; }
+function attachMaxBytesV73() { return 220 * 1024; }
+function attachKeepDaysV73() { return 5; }
 
 function attachKeyV73(orderId) { return attachPrefixV73() + String(orderId || ''); }
+/* Összesített korlát: a mellékletek együtt sem foglalhatnak többet, mint
+   1 MB. A böngésző kerete jellemzően 5 MB, és abból a fuvaroknak kell a hely. */
+function attachTotalLimitV76() { return 1024 * 1024; }
+function attachUsedBytesV76(){
+  let total=0;
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i);
+    if(key&&key.startsWith(attachPrefixV73()))total+=(localStorage.getItem(key)||'').length;
+  }
+  return total;
+}
+/* A legrégebbi bejegyzéseket dobjuk el, amíg a keret alá nem kerülünk. */
+function attachEvictOldestV76(){
+  const rows=[];
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i);
+    if(!key||!key.startsWith(attachPrefixV73()))continue;
+    const raw=localStorage.getItem(key)||'';
+    let at=0; try{ at=Date.parse(JSON.parse(raw).at)||0 }catch(error){ at=0 }
+    rows.push({key,at,size:raw.length});
+  }
+  rows.sort((a,b)=>a.at-b.at);
+  let used=rows.reduce((sum,row)=>sum+row.size,0);
+  let removed=0;
+  while(used>attachTotalLimitV76()&&rows.length){
+    const row=rows.shift();
+    localStorage.removeItem(row.key); used-=row.size; removed++;
+  }
+  return removed;
+}
 
 function saveOrderAttachmentsV73(orderId, files) {
   if (!orderId || !files?.length) return 0;
@@ -1162,6 +1228,7 @@ function saveOrderAttachmentsV73(orderId, files) {
   if (!kept.length) return 0;
   try {
     localStorage.setItem(attachKeyV73(orderId), JSON.stringify({ at: new Date().toISOString(), files: kept }));
+    attachEvictOldestV76();          // a keret felett a legrégebbit dobjuk
     return kept.length;
   } catch (error) {
     // ha megtelt a tárhely, előbb takarítunk, aztán egyszer újrapróbáljuk
