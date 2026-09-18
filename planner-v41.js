@@ -460,10 +460,22 @@
     return numbers.filter(number => existing.has(String(number)));
   }
 
-  function matchingOutlookOrders(numbers = [], orderType = 'SR0', isReturn = false) {
+  /* V77 – A CSERE CSAK AZONOS NAPON ÉRVÉNYES
+
+     Eddig a program MINDEN nap fuvarjai között keresett azonos rendelésszámot,
+     és a találatot törölte. Ha ugyanaz a rendelésszám szerepelt egy korábbi
+     napon is – például hátralékként vagy újraküldött bizonylatként –, akkor a
+     másnapi import TÖRÖLTE a tegnapi fuvart, és úgy tűnt, mintha átmozgatta
+     volna a következő napra. A hátraléka is elveszett vele.
+
+     Egy rendelésszám ugyanazon a napon egy fuvar; két különböző napon két
+     külön szállítás. Ezért a csere csak az adott napon belül keres. */
+  function matchingOutlookOrders(numbers = [], orderType = 'SR0', isReturn = false, scheduleDate = '') {
     const wanted = new Set(numbers.map(String));
+    const day = String(scheduleDate || '');
     return (typeof state !== 'undefined' ? state.orders || [] : []).filter(order => {
       if (!order.outlookImport) return false;
+      if (day && String(order.scheduleDate || '') !== day) return false;
       const sameType = (isReturn || orderType === 'VISSZARU') ? !!order.isReturn : !order.isReturn && String(order.orderType || 'SR0') === String(orderType || 'SR0');
       return sameType && orderNumbersOf(order).some(number => wanted.has(String(number)));
     });
@@ -1560,7 +1572,8 @@ ${entry.subject || ''}`) || project;
       // a gyűjtőkódos fuvar soha nem ír felül korábbit
       const numbers = meaningfulOrderNos(entry.sourceOrderNos);
       if (!numbers.length) continue;
-      matchingOutlookOrders(numbers, entry.orderType, entry.isReturn).forEach(order => replaceIds.add(order.id));
+      matchingOutlookOrders(numbers, entry.orderType, entry.isReturn, entry.scheduleDate)
+        .forEach(order => replaceIds.add(order.id));
     }
     const replacementCount = replaceIds.size;
     if (replaceIds.size) {
@@ -1576,6 +1589,11 @@ ${entry.subject || ''}`) || project;
     state.routePlans = state.routePlans || {};
     for (const order of accepted) state.routePlans[order.scheduleDate] = {};
     if (typeof save === 'function') save(false);
+
+    /* V77: az import eredményét AZONNAL feltöltjük, nem várunk a 900 ms-os
+       késleltetésre. Ha közben újratöltődik a lap – vagy a helyi mentés
+       elbukik –, a beimportált fuvarok akkor is megvannak a szerveren. */
+    try { global.flushPendingSyncV70?.(); } catch (error) { console.warn('[V77] azonnali feltöltés', error); }
 
     // V60: a levél mellékleteit feltöltjük a fuvarhoz, hogy a sofőr a saját
     // felületén megnyithassa. Ha nincs kapcsolat, a levél szövege akkor is

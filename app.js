@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V76Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V77Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -191,7 +191,7 @@ function dropAllOrderAttachmentsV76(){
   return removed;
 }
 window.dropAllOrderAttachmentsV76=dropAllOrderAttachmentsV76;
-function save(renderNow=true){stampLocalChanges();reconcileState('mentés');try{pruneOrderAttachmentsV73()}catch(error){console.warn('[V74] melléklet-takarítás',error)}saveStateToStorageV76();if(renderNow)render()}
+function save(renderNow=true){stampLocalChanges();reconcileState('mentés');try{if(!window.__cleanedLearnedV77){window.__cleanedLearnedV77=true;cleanupLearnedSuppliersV77()}}catch(error){console.warn('[V77] takarítás',error)}try{pruneOrderAttachmentsV73()}catch(error){console.warn('[V74] melléklet-takarítás',error)}saveStateToStorageV76();if(renderNow)render()}
 function activeVehicles(){return state.vehicles.filter(v=>v.active)}
 function marioVehicle(){return activeVehicles().find(v=>norm(v.driverName).includes('mario'))||state.vehicles.find(v=>norm(v.driverName).includes('mario'))||null}
 function selectedDate(){return $('#workDate').value||today()}
@@ -400,7 +400,11 @@ function attachDataCombo(input, listId, itemsFn, onPick){
       options.forEach((option, index) => option.classList.toggle('active', index === active));
       options[active]?.scrollIntoView({ block: 'nearest' });
     } else if(event.key === 'Enter' && !list.hidden && options.length){
-      event.preventDefault(); pick(active >= 0 ? active : 0);
+      /* V77: az Enter CSAK akkor választ a listából, ha nyíllal kijelöltél egy
+         sort. Enélkül a kézzel beírt cím helyére mindig az első találat került,
+         tehát saját címet nem lehetett megadni. */
+      if(active >= 0){ event.preventDefault(); pick(active); }
+      else { list.hidden = true; }
     } else if(event.key === 'Escape'){ list.hidden = true; }
   });
   input.addEventListener('blur', () => setTimeout(() => { list.hidden = true; }, 150));
@@ -662,7 +666,7 @@ function dropTargetOptions(){
   const out=[];
   for(const p of state.projects.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu'))){
     if(p.active===false)continue;
-    out.push({kind:'project',ref:p,label:p.name,address:p.address||'',hint:'Projekt'});
+    out.push({kind:'project',ref:p,label:p.name,address:projectAddressFallback(p),hint:'Projekt'});
   }
   for(const su of state.suppliers.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu')||String(a.address||'').localeCompare(String(b.address||''),'hu'))){
     if(su.active===false||!su.address)continue;
@@ -680,6 +684,67 @@ window.dropTargetOptions=dropTargetOptions;
    visszárunak csak a fele volt beállítható.
 
    Mostantól mindkét mező mindkét fajtát kínálja, "Visszáru" jelöléssel. */
+/* V77: ha a projekthez nincs cím a törzsadatban, a korábbi fuvarokból vesszük
+   a leggyakrabban használt lerakási címet. Enélkül a felrakó-választáskor a
+   cím mező üresen maradt, és kézzel kellett kitölteni. */
+/* V77 – EGYSZERI TAKARÍTÁS A KORÁBBAN TANULT SZEMÉTRE
+
+   A tanulás régebben minden új név-cím párra felvett egy beszállítót, ezért a
+   felrakó-lenyíló megtelt: félbehagyott gépelések ("metrodo"), projektnevek,
+   és ugyanannak a cégnek a variánsai.
+
+   Ez a takarítás CSAK a tanult sorokat nézi (learnedFromOrder). A törzsadatból
+   származó beszállítókhoz nem nyúl. A rájuk hivatkozó fuvarokat átkötjük a
+   helyes cégre, hogy semmi ne maradjon árván. */
+function cleanupLearnedSuppliersV77(){
+  const suppliers=state.suppliers||[];
+  const seeded=suppliers.filter(su=>!su.learnedFromOrder);
+  const projectNames=new Set((state.projects||[]).map(p=>norm(p.name)));
+  const removed=[];
+
+  for(const su of suppliers.slice()){
+    if(!su.learnedFromOrder)continue;                 // törzsadatot nem bántunk
+    const name=norm(su.name);
+    if(!name)continue;
+    const isProject=/_/.test(String(su.name||''))||projectNames.has(name);
+    const seedMatch=seeded.find(other=>norm(other.name)===name);
+    const partialOf=seeded.find(other=>{
+      const full=norm(other.name);
+      return full!==name&&full.startsWith(name);
+    });
+    if(!isProject&&!seedMatch&&!partialOf)continue;   // valódi, megtartjuk
+
+    // a rá hivatkozó fuvarokat átkötjük a helyes cégre
+    const target=seedMatch||partialOf||null;
+    for(const order of state.orders||[]){
+      if(String(order.supplierId||'')!==String(su.id))continue;
+      if(target){ order.supplierId=target.id; order.pickupName=target.name;
+        if(!order.pickupAddress)order.pickupAddress=target.address||''; }
+      else order.supplierId='';
+    }
+    state.suppliers=(state.suppliers||[]).filter(item=>item.id!==su.id);
+    removed.push(su.name+(su.address?' · '+su.address:''));
+  }
+  if(removed.length)console.info('[V77] tanult szemét eltávolítva:',removed.length,removed.slice(0,6));
+  return removed;
+}
+window.cleanupLearnedSuppliersV77=cleanupLearnedSuppliersV77;
+
+function projectAddressFallback(project){
+  const direct=String(project?.address||'').trim();
+  if(direct)return direct;
+  const counts=new Map();
+  for(const order of state.orders||[]){
+    if(norm(order.projectName||'')!==norm(project?.name||''))continue;
+    const address=String(order.dropAddress||'').trim();
+    if(!address)continue;
+    counts.set(address,(counts.get(address)||0)+1);
+  }
+  let best='',bestCount=0;
+  for(const [address,count] of counts){ if(count>bestCount){best=address;bestCount=count} }
+  return best;
+}
+
 function pickupTargetOptions(){
   const out=[];
   // V71: egy cégen belül a központ áll elöl, hogy az legyen a kézenfekvő.
@@ -693,7 +758,7 @@ function pickupTargetOptions(){
   }
   for(const p of state.projects.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu'))){
     if(p.active===false)continue;
-    out.push({kind:'project',ref:p,label:p.name,address:p.address||'',hint:'Visszáru · projektről'});
+    out.push({kind:'project',ref:p,label:p.name,address:projectAddressFallback(p),hint:'Visszáru · projektről'});
   }
   return out;
 }
@@ -705,11 +770,11 @@ function findPickupTargetByInput(v){
     ||centralFirst(state.suppliers.filter(su=>norm(su.name)===n));
   if(supplier)return{kind:'supplier',ref:supplier,address:supplier.address||''};
   const project=state.projects.find(p=>norm(p.name)===n);
-  if(project)return{kind:'project',ref:project,address:project.address||''};
+  if(project)return{kind:'project',ref:project,address:projectAddressFallback(project)};
   const partialSupplier=uniquePartial(state.suppliers,v,su=>supplierDisplay(su));
   if(partialSupplier)return{kind:'supplier',ref:partialSupplier,address:partialSupplier.address||''};
   const partialProject=uniquePartial(state.projects,v,p=>`${p.name} ${p.address||''}`);
-  if(partialProject)return{kind:'project',ref:partialProject,address:partialProject.address||''};
+  if(partialProject)return{kind:'project',ref:partialProject,address:projectAddressFallback(partialProject)};
   return null;
 }
 window.findPickupTargetByInput=findPickupTargetByInput;
@@ -717,12 +782,12 @@ window.findPickupTargetByInput=findPickupTargetByInput;
 function findDropTargetByInput(v){
   const n=norm(v);if(!n)return null;
   const project=state.projects.find(p=>norm(p.name)===n);
-  if(project)return{kind:'project',ref:project,address:project.address||''};
+  if(project)return{kind:'project',ref:project,address:projectAddressFallback(project)};
   const supplier=state.suppliers.find(su=>norm(supplierDisplay(su))===n)
     ||state.suppliers.find(su=>norm(su.name)===n&&su.address);
   if(supplier)return{kind:'supplier',ref:supplier,address:supplier.address||''};
   const partialProject=uniquePartial(state.projects,v,p=>`${p.name} ${p.address||''}`);
-  if(partialProject)return{kind:'project',ref:partialProject,address:partialProject.address||''};
+  if(partialProject)return{kind:'project',ref:partialProject,address:projectAddressFallback(partialProject)};
   const partialSupplier=uniquePartial(state.suppliers.filter(su=>su.address),v,su=>supplierDisplay(su));
   if(partialSupplier)return{kind:'supplier',ref:partialSupplier,address:partialSupplier.address||''};
   return null;
@@ -1054,10 +1119,37 @@ function renderReports(){
     order.projectId=project.id;
     return project;
   };
+  /* V77: mikor NEM szabad új beszállítót gyártani.
+     A tanulás eddig minden új név-cím párra felvett egy sort, ezért a
+     felrakó-lenyíló megtelt szeméttel: félbehagyott gépelésekből ("metrodo"),
+     projektnevekből, és ugyanannak a cégnek a variánsaiból. */
+  const looksLikeProjectName=name=>{
+    const text=String(name||'');
+    if(/_/.test(text))return true;                       // Budapest_Metrodom_Beat_Társasház
+    return (state.projects||[]).some(p=>norm(p.name)===norm(text));
+  };
+  const isPartialOfExisting=name=>{
+    const n=norm(name);
+    if(n.length<3)return true;
+    return (state.suppliers||[]).some(su=>{
+      const full=norm(su.name);
+      return full!==n&&full.startsWith(n);               // "metrodo" a "Metrodome" eleje
+    });
+  };
   const ensureSupplierLocation=order=>{
     if(!order?.pickupName||!order?.pickupAddress)return null;
     let supplier=state.suppliers.find(item=>norm(item.name)===norm(order.pickupName)&&norm(item.address)===norm(order.pickupAddress));
     if(!supplier){
+      // azonos nevű, meglévő cég: ahhoz kötjük, nem gyártunk újat
+      const sameName=(state.suppliers||[]).filter(item=>norm(item.name)===norm(order.pickupName));
+      if(sameName.length){
+        const central=sameName.find(item=>item.isCentral)||sameName[0];
+        order.supplierId=central.id;
+        return central;
+      }
+      if(looksLikeProjectName(order.pickupName)||isPartialOfExisting(order.pickupName)){
+        return null;                                     // nem visszük be a törzsadatba
+      }
       supplier={id:uid(),name:order.pickupName,site:'',address:order.pickupAddress,pickupNote:order.pickupNote||'',note:order.pickupNote||'',isCentral:false,active:true,manualOverride:true,learnedFromOrder:true,createdAt:stamp()};
       state.suppliers.push(supplier);
     }
@@ -1101,7 +1193,14 @@ function renderReports(){
       }
       const sameSupplier=norm(candidate.pickupName)===norm(order.pickupName);
       const sameOldPickup=before?.pickupAddress?norm(candidate.pickupAddress)===norm(before.pickupAddress):!candidate.pickupAddress;
-      if(supplier&&sameSupplier&&sameOldPickup){
+      /* V77: TÖBB TELEPHELYES cégnél nem írjuk át a többi fuvar címét.
+         A Lambdának két telephelye van; ha az egyik fuvarnál az Aknát
+         választod, az egy tudatos döntés arra az EGY fuvarra – nem jelenti
+         azt, hogy a többi Lambda-fuvar is oda megy. Egytelephelyes cégnél
+         viszont a javítás valódi törzsadat-javítás, azt továbbvisszük. */
+      const multiSite=(state.suppliers||[]).filter(item=>
+        item.active!==false&&norm(item.name)===norm(order.pickupName)).length>1;
+      if(supplier&&sameSupplier&&sameOldPickup&&!multiSite){
         if(candidate.pickupAddress!==supplier.address){changedAddresses.push(candidate.pickupAddress);candidate.pickupAddress=supplier.address;changedAddresses.push(candidate.pickupAddress);changed++}
         candidate.supplierId=supplier.id;candidate.pickupNote=supplier.pickupNote||supplier.note||candidate.pickupNote||'';
       }

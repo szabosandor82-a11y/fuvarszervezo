@@ -122,7 +122,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V76Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V77Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -736,6 +736,7 @@
   /* V70: ha a lap bezárul vagy háttérbe kerül, a függőben lévő mentést
      azonnal elindítjuk. Enélkül a 900 ms-es várakozás alatt elnavigálva a
      változás soha nem jutott fel a szerverre. */
+  global.flushPendingSyncV70 = () => flushPendingSyncV70();
   function flushPendingSyncV70() {
     if (!saveTimer) return;
     clearTimeout(saveTimer); saveTimer = null;
