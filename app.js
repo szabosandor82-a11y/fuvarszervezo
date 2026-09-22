@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V80Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V81Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -191,7 +191,7 @@ function dropAllOrderAttachmentsV76(){
   return removed;
 }
 window.dropAllOrderAttachmentsV76=dropAllOrderAttachmentsV76;
-function save(renderNow=true){stampLocalChanges();reconcileState('mentés');try{if(!window.__cleanedLearnedV77){window.__cleanedLearnedV77=true;cleanupLearnedSuppliersV77();mergeDuplicateSitesV79();syncSeedSitesV80()}}catch(error){console.warn('[V77] takarítás',error)}try{pruneOrderAttachmentsV73()}catch(error){console.warn('[V74] melléklet-takarítás',error)}saveStateToStorageV76();if(renderNow)render()}
+function save(renderNow=true){stampLocalChanges();reconcileState('mentés');try{if(!window.__cleanedLearnedV77){window.__cleanedLearnedV77=true;cleanupLearnedSuppliersV77();mergeDuplicateSitesV79();syncSeedSitesV80();syncSeedProjectsV81();mergeDuplicateSitesV79()}}catch(error){console.warn('[V77] takarítás',error)}try{pruneOrderAttachmentsV73()}catch(error){console.warn('[V74] melléklet-takarítás',error)}saveStateToStorageV76();if(renderNow)render()}
 function activeVehicles(){return state.vehicles.filter(v=>v.active)}
 function marioVehicle(){return activeVehicles().find(v=>norm(v.driverName).includes('mario'))||state.vehicles.find(v=>norm(v.driverName).includes('mario'))||null}
 function selectedDate(){return $('#workDate').value||today()}
@@ -444,6 +444,63 @@ function setupMasterCombos(){
 
   // A felrakó címe: a kiválasztott cég telephelyei közül szűrünk. Ha még
   // nincs cég kiválasztva, minden hitelesített telephely látszik.
+  /* V81 – A LERAKÓ CÍMJE UGYANÚGY MŰKÖDIK, MINT A FELRAKÓÉ
+
+     Eddig a lerakó címe sima szövegmező volt: se lenyíló, se javaslat. Ha a
+     projektnek nem volt címe a törzsadatban (a 60-ból 36 ilyen), kézzel
+     kellett beírni, és semmi nem segített.
+
+     Mostantól felkínálja a projekthez ismert címeket: elsőként a törzsadatit,
+     utána a korábbi fuvarokból tanultakat, gyakoriság szerint. Gépelésre
+     szűkül, és tetszőleges saját cím is beírható. */
+  attachDataCombo($('#dropAddress'), 'projectAddressList',
+    () => {
+      const typed = norm($('#projectSearch')?.value || '');
+      const project = (state.projects || []).find(item => norm(item.name) === typed)
+        || (state.projects || []).find(item => typed && norm(item.name).includes(typed));
+      const out = [];
+      const seen = new Set();
+      /* V81: VISSZÁRUNÁL a lerakó egy beszállító – ilyenkor a cég telephelyeit
+         kínáljuk, ugyanúgy, mint a felrakó oldalon, központ elöl. */
+      if (!project && typed) {
+        const company = (state.suppliers || []).find(item => norm(item.name) === typed)
+          || (state.suppliers || []).find(item => norm(item.name).includes(typed));
+        if (company) {
+          (state.suppliers || [])
+            .filter(item => item.active !== false && norm(item.name) === norm(company.name) && item.address)
+            .sort((a, b) => (b.isCentral ? 1 : 0) - (a.isCentral ? 1 : 0)
+              || String(a.address || '').localeCompare(String(b.address || ''), 'hu'))
+            .forEach(item => {
+              const key = norm(item.address);
+              if (seen.has(key)) return;
+              seen.add(key);
+              out.push({ label: item.address, note: item.isCentral ? 'központ' : (item.site || 'telephely'),
+                search: `${item.address} ${item.site || ''} ${item.name}` });
+            });
+        }
+      }
+      const push = (address, note) => {
+        const key = norm(address);
+        if (!address || seen.has(key)) return;
+        seen.add(key);
+        out.push({ label: address, note, search: `${address} ${project?.name || ''}` });
+      };
+      if (project?.address) push(project.address, 'törzsadat');
+      // a korábbi fuvarokból ismert címek, gyakoriság szerint
+      const counts = new Map();
+      for (const order of state.orders || []) {
+        if (project && norm(order.projectName || '') !== norm(project.name)) continue;
+        if (!project && typed && !norm(order.projectName || '').includes(typed)) continue;
+        const address = String(order.dropAddress || '').trim();
+        if (!address) continue;
+        counts.set(address, (counts.get(address) || 0) + 1);
+      }
+      [...counts.entries()].sort((a, b) => b[1] - a[1])
+        .forEach(([address, count]) => push(address, `korábbi fuvar · ${count}×`));
+      return out;
+    },
+    () => {});
+
   attachDataCombo($('#pickupAddress'), 'supplierAddressList',
     () => {
       const name = norm($('#supplierSearch')?.value || '').split(' · ')[0];
@@ -770,7 +827,14 @@ window.dropTargetOptions=dropTargetOptions;
 function syncSeedSitesV80(){
   const seed=(window.SEED_DATA||{}).suppliers||[];
   if(!seed.length||!state.suppliers)return { flags:0, added:0 };
-  const keyOf=row=>`${norm(row.name)}|${norm(row.address)}`;
+  /* V81: a cím kulcsát LAZÁN képezzük – az "Akna u. 2-4." és az "Akna utca
+     2-4" ugyanaz. Enélkül az igazítás a másképp írt sor MELLÉ tette volna a
+     törzsadatit, és újra két Akna utca lett volna a listában. */
+  const addressKey=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+    .replace(/\b(utca|u|ut|krt|korut)\b/g,'')
+    .replace(/(\d+)\s*[\/-]?\s*([a-z])(?![a-z0-9])/g,'$1$2')
+    .replace(/[^a-z0-9]/g,'');
+  const keyOf=row=>`${norm(row.name)}|${addressKey(row.address)}`;
   const byKey=new Map();
   for(const su of state.suppliers)byKey.set(keyOf(su),su);
 
@@ -806,6 +870,39 @@ function syncSeedSitesV80(){
   if(flags||added)console.info('[V80] törzsadat-igazítás – jelölés:',flags,'új telephely:',added);
   return { flags, added };
 }
+
+/* V81 – UGYANEZ A LERAKÓ OLDALON
+
+   A projektek címét is a törzsadat tartja karban, és ugyanúgy nem jutott el a
+   már használatban lévő gépekre. Itt a hiányzó CÍM a gyakoribb gond: a 60
+   projektből 36-nak nem volt címe.
+
+   Átvesszük a törzsadatból a hiányzó címeket és a hiányzó projekteket. A
+   kézzel megadott címet NEM írjuk felül – ha te beírtál egyet, az marad. */
+function syncSeedProjectsV81(){
+  const seed=(window.SEED_DATA||{}).projects||[];
+  if(!seed.length||!state.projects)return { filled:0, added:0 };
+  const byName=new Map();
+  for(const project of state.projects)byName.set(norm(project.name),project);
+
+  let filled=0, added=0;
+  for(const row of seed){
+    const existing=byName.get(norm(row.name));
+    if(existing){
+      // csak a HIÁNYZÓ mezőket pótoljuk, a meglévőhöz nem nyúlunk
+      if(!existing.address&&row.address){ existing.address=row.address; filled++; }
+      if(!existing.point&&row.point)existing.point=row.point.slice();
+      continue;
+    }
+    const fresh={...row,id:uid(),defaultRecipientId:''};
+    state.projects.push(fresh);
+    byName.set(norm(fresh.name),fresh);
+    added++;
+  }
+  if(filled||added)console.info('[V81] projekt-igazítás – pótolt cím:',filled,'új projekt:',added);
+  return { filled, added };
+}
+window.syncSeedProjectsV81=syncSeedProjectsV81;
 window.syncSeedSitesV80=syncSeedSitesV80;
 
 function mergeDuplicateSitesV79(){
