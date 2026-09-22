@@ -507,14 +507,36 @@
 
      Egy rendelésszám ugyanazon a napon egy fuvar; két különböző napon két
      külön szállítás. Ezért a csere csak az adott napon belül keres. */
-  function matchingOutlookOrders(numbers = [], orderType = 'SR0', isReturn = false, scheduleDate = '') {
+  /* V91 – EGY RENDELÉS, TÖBB FELRAKÓ
+
+     Egy rendelésszámhoz több felrakó is tartozhat: ugyanazt az anyagot két-
+     három helyről szedjük össze. Eddig a csere CSAK a rendelésszámot nézte,
+     ezért az újraimportálás FELÜLÍRTA a korábbit – a második és harmadik
+     felrakó soha nem került be.
+
+     Mostantól a felrakó is a kulcs része. Ugyanaz a rendelésszám UGYANARRÓL
+     a felrakóról = frissítés; MÁSIK felrakóról = új fuvar, a régi mellé.
+
+     A buborékban végzett kézi szerkesztés változatlanul csak módosít – az
+     nem megy át az importon. */
+  function pickupIdentityKey(name, address) {
+    const joinHouse = value => String(value || '')
+      .replace(/(\d+)\s*[\/-]?\s*([a-z])(?![a-z0-9])/g, '$1$2');
+    return `${nrm(name || '')}|${joinHouse(nrm(address || ''))}`;
+  }
+
+  function matchingOutlookOrders(numbers = [], orderType = 'SR0', isReturn = false, scheduleDate = '', pickupKey = '') {
     const wanted = new Set(numbers.map(String));
     const day = String(scheduleDate || '');
     return (typeof state !== 'undefined' ? state.orders || [] : []).filter(order => {
       if (!order.outlookImport) return false;
       if (day && String(order.scheduleDate || '') !== day) return false;
       const sameType = (isReturn || orderType === 'VISSZARU') ? !!order.isReturn : !order.isReturn && String(order.orderType || 'SR0') === String(orderType || 'SR0');
-      return sameType && orderNumbersOf(order).some(number => wanted.has(String(number)));
+      if (!sameType) return false;
+      if (!orderNumbersOf(order).some(number => wanted.has(String(number)))) return false;
+      // a felrakó is számít: más felrakó = külön fuvar, nem csere
+      if (pickupKey && pickupIdentityKey(order.pickupName, order.pickupAddress) !== pickupKey) return false;
+      return true;
     });
   }
 
@@ -1824,7 +1846,8 @@ ${entry.subject || ''}`) || project;
       // a gyűjtőkódos fuvar soha nem ír felül korábbit
       const numbers = meaningfulOrderNos(entry.sourceOrderNos);
       if (!numbers.length) continue;
-      matchingOutlookOrders(numbers, entry.orderType, entry.isReturn, entry.scheduleDate)
+      matchingOutlookOrders(numbers, entry.orderType, entry.isReturn, entry.scheduleDate,
+        pickupIdentityKey(entry.pickupName, entry.pickupAddress))
         .forEach(order => replaceIds.add(order.id));
     }
     const replacementCount = replaceIds.size;
@@ -2001,6 +2024,7 @@ ${entry.subject || ''}`) || project;
     supplierSpecial,
     parsePdfItemsFromLines,
     blockingFields,
+    pickupIdentityKey,
     projectAddressFromHistoryV90,
     dropAddressSelect,
     supplierAddressSelect,
