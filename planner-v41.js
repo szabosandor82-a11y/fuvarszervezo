@@ -1319,6 +1319,34 @@
   }
 
   function supplierAddressSelect(entry) {
+    /* V88: a FELRAKÓ lehet PROJEKT is (visszáru forrása). Eddig ez a lista
+       csak beszállítókban keresett, ezért projektnél üres maradt. */
+    const name = nrm(entry.pickupName || '');
+    const project = (typeof state !== 'undefined' ? state.projects || [] : [])
+      .find(item => nrm(item.name) === name);
+    if (project) {
+      const listId = `pickup-addresses-${String(entry._id || 'entry').replace(/[^a-zA-Z0-9_-]/g, '')}`;
+      const rows = [];
+      const seen = new Set();
+      const push = (address, note) => {
+        const key = nrm(address);
+        if (!address || seen.has(key)) return;
+        seen.add(key);
+        rows.push(`<option value="${htmlEsc(address)}">${htmlEsc(note)}</option>`);
+      };
+      if (project.address) push(project.address, 'törzsadat');
+      const counts = new Map();
+      for (const order of (typeof state !== 'undefined' ? state.orders || [] : [])) {
+        if (nrm(order.projectName || '') !== name && nrm(order.pickupName || '') !== name) continue;
+        for (const value of [order.dropAddress, order.pickupAddress]) {
+          const address = String(value || '').trim();
+          if (address) counts.set(address, (counts.get(address) || 0) + 1);
+        }
+      }
+      [...counts.entries()].sort((a, b) => b[1] - a[1])
+        .forEach(([address, count]) => push(address, `korábbi fuvar · ${count}×`));
+      return `<input data-field="pickupAddress" data-kind="supplier-address" list="${htmlEsc(listId)}" value="${htmlEsc(entry.pickupAddress || '')}" placeholder="Válassz címet vagy írd be"><datalist id="${htmlEsc(listId)}">${rows.join('')}</datalist>`;
+    }
     const locations = (typeof state !== 'undefined' ? state.suppliers || [] : [])
       .filter(item => nrm(item.name) === nrm(entry.pickupName))
       .sort((a, b) => Number(Boolean(b.isCentral)) - Number(Boolean(a.isCentral)) || String(a.address || '').localeCompare(String(b.address || ''), 'hu'));
@@ -1504,6 +1532,18 @@
         if (field === 'scheduleDate') entry.scheduleDateManual = true;
 
         if (input.dataset.kind === 'supplier-name') {
+          /* V88: a FELRAKÓ lehet PROJEKT is (visszáru forrása). Ilyenkor a
+             projekt címét töltjük be, nem a beszállítói törzsből keresünk. */
+          const asProject = (state.projects || []).find(item => nrm(item.name) === nrm(entry.pickupName));
+          if (asProject) {
+            entry.supplierId = '';
+            entry.pickupAddress = asProject.address || entry.pickupAddress || '';
+            entry.pickupNote = '';
+            entry.newSupplierData = null;
+            refreshEntryWarnings(entry);
+            renderPreview();
+            return;
+          }
           const locations = (state.suppliers || []).filter(item => nrm(item.name) === nrm(entry.pickupName));
           const preferred = locations.find(item => item.isCentral) || locations.find(item => nrm(item.pickupNote || item.note).includes('kozpont')) || locations[0] || null;
           entry.supplierId = preferred?.id || '';
@@ -1549,6 +1589,18 @@
             entry.projectName = project.name || entry.projectName;
             entry.dropAddress = project.address || '';
             Object.assign(entry, recipientFromProject(project));
+          } else {
+            /* V88: VISSZÁRUNÁL a lerakó egy BESZÁLLÍTÓ. Eddig csak a projektes
+               ágat kezeltük, ezért a cím a régi projekté maradt. Most a cég
+               KÖZPONTJÁRA áll – a cím mezőben bármelyik telephely választható. */
+            const company = (state.suppliers || []).filter(item =>
+              item.active !== false && nrm(item.name) === nrm(entry.projectName) && item.address);
+            const central = company.find(item => item.isCentral) || company[0];
+            if (central) {
+              entry.projectId = '';
+              entry.dropAddress = selected?.dataset.supplierAddress || central.address || '';
+              entry.isReturn = true;
+            }
           }
         }
 
@@ -1921,6 +1973,7 @@ ${entry.subject || ''}`) || project;
     parsePdfItemsFromLines,
     blockingFields,
     dropAddressSelect,
+    supplierAddressSelect,
     applyBodyPickupSiteV79,
     bytesToDataUrlV73,
     isPlaceholderOrderNo,
