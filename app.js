@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V81Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V82Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -517,10 +517,17 @@ function setupMasterCombos(){
     },
     () => {});
 
+  /* V82: a lerakó mezőben CSAK a név áll (projekt vagy cégnév), a cím a
+     cím mezőbe kerül – ugyanaz a szabály, mint a felrakónál. */
   attachDataCombo($('#projectSearch'), 'projectList',
     () => dropTargetOptions().map(target => ({ label: target.label, note: target.hint,
       search: `${target.label} ${target.address || ''}`, ref: target })),
-    item => { if($('#dropAddress')) $('#dropAddress').value = item.ref.address || ''; });
+    item => {
+      const ref = item.ref || {};
+      const plainName = ref.kind === 'supplier' ? (ref.ref?.name || ref.label) : ref.label;
+      if($('#projectSearch')) $('#projectSearch').value = String(plainName || '').split(' · ')[0];
+      if($('#dropAddress')) $('#dropAddress').value = ref.address || '';
+    });
 }
 window.setupMasterCombos = setupMasterCombos;
 
@@ -775,10 +782,18 @@ function dropTargetOptions(){
     if(p.active===false)continue;
     out.push({kind:'project',ref:p,label:p.name,address:projectAddressFallback(p),hint:'Projekt'});
   }
-  for(const su of state.suppliers.slice().sort((a,b)=>a.name.localeCompare(b.name,'hu')||String(a.address||'').localeCompare(String(b.address||''),'hu'))){
-    if(su.active===false||!su.address)continue;
-    out.push({kind:'supplier',ref:su,label:supplierDisplay(su),address:su.address,
-      hint:`Visszáru · ${su.isCentral?'központ':(su.site||'telephely')}`});
+  /* V82: a beszállítók CÉGNEVENKÉNT egyszer szerepelnek, cím nélkül – pontosan
+     úgy, mint a felrakó oldalon. A telephelyet a cím mezőben lehet kiválasztani.
+     Az alapértelmezett a központ. */
+  const companies=new Map();
+  for(const su of state.suppliers){
+    if(su.active===false||!su.address||!su.name)continue;
+    const key=norm(su.name);
+    const current=companies.get(key);
+    if(!current||(su.isCentral&&!current.isCentral))companies.set(key,su);
+  }
+  for(const su of [...companies.values()].sort((a,b)=>a.name.localeCompare(b.name,'hu'))){
+    out.push({kind:'supplier',ref:su,label:su.name,address:su.address,hint:'Visszáru · beszállító'});
   }
   return out;
 }

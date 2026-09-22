@@ -1,0 +1,595 @@
+FUVARSZERVEZO V82
+=================
+
+A V81-re epul. A lerako oldal pontosan ugyanugy mukodik, mint a felrako.
+
+MODOSITOTT FAJLOK
+-----------------
+app.js          lerako lista cegenkent, nev es cim kulon mezoben
+index.html / manifest / sw.js   verziószam
+TEST_V82.js     262 teszt
+
+
+1. A LERAKO LISTA CEGENKENT EGY ELEMET KINAL
+--------------------------------------------
+A lerako listaban a beszallitok TELEPHELYENKENT, cimmel egyutt szerepeltek
+("Lambda Systeme Kft. . 1106 Budapest, Akna u. 2-4."). A felrakonal ezt mar
+atalakitottuk, a lerakonal nem - ezert latszott ott a cim, es ezert nem
+lehetett a telephelyet valasztani.
+
+Mostantol a ketto azonos:
+
+   LERAKO lista      "Lambda Systeme Kft."   egy elem, cim nelkul
+   alapertelmezett   1117 Budapest, Hengermalom ut 47A   (a kozpont)
+
+334 beszallito, cegenkent egyszer - korabban 522 sor volt, telephelyenkent.
+
+
+2. A NEV ES A CIM KULON MEZOBEN
+-------------------------------
+A lerako mezobe CSAK a nev kerul (projekt vagy cegnev), a cim a cim mezobe.
+Ugyanaz a szabaly, mint a felrakonal.
+
+A cim mezoben szabadon valaszthatsz:
+
+   VISSZARU - Lambda        [kozpont] Hengermalom ut 47A
+                                      Akna u. 2-4.
+
+   PROJEKT - Moxy berlem.   [torzsadat]     Kazinczy u. 48.
+                            [korabbi fuvar] Kiraly utca 12.
+
+Gepelesre szukul, sajat cim is beirhato, a Tab es az Enter ugyanugy
+viselkedik, mint a felrakonal.
+
+
+TESZTEK
+-------
+TEST_V82.js   262/262
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Ket korabbi teszt a regi, telephelyenkenti listat rogzitette - azokat
+atirtuk az uj szabalyra.
+
+Futtatas: node TEST_V82.js
+
+========================================================================
+A KORABBI VERZIOK VALTOZASAI
+========================================================================
+
+1. AZ AKNA UTCA MEGIS KETSZER JELENT MEG
+----------------------------------------
+Sajat hiba a V80-bol. A torzsadatban EGY Akna-sor van, a bongeszoben viszont
+a MASKEPP irt valtozat el ("Akna utca 2-4"). Az igazitas szo szerint
+hasonlitott, ezert nem talalta meg, es a torzsadati sort MELLE tette - igy
+ismet ket Akna utca lett.
+
+Javitas ket helyen:
+  - az igazitas LAZAN hasonlitja a cimet: az "u." es az "utca" ugyanaz, a
+    "47/a" es a "47A" is
+  - az osszevonas az igazitas UTAN is lefut, hogy ha megis keletkezne
+    duplikatum, az eltunjon
+
+   ELOTTE   [kozpont] Lambda . Akna utca 2-4
+   UTANA    [kozpont] Lambda . Hengermalom ut 47A
+                      Lambda . Akna utca 2-4
+
+
+2. A LERAKO CIM MEZOJE IS KERESO LENYILOT KAPOTT
+------------------------------------------------
+Eddig sima szovegmezo volt: se lenyilo, se javaslat. Mostantol ugyanugy
+mukodik, mint a felrakonal, es felismeri, MIT irtal a lerako mezobe:
+
+  VISSZARUNAL (a lerako egy beszallito) a ceg OSSZES telephelyet kinalja,
+  kozpont elol - a Giengernel mind a husz elerheto.
+
+  PROJEKTNEL a torzsadat cimet, alatta a korabbi fuvarokbol ismert cimeket,
+  gyakorisag szerint:
+     1075 Budapest, Kazinczy u. 48.   [torzsadat]
+     1061 Budapest, Kiraly utca 12.   [korabbi fuvar . 1x]
+
+Mindket esetben gepelesre szukul, es sajat cim is beirhato. A Tab es az
+Enter ugyanugy viselkedik, mint a felrakonal.
+
+
+3. A PROJEKTEK TORZSADATA IS ELJUT A HASZNALT GEPEKRE
+-----------------------------------------------------
+Ugyanaz az igazitas fut a projektekre, mint a beszallitokra. Itt a hianyzo
+CIM a gyakoribb gond: a 60 projektbol 36-nak nem volt cime.
+
+Az igazitas potolja a hianyzo cimeket es a hianyzo projekteket, de a KEZZEL
+megadott cimet NEM irja felul.
+
+
+TESZTEK
+-------
+TEST_V81.js   260/260
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Futtatas: node TEST_V81.js
+
+========================================================================
+A KORABBI VERZIOK VALTOZASAI
+========================================================================
+
+1. MIERT MARADT A LAMBDANAL AZ AKNA UTCA
+----------------------------------------
+Ez a hiba hetekig visszatert, es a javitasok azert nem segitettek, mert a
+GYOKEROK mashol volt.
+
+A program a torzsadatot EGYSZER tolti be, es utana soha tobbe
+(refreshMasterData azonnal kilep, ha mar van masterDataVersion). Ez vedi a
+kezi modositasokat - de azt is jelenti, hogy amit a data.js-ben javitunk,
+az a mar hasznalatban levo gepen NEM valtozik semmit.
+
+Vagyis: a torzsadatban a Lambda kozpontja mar a Hengermalom volt, a
+bongeszoben tarolt allapotban viszont tovabbra is az Akna. Minden teszt a
+friss adaton futott, ezert mutatott jot.
+
+Raadasul a betoltes a kozpontot nem a jelolesbol, hanem a "site" mezobol
+szamolta (site === 'kozpont'), ami a Lambdanal ures.
+
+JAVITAS ket reszben:
+
+  a) A betoltes mostantol a SEED isCentral mezojet hasznalja, es csak
+     masodsorban a site mezot.
+
+  b) Indulaskor lefut egy igazitas (syncSeedSitesV80), ami a torzsadatbol
+     atveszi azt a KET dolgot, ami nem felhasznaloi adat:
+        - a kozpont-jeloleseket
+        - a hianyzo telephelyeket
+
+A te helyzeteddel szimulalva:
+
+   ELOTTE   [kozpont] Lambda . Akna u. 2-4.
+   UTANA    [kozpont] Lambda . Hengermalom ut 47A
+                      Lambda . Akna u. 2-4.
+
+A Gienger is megkapta a Dulo utcat, es a hianyzo 20 telephelye is bekerult.
+
+
+2. A KEZI ADATOKHOZ NEM NYUL
+----------------------------
+Az igazitas kizarolag a torzsadatbol szarmazo sorokat erinti:
+  - a magad felvette cegek megmaradnak
+  - a sajat telephelyek (pl. "Sajat egyedi telephely 9.") megmaradnak
+  - azok kozponti jelolese sem valtozik
+
+Cegenkent egy kozpont marad; ha az igazitas utan tobb lenne, a tobbirol
+lekerul a jeloles.
+
+
+TESZTEK
+-------
+TEST_V80.js   255/255
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Harom uj teszt vedi: az igazitas mukodese, a kezi adatok serthetetlensege, es
+hogy a betoltes a SEED jelolest hasznalja.
+
+Futtatas: node TEST_V80.js
+
+========================================================================
+A KORABBI VERZIOK VALTOZASAI
+========================================================================
+
+1. A BIZONYLATROL CSAK A CEGNEV SZAMIT
+--------------------------------------
+Eddig a papirra nyomtatott cim dontott, ezert a Lambda az Akna utcat kapta,
+ha a bizonylatra azt nyomtattak - holott az anyagot a Hengermalomban adjak ki.
+
+Mostantol a ceget a papirrol olvassuk, a TELEPHELYET a torzsadat kozponti
+jelolese adja:
+
+   a papiron Akna utca   -> 1117 Budapest, Hengermalom ut 47A
+   a papiron Hatar ut    -> 1225 Budapest, Dulo utca 31-35.
+   a papiron Baja        -> 1158 Budapest, Kesmark utca 9
+
+Ez mindket felismeresi agon ervenyes (PDF-fejlec es szoveges kereses).
+
+KOVETKEZMENY: ha egy bizonylaton tenyleg egy masik telephely szerepel, a
+program akkor is a kozpontot adja. Ket modon lehet elterni: a level szovege
+(2. pont), es a kezi atiras (3. pont).
+
+
+2. A LEVEL MEGNEVEZHETI A TELEPHELYET
+-------------------------------------
+Ha a kisero level mast mond, mint a bizonylat - "holnap felvesszuk nalatok a
+Hengermalomban" -, a level a frissebb informacio. Ilyenkor arra valt.
+
+Csak UGYANANNAK a cegnek a telephelyei kozul valthat, es csak akkor, ha a
+levelben szereplo utcanev egyertelmuen masik telephelyre mutat. A helynevek
+(Budapest, kerulet, utca, dulo) nem szamitanak.
+
+A valtas latszik az elonezet "Felismeres" soraban, tehat importalas elott
+ellenorizheto.
+
+
+3. AZ IMPORTNAL A FELRAKO CIME ATIRHATO
+---------------------------------------
+Ha a beirt cim nem talalt PONTOSAN a torzsadatra, a program KIURITETTE a
+mezot - ezert nem lehetett atirni. Mostantol megtartja, amit beirsz:
+
+   "hengermalom"          -> 1117 Budapest, Hengermalom ut 47A
+   "Hengermalom ut 47/a"  -> 1117 Budapest, Hengermalom ut 47A
+   "Sajat egyedi cim 12." -> megmarad, ahogy beirtad
+
+
+4. A CIM LENYILOJA MINDEN TELEPHELYET MUTAT
+-------------------------------------------
+Az import elonezeten a cim mezo NATIV bongeszos lenyilo volt, amit a bongeszo
+a mezoben ALLO szovegre szur - ezert lenyitaskor csak egy cim latszott.
+
+Most ugyanazt a kereso lenyilot kapta, mint a fuvarurlap: lenyitaskor a ceg
+OSSZES telephelye latszik (kozpont elol), gepelesre pedig szukul.
+
+
+5. DUPLIKALT TELEPHELYEK OSSZEVONVA
+-----------------------------------
+Kilenc cegnel ugyanaz a cim ketszer szerepelt, mas irasmoddal ("Akna u. 2-4."
+es "Akna utca 2-4"). Ezek osszevonva: 531 -> 522 telephely.
+
+A megtartott sor az AKTIV, azon belul a kozpont, vegul a teljesebb irasmodu.
+Ez fontos volt: az elso probanal egy INAKTIV sort tartottunk meg, es emiatt a
+program csak egy Lambda-telephelyet latott.
+
+A bongeszoben tarolt korabbi allapotra indulaskor is lefut az osszevonas.
+
+
+6. AMIT NEM ISMER FEL BIZTOSAN, AZT URESEN HAGYJA
+-------------------------------------------------
+A rossz ertek rosszabb, mint az ures mezo: az ureset kitoltod, a rosszat
+viszont eszre sem veszed.
+
+BESZALLITO: kitolti, ha a teljes nev vagy minden jellemzo szo egyezik. Ha
+csak a vezeto szo egyezik ES tobb kulonbozo ceg is szoba jon, ures marad.
+A rovidites ("Gienger kp", "Lambda") tovabbra is mukodik, mert ott csak egy
+ceg johet szoba.
+
+PROJEKT: a kuszob eddig 8 pont volt, amit nehany rovid szo veletlen talalata
+is teljesitett - ez a veszelyesebb hiba, mert rossz projektnel MAS
+epitkezesre megy az anyag. Mostantol a teljes projektnev vagy minden
+jellemzo szo kell, es a masodik helyezettnek erezhetoen hatrebb kell lennie.
+
+Mindket esetben magyarazo uzenet all a mezo helyen.
+
+Ellenorizve mind a HET valos bizonylaton: egyik felismeres sem romlott el.
+
+
+TESZTEK
+-------
+TEST_V79.js   252/252
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Futtatas: node TEST_V79.js
+
+========================================================================
+A KORABBI VERZIOK VALTOZASAI
+========================================================================
+
+1. A KOZPONTI TELEPHELY JELOLES ATVETELE
+----------------------------------------
+A feltoltott torzsadatbol (torzsadatok_2026-08-05.xlsx) atvettuk a "Kozponti
+telephely" oszlopot. 19 sornal valtozott a jeloles:
+
+   Hegedus Csoszerelveny  -> 1117 Budapest, Hunyadi J. ut 1.
+   D-T Kozmu              -> 1106 Budapest, Pesti hatarut 1
+   Duna-Armatura          -> 1044 Budapest IV., Vaci ut 121.
+   Egrokorr               -> 2030 Erd, Fehervari ut 63J.
+   ... es tovabbi 15
+
+A Hegedus 14 telephelyes ceg volt kozpont nelkul - ez korabban nyitott
+kerdes volt, most megoldodott.
+
+A Benedek es Tsa Kft-nel a fajlban KET kozpont szerepelt. A felhasznaloi
+dontes szerint a 1239 Budapest, Peter apostol u. 1-3. a kozpont; a Vas
+Gereben utcarol lekerult a jeloles.
+
+FONTOS: a torzsadatot NEM csereltuk le. A fajl 61 ceget tartalmaz, a
+torzsadatban 334 van - a csere 273 ceget torolt volna (Airvent, Neber, Ryng,
+Lindab es a tobbi napi hasznalatu ceg). Csak a jeloleseket vettuk at.
+
+Harom cegnel a fajl alapjan ket kozpont lett volna; a masodikrol levettuk a
+jelolest, mert egy cegnek egy kozpontja lehet.
+
+MEG NYITOTT - ot kettelephelyes cegnel nincs jeloles sem a fajlban, sem
+eddig; ott a program a lista elso elemet veszi:
+   Pal-Ferr-Box, PROFIRENT, Rankl Magyarorszag, MARKETBAU-REMEHA, RTP Technic
+Egy cimmezoben webcim all a valodi cim helyett: Szerelveny Delpest Kft.
+
+
+2. A NEVMEZOBE CSAK A CEGNEV KERUL
+----------------------------------
+Eddig a felrako mezobe a "Ceg . Cim" alak kerult, ezert a cim ket helyen
+szerepelt, es a telephely megvaltoztatasahoz a nevet is at kellett irni.
+
+Mostantol:
+   nevmezo:  Szatmari Kft
+   cim mezo: a ceg OSSZES telephelye, kozpont elol (a Szatmarinal 46 db)
+
+A javaslatlista is cegneveket kinal, nem "ceg . cim" parokat.
+
+A valtas szabad: a cim mezoben barmelyik telephely valaszthato, gepelesre
+szukul ("vaci" -> Kulso-Vaci ut 61-63.). Kezzel is beirhato olyan cim, ami
+nincs a listaban.
+
+Ez az importalt fuvarokra is ervenyes, es a valtoztatas NEM ragad ra a ceg
+tobbi fuvarjara (V77).
+
+
+3. A TAB IS KITOLTI A MEZOT
+---------------------------
+   nyillal kijelolt sor        -> azt irja be (mint az Enter)
+   kijeloles nelkul, 1 talalat -> azt irja be
+   kijeloles nelkul, tobb      -> NEM valaszt, a kovetkezo mezore lep
+
+Az utolso eset szandekos: a talalgato kitoltes volt az eredeti hiba az
+Enternel, azt nem hoztuk vissza a Tabbal.
+
+
+TESZTEK
+-------
+TEST_V78.js   235/235
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Futtatas: node TEST_V78.js
+
+========================================================================
+A KORABBI VERZIOK VALTOZASAI
+========================================================================
+
+1. ELTUNT IMPORT - KET OKA VOLT
+-------------------------------
+Bejelentes: az importalt fuvarok eltuntek, es az ELOZO napi fuvarok
+atkerultek a kovetkezo napra.
+
+ELSO OK - a csere nem nezte a datumot. A program MINDEN nap fuvarjai kozott
+keresett azonos rendelesszamot, es a talalatot TOROLTE. Ha ugyanaz a
+rendelesszam szerepelt egy korabbi napon is - peldaul hatralekkent vagy
+ujrakuldott bizonylatkent -, akkor a masnapi import torolte a tegnapi
+fuvart, es ugy nezett ki, mintha atmozgatta volna. A hatraleka is elveszett.
+
+   Mostantol a csere CSAK az adott napon belul keres. Egy rendelesszam
+   ugyanazon a napon egy fuvar; ket kulonbozo napon ket kulon szallitas.
+
+MASODIK OK - a V75-os tarhely-hiba: a mentes csendben elbukott, es
+ujratolteskor a szerveren levo regi allapot jott vissza. Ezt a V76 mar
+kezeli, de megerositettuk: az import mostantol AZONNAL feltolti az
+eredmenyt, nem var a 900 ms-os kesleltetesre. Ha kozben ujratoltodik a lap,
+a munka a szerveren megvan.
+
+
+2. A LAMBDA NEHA AZ AKNAT KAPTA
+-------------------------------
+Nem az import a hibas - az mindig a Hengermalmot adja, kiveve ha a papiron
+az Akna all. A TANULAS irta felul: ha egyszer egy fuvarnal az Aknat
+valasztottad, a program a TOBBI Lambda-fuvar cimet is atirta.
+
+Mostantol tobb telephelyes cegnel nem terjed tovabb a cimvaltoztatas. Az
+egyedi valasztas szabad marad: ha egy fuvarhoz az Aknat kered, azt kapod, es
+nem ragad ra a tobbire.
+
+Egytelephelyes cegnel viszont tovabbra is atterjed, mert ott az valodi
+torzsadat-javitas.
+
+
+3. A TELESZEMETELT FELRAKO-LENYILO
+----------------------------------
+A tanulas minden uj nev-cim parra felvett egy beszallitot, ezert a lenyiloba
+bekerult a felbehagyott gepeles ("metrodo") es a projektnev is.
+
+  a) MEGELOZES: nem vesz fel ujat, ha a nev egy meglevo ceg neve (ahhoz
+     koti), ha projektnevnek latszik, vagy ha egy meglevo nev eleje.
+
+  b) TAKARITAS: egyszeri, indulaskor lefuto takaritas eltavolitja a korabban
+     bekerult szemetet. CSAK a tanult sorokat nezi - a torzsadatbol szarmazo
+     beszallitokhoz nem nyul. A rajuk hivatkozo fuvarokat atkoti a helyes
+     cegre, es ha ures volt a cimuk, megkapjak a rendeset.
+
+  c) A CIM KITOLTESE: ha a projekthez nincs cim a torzsadatban, a korabbi
+     fuvarokbol vesszuk a leggyakrabban hasznalt lerakasi cimet.
+
+  d) KEZI BEIRAS: az Enter eddig MINDIG az elso talalatot valasztotta, ezert
+     sajat cimet nem lehetett megadni. Mostantol csak akkor valaszt, ha
+     nyillal kijelolted a sort - kulonben megtartja, amit beirtal.
+
+
+TESZTEK
+-------
+TEST_V77.js   227/227
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Futtatas: node TEST_V77.js
+
+========================================================================
+A KORABBI VERZIOK VALTOZASAI
+========================================================================
+
+0. "exceeded the quota" – BELEPESI HIBA
+---------------------------------------
+Hibauzenet:
+   Failed to execute 'setItem' on 'Storage': Setting the value of
+   'fuvarszervezo_v11' exceeded the quota.
+
+Ok: a V74-ben bevezetett helyi melleklet-tarolo megtoltotte a bongeszo
+tarhelyet (fajlonkent akar 600 kB, 10 napig orizve), ezert a program SAJAT
+adata mar nem fert el - es a belepes elszallt.
+
+Ez sajat hiba, ket kiadason keresztul: eloszor a betoltesi sorrend (V74),
+most a tarhely.
+
+Javitas harom reszben:
+
+  1. A FUVAROK ADATA MINDENNEL FONTOSABB. Ha megtelt a tarhely, a program
+     eloszor ELDOBJA a mellekleteket - azok kenyelmi masolatok, a szerveren
+     megvannak -, es ujraprobalja a mentest. Csak ha ugy sem fer el, akkor
+     szol egy uzenettel.
+
+  2. Szigorubb korlatok: fajlonkent 600 -> 220 kB, megorzes 10 -> 5 nap.
+
+  3. Osszesitett korlat: a mellekletek egyutt sem foglalhatnak tobbet 1 MB-nal.
+     A keret felett a LEGREGEBBI bejegyzesek dobodnak el automatikusan.
+
+Negy uj teszt vedi, koztuk olyan is, amelyik szuk tarhelyet szimulal, es
+megkoveteli, hogy a fuvarok akkor is elmentodjenek.
+
+
+========================================================================
+A KORABBI VERZIO (V75) VALTOZASAI
+========================================================================
+
+1. A SORSZAM ELTUNT, ES MOZGATNI SEM LEHETETT
+---------------------------------------------
+A V74-ben a sorszam lett a huzofogantyu, de a Nezetben eltunt.
+
+Ok: a program regi buborekaiban a fogantyu a JOBB FELSO SAROKBAN ul, ezert a
+.drag osztaly position:absolute-ot ad neki. Amikor a sorszam megkapta ezt az
+osztalyt, kiugrott a sorbol a sarokba - ott a Csatolmany gomb es a keret ala
+kerult, igy lathatatlanna valt, es megfogni sem lehetett.
+
+Ezert volt nehez megtalalni: a szam RENDBEN kirenderelodott, csak nem ott
+volt, ahol kerestem.
+
+Javitas: a Nezet soraban a sorszam visszakerul normal helyzetbe. A regi
+buborekok fogantyuja erintetlen - arra ott tovabbra is a sarokban van a helye.
+
+A sorszam egyben nagyobb es hangsulyosabb lett (22 -> 30 pixel, felkover,
+kerettel), mert most ez a fogopont: ujjal is konnyen megfoghato.
+
+
+2. A SORSZAM AZONNAL KOVETI AZ ATMOZGATAST
+------------------------------------------
+A fooldal a huzas utan ujrarajzolodik, a Nezet ablak viszont nem - ott a
+sorok a helyukre csusztak, de a belejuk irt szam a REGI maradt.
+
+Mostantol a mozgatas vegen azonnal ujraszamozzuk oket a kepernyon lathato
+sorrend szerint:
+
+   huzas utan a sorrend:  3, 1, 2
+   azonnal atszamozva:    1, 2, 3
+
+A sorrend fontos: elobb a sorszamok mentese fut, utana a kepernyon lathato
+atszamozas - igy a ketto nem csuszhat szet.
+
+
+TESZTEK
+-------
+TEST_V75.js   215/215
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Ot uj teszt vedi ezt a ket javitast, koztuk olyan is, amelyik a globalis
+.drag szabaly meglétét ellenorzi - azt nem szabad eltavolitani, mert a regi
+buborekok fogantyujahoz kell.
+
+Futtatas: node TEST_V75.js
+
+
+========================================================================
+A KORABBI VERZIO (V74) VALTOZASAI
+========================================================================
+
+0. BELEPEST BLOKKOLO HIBA JAVITVA (V74 elso csomag)
+---------------------------------------------------
+A V74 elso csomagjaban a belepes elszallt:
+
+   "Belepesi hiba: Cannot access 'ATTACH_KEEP_DAYS_V73' before initialization"
+
+Ok: a melleklet-tarolo konstansai a fajl VEGEN alltak const-kent, a save()
+viszont a fajl elejen van, es a betoltes kozben mar meghivodik. Ilyenkor a
+konstans meg nem letezik, es az egesz alkalmazas megall.
+
+Javitas: a harom ertek fuggvennye alakult (a fuggvenydeklaracio a fajl
+elejere emelodik), es a mentes takaritasa try-catch moge kerult, hogy egy
+kesobbi hiba se allithassa meg a mentest.
+
+Uj teszt vedi: vegignezi a save()-bol hivott osszes fuggvenyt, es elbukik, ha
+barmelyik olyan konstansra hivatkozik, amit a save() UTAN deklaralunk.
+
+
+1. A KULONBOZO TELEPHELYEK NEM OLVADNAK OSSZE
+---------------------------------------------
+Ez a V54 ota ismert korlat volt: a csoportkepzo CSAK a cegnevet hasznalta,
+ezert a Szatmari kesmarki es nagytetenyi telephelyerol erkezo rendelesek egy
+buborekba kerultek - pedig ket kulon helyre kell menni ertuk.
+
+A javitas OT fajlt erintett (ugyanaz a hiba mindegyikben), plusz a Nezet
+kulcsat, ami kulon rosszul csinalta: ott a cim SZANDEKOSAN uresen ment a
+kulcskepzobe.
+
+   Szatmari Kft | 1158 Budapest, Kesmark utca 9.        3 rendeles
+   Szatmari Kft | Budapest XXII. ker., Nagytetenyi ut   1 rendeles
+
+Azonos cimen tovabbra is osszevonja oket. A huzas is ehhez igazodik: a ket
+kesmarki egyutt mozog, a nagytetenyi nem megy veluk.
+
+
+2. A 000000 GYUJTOKOD
+---------------------
+Visszarunal es hasonlo fuvaroknal nincs valodi rendelesszam. A csupa nullas
+szam mostantol NEM azonosito: minden ilyen fuvar onallo marad, nem irja felul
+az elozot, es nem is blokkolja az importot.
+
+Elfogadott alakok: 0, 00, 000000, szokozokkel is. A 000001 valodi szam.
+A valodi rendelesszamoknal a regi viselkedes marad: azonos szam = frissites.
+
+
+3. AZ IMPORTALT MEGJEGYZES SZERKESZTHETO
+----------------------------------------
+A megjegyzes KET mezoben elt (note es manualItems). A mentes csak az elsot
+frissitette, a buborek viszont mindkettot mutatta - ezert az atirt szoveg
+melle odairodott a regi:
+
+   "ATIRT szoveg . regi importalt szoveg"
+
+Igy nezett ki ugy, mintha nem lehetne szerkeszteni. A mentes mostantol
+mindket mezot frissiti.
+
+A level TARGYA tobbe nem kerul a megjegyzesbe - oda a TE szoveged kerul.
+
+
+4. A MELLEKLET HELYBEN IS ELERHETO
+----------------------------------
+Eddig a Csatolmany CSAK a Supabase-tarolobol tudta megnyitni a PDF-et. Ha a
+feltoltes nem ment at, csak a fajl NEVE latszott.
+
+Az import mostantol helyben is elteszi a PDF-et, a szervertol fuggetlenul.
+NEM a fuvar adatai koze - azt minden mentes felkuldi, es egy napi adag PDF
+2,7 MB volna -, hanem kulon taroloba, ami csak azon a gepen el.
+
+Ket korlat: fajlonkent 600 kB, es a 10 napnal regebbi (vagy arva) bejegyzesek
+takaritodnak. Ha megtelne a tarhely, elobb takarit, aztan ujraprobalja.
+
+Az ablakban a helyi fajl all elol "Melleklet" cimmel, alatta "Szerverrol".
+
+FIGYELEM: ez az EZUTAN importalt leveleknel mukodik.
+
+
+5. A LEVELSZOVEG, NEM A LEVELFORRAS
+-----------------------------------
+Tovabbitott (FW:) leveleknel a beolvaso a teljes levelforrast adta vissza:
+Received, Content-Type, boundary, X-Mailer. Ez jelent meg a level szovege
+helyett.
+
+Mostantol a fejlecblokk kivagodik, es csak az erdemi szoveg latszik. A rendes
+szerkezetu leveleket nem bantja, es ha csak fejlec van, inkabb az eredetit
+mutatja, mint ures ablakot.
+
+
+6. A NEZETBEN A SORSZAM A HUZOFOGANTYU
+--------------------------------------
+A kulon fogantyugomb megszunt. A sorszamot lehet megfogni es fel-le tolni.
+
+Igy a fogopont ott van, ahol a sorrendet nezed, es egy elemmel kevesebb van a
+soron - a Csatolmany gombnak tobb hely jut. Az elintezett fuvarok sorszama
+nem foghato, ezt a kurzor is jelzi.
+
+
+TESZTEK
+-------
+TEST_V74.js   210/210
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Ket regi teszt varakozasat at kellett irni: a TEST_V44 azt rogzitette, hogy
+azonos beszallito ELTERO cimen is egyutt mozogjon (ez volt a hibas
+viselkedes), ket masik pedig a most eltavolitott fogantyugombot kereste.
+
+Futtatas: node TEST_V74.js
