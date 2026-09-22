@@ -811,6 +811,26 @@
     return value.slice(0, cut).trim() || value;
   }
 
+  /* V90: ha a projekthez nincs cím a törzsadatban, a KORÁBBI FUVAROKBÓL
+     vesszük a leggyakrabban használt címet. Visszárunál a felrakó egy
+     projekt, és a 60 projektből 36-nak nincs címe – emiatt maradt üresen a
+     felrakó cím mezője. */
+  function projectAddressFromHistoryV90(name) {
+    const key = nrm(name || '');
+    if (!key || typeof state === 'undefined') return '';
+    const counts = new Map();
+    for (const order of state.orders || []) {
+      const matchesDrop = nrm(order.projectName || '') === key;
+      const matchesPickup = nrm(order.pickupName || '') === key;
+      if (!matchesDrop && !matchesPickup) continue;
+      const address = String((matchesDrop ? order.dropAddress : order.pickupAddress) || '').trim();
+      if (address) counts.set(address, (counts.get(address) || 0) + 1);
+    }
+    let best = '', bestCount = 0;
+    for (const [address, count] of counts) if (count > bestCount) { best = address; bestCount = count; }
+    return best;
+  }
+
   function projectMasterByIdentity(location) {
     if (!location || typeof state === 'undefined') return location || null;
     const projects = state.projects || [];
@@ -1078,6 +1098,12 @@
       const returnHint = inferReturnProjectHint(subject, body);
       project = projectMasterByIdentity(bestProject(`${subject}\n${stripSignature(body)}`, returnHint) || bestProject(combined, returnHint));
       supplier = resolveReturnSupplier(subject, body, combined);
+      // V90: visszárunál a felrakó a projekt – ha nincs címe, a korábbi
+      // fuvarokból pótoljuk, hogy ne maradjon üresen a mező
+      if (project && !project.address) {
+        const known = projectAddressFromHistoryV90(project.name);
+        if (known) project = { ...project, address: known };
+      }
       pickup = project;
       drop = supplier;
       pickupRole = 'project'; dropRole = 'supplier';
@@ -1535,20 +1561,23 @@
           /* V88: a FELRAKÓ lehet PROJEKT is (visszáru forrása). Ilyenkor a
              projekt címét töltjük be, nem a beszállítói törzsből keresünk. */
           const asProject = (state.projects || []).find(item => nrm(item.name) === nrm(entry.pickupName));
+          /* V89 JAVÍTÁS: itt korábban egy nem létező renderPreview() hívás állt,
+             ami hibára futott – a kezelő megszakadt, és a kártya nem frissült.
+             A helyes név renderPending(), és azt a kezelő VÉGE úgyis meghívja,
+             ezért itt nem hívunk semmit, csak kihagyjuk a beszállítói ágat. */
+          const locations = asProject ? [] : (state.suppliers || []).filter(item => nrm(item.name) === nrm(entry.pickupName));
           if (asProject) {
             entry.supplierId = '';
             entry.pickupAddress = asProject.address || entry.pickupAddress || '';
             entry.pickupNote = '';
             entry.newSupplierData = null;
-            refreshEntryWarnings(entry);
-            renderPreview();
-            return;
           }
-          const locations = (state.suppliers || []).filter(item => nrm(item.name) === nrm(entry.pickupName));
-          const preferred = locations.find(item => item.isCentral) || locations.find(item => nrm(item.pickupNote || item.note).includes('kozpont')) || locations[0] || null;
-          entry.supplierId = preferred?.id || '';
-          entry.pickupAddress = preferred?.address || '';
-          entry.pickupNote = preferred?.pickupNote || preferred?.note || '';
+          if (!asProject) {
+            const preferred = locations.find(item => item.isCentral) || locations.find(item => nrm(item.pickupNote || item.note).includes('kozpont')) || locations[0] || null;
+            entry.supplierId = preferred?.id || '';
+            entry.pickupAddress = preferred?.address || '';
+            entry.pickupNote = preferred?.pickupNote || preferred?.note || '';
+          }
         } else if (input.dataset.kind === 'supplier-address') {
           const supplier = (state.suppliers || []).find(item => nrm(item.name) === nrm(entry.pickupName) && nrm(item.address) === nrm(entry.pickupAddress));
           if (supplier) {
@@ -1972,6 +2001,7 @@ ${entry.subject || ''}`) || project;
     supplierSpecial,
     parsePdfItemsFromLines,
     blockingFields,
+    projectAddressFromHistoryV90,
     dropAddressSelect,
     supplierAddressSelect,
     applyBodyPickupSiteV79,
