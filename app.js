@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V83Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V85Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -541,6 +541,37 @@ window.setupMasterCombos = setupMasterCombos;
    a cég ÖSSZES telephelye látszik, gépelésre pedig szűkül. */
 function attachImportAddressCombos(root){
   const scope = root && root.querySelectorAll ? root : document;
+  scope.querySelectorAll('input[data-kind="drop-address"]:not([data-combo])').forEach(input => {
+    const card = input.closest('[data-entry-id]') || input.closest('article') || input.parentElement;
+    const nameField = card?.querySelector('[data-kind="project-name"]');
+    attachDataCombo(input, input.getAttribute('list') || '', () => {
+      const target = nameField?.value || '';
+      const key = norm(target);
+      const rows = [], seen = new Set();
+      const push = (address, note) => {
+        const k = norm(address);
+        if (!address || seen.has(k)) return;
+        seen.add(k);
+        rows.push({ label: address, note, search: `${address} ${target}` });
+      };
+      (state.suppliers || [])
+        .filter(item => item.active !== false && norm(item.name) === key && item.address)
+        .sort((a,b)=>(b.isCentral?1:0)-(a.isCentral?1:0)
+          ||String(a.address||'').localeCompare(String(b.address||''),'hu'))
+        .forEach(item => push(item.address, item.isCentral ? 'központ' : (item.site || 'telephely')));
+      const project = (state.projects || []).find(item => norm(item.name) === key);
+      if (project?.address) push(project.address, 'törzsadat');
+      const counts = new Map();
+      for (const order of state.orders || []) {
+        if (norm(order.projectName || '') !== key) continue;
+        const address = String(order.dropAddress || '').trim();
+        if (address) counts.set(address, (counts.get(address) || 0) + 1);
+      }
+      [...counts.entries()].sort((a,b)=>b[1]-a[1])
+        .forEach(([address, count]) => push(address, `korábbi fuvar · ${count}×`));
+      return rows;
+    }, () => { input.dispatchEvent(new Event('change', { bubbles: true })); });
+  });
   scope.querySelectorAll('input[data-kind="supplier-address"]:not([data-combo])').forEach(input => {
     const card = input.closest('[data-entry-id]') || input.closest('article') || input.parentElement;
     const nameField = card?.querySelector('[data-kind="supplier-name"]');

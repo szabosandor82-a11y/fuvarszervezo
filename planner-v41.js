@@ -1327,23 +1327,76 @@
     return `<input data-field="pickupAddress" data-kind="supplier-address" list="${htmlEsc(listId)}" value="${htmlEsc(entry.pickupAddress || '')}" placeholder="Válassz címet a beszállítói törzsből…"><datalist id="${htmlEsc(listId)}">${options.join('')}</datalist>`;
   }
 
+  /* V85 – A LERAKÓ CÍMJE IS VÁLASZTHATÓ AZ IMPORTBAN
+
+     A felrakónak eddig is volt cím-lenyílója, a lerakónak nem – ott sima
+     szövegmező állt. Ezért visszárunál nem lehetett a beszállító másik
+     telephelyét kiválasztani.
+
+     A kínálat ugyanaz, mint a fuvarűrlapon:
+       - ha a lerakó egy BESZÁLLÍTÓ (visszáru): a cég összes telephelye,
+         központ elöl
+       - ha PROJEKT: a törzsadat címe, alatta a korábbi fuvarokból ismertek */
+  function dropAddressSelect(entry) {
+    const name = nrm(entry.projectName || '');
+    const listId = `drop-addresses-${String(entry._id || 'entry').replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    const rows = [];
+    const seen = new Set();
+    const push = (address, note) => {
+      const key = nrm(address);
+      if (!address || seen.has(key)) return;
+      seen.add(key);
+      rows.push({ address, note });
+    };
+
+    const suppliers = (typeof state !== 'undefined' ? state.suppliers || [] : [])
+      .filter(item => item.active !== false && nrm(item.name) === name && item.address)
+      .sort((a, b) => Number(Boolean(b.isCentral)) - Number(Boolean(a.isCentral))
+        || String(a.address || '').localeCompare(String(b.address || ''), 'hu'));
+    for (const item of suppliers) push(item.address, item.isCentral ? 'Központ' : (item.site || 'telephely'));
+
+    const project = (typeof state !== 'undefined' ? state.projects || [] : [])
+      .find(item => nrm(item.name) === name);
+    if (project?.address) push(project.address, 'törzsadat');
+
+    // a korábbi fuvarokból ismert címek, gyakoriság szerint
+    const counts = new Map();
+    for (const order of (typeof state !== 'undefined' ? state.orders || [] : [])) {
+      if (nrm(order.projectName || '') !== name) continue;
+      const address = String(order.dropAddress || '').trim();
+      if (address) counts.set(address, (counts.get(address) || 0) + 1);
+    }
+    [...counts.entries()].sort((a, b) => b[1] - a[1])
+      .forEach(([address, count]) => push(address, `korábbi fuvar · ${count}×`));
+
+    const options = rows.map(row => `<option value="${htmlEsc(row.address)}">${htmlEsc(row.note)}</option>`).join('');
+    return `<input data-field="dropAddress" data-kind="drop-address" list="${htmlEsc(listId)}" value="${htmlEsc(entry.dropAddress || '')}" placeholder="Válassz címet vagy írd be"><datalist id="${htmlEsc(listId)}">${options}</datalist>`;
+  }
+
   function projectNameSelect(entry) {
     const projects = (typeof state !== 'undefined' ? state.projects || [] : []).slice()
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'hu'));
     if (entry.projectName && !projects.some(item => nrm(item.name) === nrm(entry.projectName))) {
       projects.unshift({ id: entry.projectId || '', name: entry.projectName, address: entry.dropAddress || '' });
     }
-    const suppliers = (typeof state !== 'undefined' ? state.suppliers || [] : [])
-      .filter(item => item.active !== false && item.name && item.address)
-      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'hu') || String(a.address).localeCompare(String(b.address), 'hu'));
-    const supplierOptions = suppliers.length ? [`<optgroup label="Visszáru · beszállítóhoz">`]
-      .concat(suppliers.map(item => {
-        const label = `${item.name} · ${item.address}`;
-        return `<option value="${htmlEsc(label)}" data-supplier-address="${htmlEsc(item.address)}" ${nrm(label) === nrm(entry.projectName) ? 'selected' : ''}>${htmlEsc(label)}</option>`;
-      }))
+    /* V84: a beszállítók CÉGENKÉNT egyszer, CÍM NÉLKÜL – ugyanúgy, mint a
+       fuvarűrlapon. A telephelyet a "Lerakó címe" mezőben lehet megadni.
+       Korábban telephelyenként, "cég · cím" alakban listáztuk őket, ezért
+       jelent meg a cím a lerakó mezőben. */
+    const companies = new Map();
+    for (const item of (typeof state !== 'undefined' ? state.suppliers || [] : [])) {
+      if (item.active === false || !item.name || !item.address) continue;
+      const key = nrm(item.name);
+      const current = companies.get(key);
+      if (!current || (item.isCentral && !current.isCentral)) companies.set(key, item);
+    }
+    const suppliers = [...companies.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), 'hu'));
+    const supplierOptions = suppliers.length ? ['<optgroup label="Visszáru · beszállítóhoz">']
+      .concat(suppliers.map(item => `<option value="${htmlEsc(item.name)}" data-supplier-address="${htmlEsc(item.address)}" ${nrm(item.name) === nrm(entry.projectName) ? 'selected' : ''}>${htmlEsc(item.name)}</option>`))
       .concat(['</optgroup>']) : [];
     const options = ['<option value="">Válassz projektet / lerakót…</option>'].concat(projects.map(item => {
-      const label = `${item.name || 'Névtelen projekt'}${item.address ? ` · ${item.address}` : ' · cím nélkül'}`;
+      // V84: a projekt is csak a nevével – a cím a külön mezőben látszik
+      const label = `${item.name || 'Névtelen projekt'}${item.address ? '' : ' · cím nélkül'}`;
       return `<option value="${htmlEsc(item.name || '')}" data-project-id="${htmlEsc(item.id || '')}" ${nrm(item.name) === nrm(entry.projectName) ? 'selected' : ''}>${htmlEsc(label)}</option>`;
     }));
     return `<select data-field="projectName" data-kind="project-name">${options.concat(supplierOptions).join('')}</select>`;
@@ -1402,7 +1455,7 @@
         <label>Felrakó neve${supplierNameSelect(entry)}</label>
         <label>Felrakó címe${supplierAddressSelect(entry)}</label>
         <label>Lerakó / projekt${projectNameSelect(entry)}</label>
-        <label>Lerakó címe<input data-field="dropAddress" value="${htmlEsc(entry.dropAddress)}" placeholder="A projekt kiválasztásakor automatikusan betöltődik"></label>
+        <label>Lerakó címe${dropAddressSelect(entry)}</label>
       </div>
       <label class="v65-manual-items ${entry.items.length ? '' : 'needed'}">
         ${entry.items.length ? 'Kiegészítő megjegyzés a tételekhez' : 'A bizonylatról nem sikerült tételt felismerni – írd be kézzel'}
@@ -1867,6 +1920,7 @@ ${entry.subject || ''}`) || project;
     supplierSpecial,
     parsePdfItemsFromLines,
     blockingFields,
+    dropAddressSelect,
     applyBodyPickupSiteV79,
     bytesToDataUrlV73,
     isPlaceholderOrderNo,
