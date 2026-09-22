@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V79Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V80Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -39,7 +39,7 @@ function syncScheduleDate(){
 }
 function bindDateParts(prefix){const y=$('#'+prefix+'Year'),m=$('#'+prefix+'Month'),d=$('#'+prefix+'Day');[[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next])=>{if(!el)return;el.addEventListener('input',()=>{el.value=el.value.replace(/\D/g,'').slice(0,max);if(el.value.length===max&&next){next.focus();next.select()}});el.addEventListener('keydown',e=>{if(e.key==='Backspace'&&!el.value){const prev=el===d?m:el===m?y:null;if(prev){e.preventDefault();prev.focus();prev.setSelectionRange(prev.value.length,prev.value.length)}}})})}
 function defaultVehicles(){return[{id:'v-mario',driverName:'Márió',name:'Dobozos 1',type:'3.5 T dobozos autó',homeCity:'Vác',active:true},{id:'v-patrik',driverName:'Patrik',name:'Dobozos 2',type:'3.5 T dobozos autó',homeCity:'Kispest',active:true},{id:'v-martin',driverName:'Martin',name:'Ponyvás',type:'3.5 T plató autó',homeCity:'Felcsút',active:true}]}
-function refreshMasterData(){if(state.masterDataVersion)return;state.recipients=(state.recipients?.length?state.recipients:(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i})));state.projects=(SEED_DATA.projects||[]).map((x,i)=>({...x,id:'p'+i,defaultRecipientId:''}));state.suppliers=(SEED_DATA.suppliers||[]).map((x,i)=>({...x,id:'s'+i,isCentral:!!x.site&&norm(x.site)==='kozpont',pickupNote:x.note||''}));state.projects.forEach(p=>{const r=state.recipients.find(x=>norm(x.project)===norm(p.name))||state.recipients.find(x=>norm(x.name)===norm(p.receiver));p.defaultRecipientId=r?.id||''});(state.orders||[]).forEach(o=>{const p=state.projects.find(x=>norm(x.name)===norm(o.projectName));if(p)o.projectId=p.id;const matches=state.suppliers.filter(x=>norm(x.name)===norm(o.pickupName));if(matches.length===1)o.supplierId=matches[0].id});state.aliases={projects:{},suppliers:{}};state.masterDataVersion='v14-20260717'}function load(){const raw=localStorage.getItem(KEY);if(raw){state=JSON.parse(raw);state.aliases=state.aliases||{projects:{},suppliers:{}};state.vehicles=state.vehicles||defaultVehicles();state.orders=state.orders||[];state.backlog=state.backlog||[];refreshMasterData();save(false);return}state.recipients=(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i}));state.vehicles=defaultVehicles();state.orders=[];refreshMasterData();save(false)}
+function refreshMasterData(){if(state.masterDataVersion)return;state.recipients=(state.recipients?.length?state.recipients:(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i})));state.projects=(SEED_DATA.projects||[]).map((x,i)=>({...x,id:'p'+i,defaultRecipientId:''}));state.suppliers=(SEED_DATA.suppliers||[]).map((x,i)=>({...x,id:'s'+i,isCentral:x.isCentral===true||(!!x.site&&norm(x.site)==='kozpont'),pickupNote:x.note||''}));state.projects.forEach(p=>{const r=state.recipients.find(x=>norm(x.project)===norm(p.name))||state.recipients.find(x=>norm(x.name)===norm(p.receiver));p.defaultRecipientId=r?.id||''});(state.orders||[]).forEach(o=>{const p=state.projects.find(x=>norm(x.name)===norm(o.projectName));if(p)o.projectId=p.id;const matches=state.suppliers.filter(x=>norm(x.name)===norm(o.pickupName));if(matches.length===1)o.supplierId=matches[0].id});state.aliases={projects:{},suppliers:{}};state.masterDataVersion='v14-20260717'}function load(){const raw=localStorage.getItem(KEY);if(raw){state=JSON.parse(raw);state.aliases=state.aliases||{projects:{},suppliers:{}};state.vehicles=state.vehicles||defaultVehicles();state.orders=state.orders||[];state.backlog=state.backlog||[];refreshMasterData();save(false);return}state.recipients=(SEED_DATA.recipients||[]).map((x,i)=>({...x,id:'r'+i}));state.vehicles=defaultVehicles();state.orders=[];refreshMasterData();save(false)}
 /* V57 – KÖZPONTI INTEGRITÁSI RÉTEG
 
    A fuvarokra több gyűjtemény is hivatkozik: a hátralék (forrás- és
@@ -191,7 +191,7 @@ function dropAllOrderAttachmentsV76(){
   return removed;
 }
 window.dropAllOrderAttachmentsV76=dropAllOrderAttachmentsV76;
-function save(renderNow=true){stampLocalChanges();reconcileState('mentés');try{if(!window.__cleanedLearnedV77){window.__cleanedLearnedV77=true;cleanupLearnedSuppliersV77();mergeDuplicateSitesV79()}}catch(error){console.warn('[V77] takarítás',error)}try{pruneOrderAttachmentsV73()}catch(error){console.warn('[V74] melléklet-takarítás',error)}saveStateToStorageV76();if(renderNow)render()}
+function save(renderNow=true){stampLocalChanges();reconcileState('mentés');try{if(!window.__cleanedLearnedV77){window.__cleanedLearnedV77=true;cleanupLearnedSuppliersV77();mergeDuplicateSitesV79();syncSeedSitesV80()}}catch(error){console.warn('[V77] takarítás',error)}try{pruneOrderAttachmentsV73()}catch(error){console.warn('[V74] melléklet-takarítás',error)}saveStateToStorageV76();if(renderNow)render()}
 function activeVehicles(){return state.vehicles.filter(v=>v.active)}
 function marioVehicle(){return activeVehicles().find(v=>norm(v.driverName).includes('mario'))||state.vehicles.find(v=>norm(v.driverName).includes('mario'))||null}
 function selectedDate(){return $('#workDate').value||today()}
@@ -756,6 +756,58 @@ window.dropTargetOptions=dropTargetOptions;
    A megtartott sor: az AKTÍV, azon belül a központ, végül a teljesebb
    írásmódú. A jelölések (központ, aktív) átöröklődnek, a rá hivatkozó
    fuvarok pedig átkötődnek. */
+/* V80 – A TÖRZSADAT JAVÍTÁSAI ELJUTNAK A MÁR HASZNÁLATBAN LÉVŐ GÉPEKRE
+
+   A refreshMasterData() azonnal kilép, ha a törzsadat egyszer már betöltődött.
+   Ez védi a kézi módosításokat, de azt is jelenti, hogy a kiadott javítások –
+   új központ-jelölés, hiányzó telephely – soha nem jutnak el a meglévő
+   telepítésekre. Emiatt maradt a Lambdánál az Akna utca akkor is, amikor a
+   törzsadatban már a Hengermalom volt a központ.
+
+   Ezért induláskor átvesszük a törzsadatból azt a KÉT dolgot, ami nem
+   felhasználói adat: a központ-jelölést és a hiányzó telephelyeket. A kézzel
+   felvitt sorokhoz és a saját címekhez nem nyúlunk. */
+function syncSeedSitesV80(){
+  const seed=(window.SEED_DATA||{}).suppliers||[];
+  if(!seed.length||!state.suppliers)return { flags:0, added:0 };
+  const keyOf=row=>`${norm(row.name)}|${norm(row.address)}`;
+  const byKey=new Map();
+  for(const su of state.suppliers)byKey.set(keyOf(su),su);
+
+  let flags=0, added=0;
+  for(const row of seed){
+    const seedCentral=row.isCentral===true||(!!row.site&&norm(row.site)==='kozpont');
+    const existing=byKey.get(keyOf(row));
+    if(existing){
+      if(!!existing.isCentral!==seedCentral){ existing.isCentral=seedCentral; flags++; }
+      if(!existing.address&&row.address)existing.address=row.address;
+      if(!existing.point&&row.point)existing.point=row.point.slice();
+      continue;
+    }
+    // a torzsadatban van, nalunk nincs: felvesszuk telephelykent
+    const sameName=state.suppliers.filter(su=>norm(su.name)===norm(row.name));
+    if(!sameName.length)continue;                 // egeszen uj ceg: nem eroltetjuk
+    const fresh={...row,id:uid(),isCentral:seedCentral};
+    state.suppliers.push(fresh);
+    byKey.set(keyOf(fresh),fresh);
+    added++;
+  }
+  // egy cegnel csak EGY kozpont maradhat
+  const groups=new Map();
+  for(const su of state.suppliers){
+    const k=norm(su.name);
+    if(!groups.has(k))groups.set(k,[]);
+    groups.get(k).push(su);
+  }
+  for(const rows of groups.values()){
+    const central=rows.filter(su=>su.isCentral);
+    for(const su of central.slice(1))su.isCentral=false;
+  }
+  if(flags||added)console.info('[V80] törzsadat-igazítás – jelölés:',flags,'új telephely:',added);
+  return { flags, added };
+}
+window.syncSeedSitesV80=syncSeedSitesV80;
+
 function mergeDuplicateSitesV79(){
   const addressKey=value=>String(value||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase()
     .replace(/\b(utca|u|ut|krt|korut)\b/g,'')

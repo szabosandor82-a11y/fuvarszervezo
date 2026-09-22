@@ -1,4 +1,4 @@
-/* Fuvarszervező V79
+/* Fuvarszervező V80
    Sáv-alapú szétosztás és lánc-optimalizált felrakási sorrend.
 
    Kemény szabályok:
@@ -23,7 +23,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '79';
+  const VERSION = '80';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   // Alapértelmezett indulási pontok. A törzsadat (SEED_DATA.vehicles) felülírja
   // őket, ha ott meg van adva a sofőr lakóhelye.
@@ -926,7 +926,7 @@
         if (Number.isFinite(metres)) fallback[from.index][to.index] = metres / 1000;
       }));
     } catch (error) {
-      console.warn('[V79] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
+      console.warn('[V80] Közúti mátrix nem elérhető; légvonalas tartalék használata.', error);
     }
     return fallback;
   }
@@ -1192,10 +1192,10 @@
       await persistOnlineV49();
       if (typeof render === 'function') render();
       const conflictText = result.conflicts.length ? `\nFigyelem: ${result.conflicts.length} felrakóhelyen egymással ütköző fix sofőrjelölés maradt.` : '';
-      alert(`Fuvarok V79 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
+      alert(`Fuvarok V80 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
       return result;
     } catch (error) {
-      console.error('[V79] Szétosztási hiba', error);
+      console.error('[V80] Szétosztási hiba', error);
       alert(`A fuvarok szétosztása közben hiba történt: ${error?.message || error}`);
       return null;
     }
@@ -1211,10 +1211,10 @@
       if (changed.length) throw new Error('Az optimalizálás sofőrt változtatott.');
       await persistOnlineV49();
       if (typeof render === 'function') render();
-      alert('V79 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
+      alert('V80 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
       return true;
     } catch (error) {
-      console.error('[V79] Optimalizálási hiba', error);
+      console.error('[V80] Optimalizálási hiba', error);
       alert(`Az optimalizálás közben hiba történt: ${error?.message || error}`);
       return false;
     }
@@ -1452,12 +1452,12 @@
     if (balanceButton) {
       balanceButton.onclick = event => { event.preventDefault(); return balanceActionV44(); };
       balanceButton.dataset.algorithmVersion = VERSION;
-      balanceButton.title = 'V79: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
+      balanceButton.title = 'V80: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
     }
     if (optimizeButton) {
       optimizeButton.onclick = event => { event.preventDefault(); return optimizeActionV44(); };
       optimizeButton.dataset.algorithmVersion = VERSION;
-      optimizeButton.title = 'V79: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
+      optimizeButton.title = 'V80: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
     }
     document.getElementById('clearAllMastersBtn')?.addEventListener('click', clearAllMasterDataV44);
     document.getElementById('loadBuiltInMastersBtn')?.addEventListener('click', loadBuiltInMasterDataV44);
@@ -1493,7 +1493,7 @@
   global.clearAllMasterDataV44 = clearAllMasterDataV44;
   global.loadBuiltInMasterDataV44 = loadBuiltInMasterDataV44;
 
-  global.V79Planner = {
+  global.V80Planner = {
     version: VERSION,
     canonicalAddress,
     locationKey,
@@ -1534,33 +1534,34 @@
     clearAllMasterDataV44,
     loadBuiltInMasterDataV44
   };
-  global.V78Planner = global.V79Planner;
-  global.V77Planner = global.V79Planner;
-  global.V76Planner = global.V79Planner;
-  global.V75Planner = global.V79Planner;
-  global.V74Planner = global.V79Planner;
-  global.V73Planner = global.V79Planner;
-  global.V72Planner = global.V79Planner;
-  global.V71Planner = global.V79Planner;
-  global.V70Planner = global.V79Planner;
-  global.V69Planner = global.V79Planner;
-  global.V66Planner = global.V79Planner;
-  global.V65Planner = global.V79Planner;
-  global.V64Planner = global.V79Planner;
-  global.V63Planner = global.V79Planner;
-  global.V62Planner = global.V79Planner;
-  global.V61Planner = global.V79Planner;
-  global.V60Planner = global.V79Planner;
-  global.V59Planner = global.V79Planner;
-  global.V58Planner = global.V79Planner;
-  global.V57Planner = global.V79Planner;
-  global.V56Planner = global.V79Planner;
-  global.V55Planner = global.V79Planner;
-  global.V54Planner = global.V79Planner;
-  global.V53Planner = global.V79Planner;
-  global.V50Planner = global.V79Planner;
-  global.V49Planner = global.V79Planner;
-  global.V44Planner = global.V79Planner;
+  global.V79Planner = global.V80Planner;
+  global.V78Planner = global.V80Planner;
+  global.V77Planner = global.V80Planner;
+  global.V76Planner = global.V80Planner;
+  global.V75Planner = global.V80Planner;
+  global.V74Planner = global.V80Planner;
+  global.V73Planner = global.V80Planner;
+  global.V72Planner = global.V80Planner;
+  global.V71Planner = global.V80Planner;
+  global.V70Planner = global.V80Planner;
+  global.V69Planner = global.V80Planner;
+  global.V66Planner = global.V80Planner;
+  global.V65Planner = global.V80Planner;
+  global.V64Planner = global.V80Planner;
+  global.V63Planner = global.V80Planner;
+  global.V62Planner = global.V80Planner;
+  global.V61Planner = global.V80Planner;
+  global.V60Planner = global.V80Planner;
+  global.V59Planner = global.V80Planner;
+  global.V58Planner = global.V80Planner;
+  global.V57Planner = global.V80Planner;
+  global.V56Planner = global.V80Planner;
+  global.V55Planner = global.V80Planner;
+  global.V54Planner = global.V80Planner;
+  global.V53Planner = global.V80Planner;
+  global.V50Planner = global.V80Planner;
+  global.V49Planner = global.V80Planner;
+  global.V44Planner = global.V80Planner;
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(bindV44, 0), { once: true });
