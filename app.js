@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V78Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V79Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -191,7 +191,7 @@ function dropAllOrderAttachmentsV76(){
   return removed;
 }
 window.dropAllOrderAttachmentsV76=dropAllOrderAttachmentsV76;
-function save(renderNow=true){stampLocalChanges();reconcileState('mentés');try{if(!window.__cleanedLearnedV77){window.__cleanedLearnedV77=true;cleanupLearnedSuppliersV77()}}catch(error){console.warn('[V77] takarítás',error)}try{pruneOrderAttachmentsV73()}catch(error){console.warn('[V74] melléklet-takarítás',error)}saveStateToStorageV76();if(renderNow)render()}
+function save(renderNow=true){stampLocalChanges();reconcileState('mentés');try{if(!window.__cleanedLearnedV77){window.__cleanedLearnedV77=true;cleanupLearnedSuppliersV77();mergeDuplicateSitesV79()}}catch(error){console.warn('[V77] takarítás',error)}try{pruneOrderAttachmentsV73()}catch(error){console.warn('[V74] melléklet-takarítás',error)}saveStateToStorageV76();if(renderNow)render()}
 function activeVehicles(){return state.vehicles.filter(v=>v.active)}
 function marioVehicle(){return activeVehicles().find(v=>norm(v.driverName).includes('mario'))||state.vehicles.find(v=>norm(v.driverName).includes('mario'))||null}
 function selectedDate(){return $('#workDate').value||today()}
@@ -467,9 +467,37 @@ function setupMasterCombos(){
 }
 window.setupMasterCombos = setupMasterCombos;
 
+/* V79 – AZ IMPORT CÍM MEZŐJE IS KERESŐS LENYÍLÓT KAP
+
+   Az import előnézetén a felrakó címe natív datalist volt. A böngésző az
+   ilyet a mezőben ÁLLÓ szövegre szűri, ezért ha már volt benne egy cím,
+   a lenyitáskor csak az az egy látszott – a cég többi telephelye nem.
+
+   Ugyanazt a keresős lenyílót adjuk neki, mint a fuvarűrlapon: lenyitáskor
+   a cég ÖSSZES telephelye látszik, gépelésre pedig szűkül. */
+function attachImportAddressCombos(root){
+  const scope = root && root.querySelectorAll ? root : document;
+  scope.querySelectorAll('input[data-kind="supplier-address"]:not([data-combo])').forEach(input => {
+    const card = input.closest('[data-entry-id]') || input.closest('article') || input.parentElement;
+    const nameField = card?.querySelector('[data-kind="supplier-name"]');
+    attachDataCombo(input, input.getAttribute('list') || '', () => {
+      const company = nameField?.value || '';
+      return (state.suppliers || [])
+        .filter(item => norm(item.name) === norm(company) && item.address)
+        .sort((a,b)=>(b.isCentral?1:0)-(a.isCentral?1:0)
+          ||String(a.address||'').localeCompare(String(b.address||''),'hu'))
+        .map(item => ({ label: item.address, search: `${item.address} ${item.site||''} ${item.name}`,
+          note: [item.isCentral ? 'központ' : item.site, item.pickupNote].filter(Boolean).join(' · '),
+          ref: item }));
+    }, () => { input.dispatchEvent(new Event('change', { bubbles: true })); });
+  });
+}
+window.attachImportAddressCombos = attachImportAddressCombos;
+
 function makeSearchableSelects(root){
   const scope = root && root.querySelectorAll ? root : document;
   scope.querySelectorAll('select:not([data-combo])').forEach(buildCombo);
+  attachImportAddressCombos(scope);
 }
 window.makeSearchableSelects = makeSearchableSelects;
 
@@ -718,6 +746,55 @@ window.dropTargetOptions=dropTargetOptions;
    Ez a takarítás CSAK a tanult sorokat nézi (learnedFromOrder). A törzsadatból
    származó beszállítókhoz nem nyúl. A rájuk hivatkozó fuvarokat átkötjük a
    helyes cégre, hogy semmi ne maradjon árván. */
+/* V79 – AZONOS TELEPHELY TÖBBSZÖR: ÖSSZEVONÁS FUTÁS KÖZBEN
+
+   Ugyanaz a cím kétféle írásmóddal külön sorként élt ("Akna u. 2-4." és
+   "Akna utca 2-4"), ezért a lenyílóban kétszer jelent meg. A törzsadatban
+   ezt már összevontuk, de a böngészőben tárolt korábbi állapotban még
+   megvan – ezért induláskor itt is elvégezzük.
+
+   A megtartott sor: az AKTÍV, azon belül a központ, végül a teljesebb
+   írásmódú. A jelölések (központ, aktív) átöröklődnek, a rá hivatkozó
+   fuvarok pedig átkötődnek. */
+function mergeDuplicateSitesV79(){
+  const addressKey=value=>String(value||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase()
+    .replace(/\b(utca|u|ut|krt|korut)\b/g,'')
+    .replace(/(\d+)\s*[\/-]?\s*([a-z])(?![a-z0-9])/g,'$1$2')
+    .replace(/[^a-z0-9]/g,'');
+  const groups=new Map();
+  for(const su of state.suppliers||[]){
+    if(!su.address)continue;
+    const key=`${norm(su.name)}|${addressKey(su.address)}`;
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(su);
+  }
+  const merged=[];
+  for(const rows of groups.values()){
+    if(rows.length<2)continue;
+    rows.sort((a,b)=>
+      (a.active===false?1:0)-(b.active===false?1:0)
+      ||(b.isCentral?1:0)-(a.isCentral?1:0)
+      ||String(b.address||'').length-String(a.address||'').length);
+    const keep=rows[0];
+    for(const row of rows.slice(1)){
+      for(const field of ['pickupNote','site','point','phone','email','verified']){
+        if(!keep[field]&&row[field])keep[field]=row[field];
+      }
+      if(row.isCentral)keep.isCentral=true;
+      if(row.active!==false)keep.active=true;
+      for(const order of state.orders||[]){
+        if(String(order.supplierId||'')===String(row.id))order.supplierId=keep.id;
+      }
+      merged.push(`${row.name} · ${row.address}`);
+    }
+    const dropIds=new Set(rows.slice(1).map(row=>row.id));
+    state.suppliers=(state.suppliers||[]).filter(su=>!dropIds.has(su.id));
+  }
+  if(merged.length)console.info('[V79] összevont telephely:',merged.length,merged.slice(0,5));
+  return merged;
+}
+window.mergeDuplicateSitesV79=mergeDuplicateSitesV79;
+
 function cleanupLearnedSuppliersV77(){
   const suppliers=state.suppliers||[];
   const seeded=suppliers.filter(su=>!su.learnedFromOrder);

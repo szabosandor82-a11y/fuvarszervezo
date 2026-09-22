@@ -213,6 +213,43 @@
     });
   }
 
+  /* V79 – A LEVÉL MEGNEVEZHETI A TELEPHELYET
+
+     Előfordul, hogy a bizonylaton az egyik telephely szerepel, a kísérő
+     levélben viszont a másik: "holnap felvesszük nálatok a Hengermalomban".
+     Ilyenkor a levél a frissebb és pontosabb információ – az írja le, hova
+     megy ténylegesen az autó.
+
+     Csak UGYANANNAK a cégnek a telephelyei közül válthatunk, és csak akkor,
+     ha a levélben szereplő utcanév egyértelműen egy másik telephelyre mutat.
+     A váltást jelezzük, hogy az előnézetben látható és felülbírálható legyen. */
+  function applyBodyPickupSiteV79(pickup, body, subject) {
+    if (!pickup?.name || typeof state === 'undefined') return null;
+    const text = nrm(`${body || ''} ${subject || ''}`);
+    if (!text) return null;
+    const sites = (state.suppliers || []).filter(item =>
+      item.active !== false && nrm(item.name) === nrm(pickup.name) && item.address);
+    if (sites.length < 2) return null;
+
+    // helynevek és általános szavak, amik nem azonosítanak telephelyet
+    const NOISE = new Set(['budapest','budapesti','kerulet','ker','utca','ut','uti','ter','koz',
+      'korut','krt','hrsz','magyarorszag','epulet','emelet','dulo','fasor','sor','park','telep']);
+    const streetOf = site => nrm(site.address).split(' ')
+      .find(token => token.length >= 5 && !/^\d+$/.test(token) && !NOISE.has(token)) || '';
+    const current = streetOf(pickup);
+    let found = null;
+    for (const site of sites) {
+      const street = streetOf(site);
+      if (!street || street === current) continue;
+      // szohatar-vizsgalat regex nelkul: a szo eleje vagy szokoz elozze meg
+      const at = text.indexOf(street);
+      const boundary = at === 0 || (at > 0 && text[at - 1] === " ");
+      if (at >= 0 && boundary) { found = site; break; }
+    }
+    if (!found) return null;
+    return { site: found, note: `A levél a(z) ${found.address} telephelyet nevezi meg` };
+  }
+
   function applyBodyScopeV60(items, body, subject) {
     const result = { items, note: '', narrowed: false, backlogOnly: false };
     if (!items || items.length < 2) return result;      // egytételes bizonylatot nincs mit szűkíteni
@@ -552,10 +589,21 @@
     const suppliers = typeof state !== 'undefined' ? state.suppliers || [] : [];
     const explicit = extractExplicitPickup(sourceText);
     if (explicit?.name && explicit?.address) {
+      /* V79 – A BIZONYLATRÓL CSAK A CÉGNÉV SZÁMÍT, A CÍM A TÖRZSADATBÓL JÖN
+
+         Eddig a papíron álló cím döntött, ezért a Lambda az Akna utcát kapta,
+         ha a bizonylatra azt nyomtatták – holott az anyagot a Hengermalomban
+         adják ki. A cím a ti nyilvántartásotokban van karbantartva, nem a
+         beszállító bizonylatán.
+
+         Ezért: a cégnevet a papírról olvassuk, a telephelyet a törzsadat
+         KÖZPONTI jelölése adja. Ettől a levél szövege (V79) és a kézi
+         átírás továbbra is eltérhet. Ha a cégnek nincs megjelölt központja,
+         marad a régi, címre épülő keresés. */
       const sameName = suppliers.filter(item => nrm(item.name) === nrm(explicit.name));
-      const master = suppliers.find(item => nrm(item.name) === nrm(explicit.name) && nrm(item.address) === nrm(explicit.address))
+      const master = sameName.find(item => item.isCentral)
+        || suppliers.find(item => nrm(item.name) === nrm(explicit.name) && nrm(item.address) === nrm(explicit.address))
         || suppliers.find(item => nrm(item.address) === nrm(explicit.address))
-        || sameName.find(item => item.isCentral)
         || sameName[0]
         || null;
       if (master) return { id: master.id || '', name: master.name || explicit.name, address: master.address || '', pickupNote: master.pickupNote || master.note || explicit.pickupNote || '', phone: master.phone || explicit.phone || '', email: master.email || explicit.email || '', reason: 'levél/PDF felrakó biztos törzsadat-egyezéssel', autoMaster: false };
@@ -586,17 +634,39 @@
       let score = supplierScore(supplier, sourceNorm);
       if (leadHit) score += 12;
       if (wantsCentral && supplier.isCentral) score += 25;
-      return { supplier, score, strict: exactName || allDistinctiveTokens || leadHit, leadHit };
+      // V79: a "biztos" azonosítás a teljes név vagy minden jellemző szó
+      // egyezése. A puszta vezetőszó-találat bizonytalan.
+      return { supplier, score, strict: exactName || allDistinctiveTokens || leadHit,
+        confident: exactName || allDistinctiveTokens, leadHit };
     }).filter(candidate => candidate.strict).sort((a, b) => b.score - a.score || Number(Boolean(b.supplier.isCentral)) - Number(Boolean(a.supplier.isCentral)));
     if (!candidates.length) return null;
     // Ha csak a vezető szó egyezik és két KÜLÖNBÖZŐ cég is szóba jön, nem
     // találgatunk: ellenőrzendőnek jelöljük.
     const topScore = candidates[0].score;
+    /* V79: amit nem ismerünk fel BIZTOSAN, azt inkább üresen hagyjuk – de csak
+       akkor, ha tényleg van mit eltéveszteni. A rövidített név ("Gienger kp",
+       "Lambda") egyértelmű, ha csak EGY cég jöhet szóba; ilyenkor kitöltjük.
+       Ha viszont több különböző cég is illeszkedik, és a teljes név nem
+       egyezik egyikkel sem, a találgatás rosszabb, mint az üres mező: azt
+       kitöltöd, a rossz értéket viszont észre sem veszed. */
+    const allCompanies = new Set(candidates.map(item => leadWordOf(item.supplier.name)));
+    if (!candidates[0].confident && allCompanies.size > 1) {
+      return { id: '', name: '', address: '', pickupNote: '',
+        detectedName: candidates[0].supplier.name || '',
+        reason: 'a beszállító nem azonosítható biztosan, add meg kézzel', autoMaster: false };
+    }
     const tiedCompanies = new Set(candidates.filter(item => item.score === topScore).map(item => leadWordOf(item.supplier.name)));
     if (tiedCompanies.size > 1) {
       return { id: '', name: '', address: '', pickupNote: '', detectedName: sourceText.slice(0, 60), reason: 'több beszállító is illeszkedik, ellenőrizd', autoMaster: false, unmatchedMaster: true };
     }
-    const winner = candidates[0].supplier;
+    /* V79: a bizonylatról a CÉGNÉV számít, a telephelyet a törzsadat KÖZPONTI
+       jelölése adja. A papírra nyomtatott cím nem dönt – azt a beszállító
+       tölti ki, ti viszont a saját nyilvántartásotokban tartjátok karban,
+       hol veszitek fel az anyagot. Ha nincs megjelölt központ, marad a
+       pontozás szerinti telephely. */
+    const scored = candidates[0].supplier;
+    const sameCompany = suppliers.filter(item => nrm(item.name) === nrm(scored.name));
+    const winner = sameCompany.find(item => item.isCentral) || scored;
     return { id: winner.id || '', name: winner.name || '', address: winner.address || '', pickupNote: winner.pickupNote || winner.note || '', phone: winner.phone || '', email: winner.email || '', reason: `biztos törzsadat-egyezés (${candidates[0].score})`, autoMaster: false };
   }
 
@@ -620,7 +690,12 @@
       return { supplier, score, strict: exactName || allDistinctiveTokens || (/niczuk/.test(nameNorm) && /niczuk/.test(sourceNorm)) };
     }).filter(candidate => candidate.strict).sort((a, b) => b.score - a.score || Number(Boolean(b.supplier.isCentral)) - Number(Boolean(a.supplier.isCentral)) || Number(Boolean(b.supplier.address)) - Number(Boolean(a.supplier.address)));
     if (!candidates.length) return null;
-    const winner = candidates[0].supplier;
+    /* V79: a fejlécből a CÉGNÉV számít, a telephelyet a törzsadat központi
+       jelölése adja – ugyanaz a szabály, mint a bestSupplier-ben. */
+    const scored = candidates[0].supplier;
+    const sameCompany = (typeof state !== 'undefined' ? state.suppliers || [] : [])
+      .filter(item => nrm(item.name) === nrm(scored.name));
+    const winner = sameCompany.find(item => item.isCentral) || scored;
     return {
       id: winner.id || '',
       name: winner.name || '',
@@ -657,6 +732,24 @@
       .sort((a, b) => b.score - a.score || Number(Boolean(b.project.address)) - Number(Boolean(a.project.address)));
     if (!candidates.length || candidates[0].score < 8) {
       return hint ? { id: '', name: hint, address: '', reason: 'projekt a fájlnévből; törzsadat-egyezés nincs' } : null;
+    }
+    /* V79 – BIZONYTALAN PROJEKT: INKÁBB ÜRES
+
+       A 8 pontos küszöb gyenge egyezésnél is elfogadott: néhány rövid szó
+       véletlen találata elég volt. A rossz projekt rosszabb, mint az üres
+       mező – az üreset kitöltöd, a rosszat viszont észre sem veszed, és az
+       anyag más építkezésre megy.
+
+       Biztosnak azt tekintjük, ha a teljes projektnév szerepel a szövegben
+       vagy a fájlnévben (35, illetve 30 pont), vagy ha MINDEN jellemző szava
+       megvan (12 pont a záró jutalom). Emellé kell, hogy a második helyezett
+       érezhetően hátrébb legyen – különben két projekt között találgatnánk. */
+    const topScore = candidates[0].score;
+    const runnerUp = candidates[1]?.score ?? 0;
+    const strongProject = topScore >= 30 || (topScore >= 20 && topScore - runnerUp >= 8);
+    if (!strongProject) {
+      return { id: '', name: hint || '', address: '',
+        reason: `a projekt nem azonosítható biztosan (${candidates[0].project.name}), add meg kézzel` };
     }
     const winner = candidates[0].project;
     return { id: winner.id || '', name: winner.name || hint, address: winner.address || '', defaultRecipientId: winner.defaultRecipientId || '', reason: `projekt törzsadat-egyezés (${candidates[0].score})` };
@@ -951,6 +1044,8 @@
     const bodyScope = applyBodyScopeV60(items, body, subject);
     if (bodyScope.note) reasons.push(bodyScope.note);
     items = bodyScope.items;
+    // V79: a levél megnevezhet másik telephelyet ugyanannál a cégnél
+    let pickupSite = null;
 
     // V63: a belső rendelés (BR0) szerkezetileg ugyanaz, mint a raktárközi:
     // Forrás raktár / Cél raktár hasáb. A felrakó a központi raktár, a lerakó
@@ -1000,6 +1095,12 @@
     if (!pickup?.name) warnings.push('Felrakó nem azonosítható');
     if (pickupRole === 'supplier' && (!pickup?.id || pickup?.unmatchedMaster)) warnings.push(`Felrakó nincs a beszállítói törzsadatokban${pickup?.detectedName ? `: ${pickup.detectedName}` : ''}`);
     if (!pickup?.address) warnings.push('Felrakó címe hiányzik');
+    /* V79: a levélben megnevezett telephely felülírja a bizonylatét, de csak
+       ugyanannál a cégnél. A váltást jelezzük az előnézeten. */
+    if (pickupRole === 'supplier') {
+      const bodySite = applyBodyPickupSiteV79(pickup, body, subject);
+      if (bodySite) { pickupSite = bodySite.site; reasons.push(bodySite.note); }
+    }
     if (!drop?.name) warnings.push('Lerakó/projekt nem azonosítható');
     if (!drop?.address) warnings.push('Lerakó címe hiányzik a törzsadatból');
     if (!items.length) warnings.push('Tételek nem olvashatók automatikusan');
@@ -1009,7 +1110,7 @@
     return {
       _id: id(), approved: true, category, sourceName, subject: subject || '', pdfName, attachmentNames,
       scheduleDate, scheduleDateManual: false, requestedDate: requested, orderNo, sourceOrderNos, fullOrderRefs: refs.map(ref => ref.full), orderType, isReturn: returnMode,
-      pickupName: pickup?.name || '', pickupAddress: pickup?.address || '', supplierId: pickupRole === 'supplier' ? (pickup?.id || '') : '', pickupNote: pickup?.pickupNote || '', pickupRole,
+      pickupName: pickupSite?.name || pickup?.name || '', pickupAddress: pickupSite?.address || pickup?.address || '', supplierId: pickupRole === 'supplier' ? (pickupSite?.id || pickup?.id || '') : '', pickupNote: pickup?.pickupNote || '', pickupRole,
       projectName: drop?.name || hint || '', projectId: dropRole === 'project' ? (drop?.id || '') : '', dropAddress: drop?.address || '', dropRole,
       returnSourceProjectId: returnMode ? (project?.id || '') : '', returnDestinationSupplierId: returnMode ? (supplier?.id || '') : '',
       newSupplierData: null,
@@ -1364,9 +1465,26 @@
             entry.pickupNote = supplier.pickupNote || supplier.note || '';
             entry.newSupplierData = null;
           } else {
-            entry.supplierId = '';
-            entry.pickupAddress = '';
-            entry.pickupNote = '';
+            /* V79: ha a beírt cím nem talál PONTOSAN a törzsadatra, eddig
+               KIÜRÍTETTÜK a mezőt – ezért nem lehetett átírni a felrakó
+               címét az importnál. Mostantól megtartjuk, amit beírtál.
+
+               Előbb megpróbáljuk a cég telephelyei közül a részleges
+               egyezést ("hengermalom" → Hengermalom út 47A); ha az sincs,
+               a beírt szöveg marad, egyedi címként. */
+            // a házszámot egybe olvassuk, hogy a "47/a" is találjon a "47A"-ra
+            const joinHouse = value => String(value || '').replace(/(\d+)\s*[\/\-]?\s*([a-z])(?![a-z0-9])/g, '$1$2');
+            const typed = joinHouse(nrm(entry.pickupAddress));
+            const sites = (state.suppliers || []).filter(item => nrm(item.name) === nrm(entry.pickupName));
+            const partial = typed && sites.find(item => joinHouse(nrm(item.address)).includes(typed));
+            if (partial) {
+              entry.supplierId = partial.id || '';
+              entry.pickupAddress = partial.address || '';
+              entry.pickupNote = partial.pickupNote || partial.note || '';
+            } else {
+              entry.supplierId = '';
+              entry.pickupNote = '';
+            }
             entry.newSupplierData = null;
           }
         } else if (input.dataset.kind === 'project-name') {
@@ -1749,6 +1867,7 @@ ${entry.subject || ''}`) || project;
     supplierSpecial,
     parsePdfItemsFromLines,
     blockingFields,
+    applyBodyPickupSiteV79,
     bytesToDataUrlV73,
     isPlaceholderOrderNo,
     meaningfulOrderNos,
