@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V82Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V83Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -1093,30 +1093,50 @@ $('#orderForm').onsubmit=e=>{e.preventDefault();if(!syncScheduleDate())return al
      lehetne szerkeszteni. */
   manualItems:$('#orderNote').value.trim(),
   items:old?.items||[],completed:old?.completed||false,sequence:old?.sequence||999};const i=state.orders.findIndex(x=>x.id===o.id);if(i>=0)state.orders[i]=o;else state.orders.push(o);$('#orderDialog').close();save()}
+/* V83: a felrakó oldalon UGYANEZ a szabály – a cím csak akkor frissül, ha
+   MÁSIK céget vagy projektet választasz, nem minden billentyűleütésnél. */
+let lastPickupTargetKeyV83='';
 $('#supplierSearch').oninput=()=>{
   // V62: a felrakó lehet projekt is (visszáru forrása).
   const target=findPickupTargetByInput($('#supplierSearch').value);
+  const pickupKey=target?`${target.kind}:${norm(target.ref?.name||target.name||'')}`:'';
+  const pickupChanged=pickupKey!==lastPickupTargetKeyV83;
+  lastPickupTargetKeyV83=pickupKey;
   if(target?.kind==='project'){
     $('#supplierId').value='';
-    $('#pickupAddress').value=target.address||'';
+    if(pickupChanged||!$('#pickupAddress').value)$('#pickupAddress').value=target.address||'';
     $('#pickupNote').value='';
     return;
   }
-  const s=findSupplierByInput($('#supplierSearch').value);$('#supplierId').value=s?.id||'';fillSupplierAddressList(s?.name||$('#supplierSearch').value);if(s){$('#pickupAddress').value=s.address||'';$('#pickupNote').value=s.pickupNote||''}else{$('#pickupAddress').value='';$('#pickupNote').value=''}};
+  const s=findSupplierByInput($('#supplierSearch').value);$('#supplierId').value=s?.id||'';fillSupplierAddressList(s?.name||$('#supplierSearch').value);if(s){if(pickupChanged||!$('#pickupAddress').value)$('#pickupAddress').value=s.address||'';$('#pickupNote').value=s.pickupNote||''}else{$('#pickupAddress').value='';$('#pickupNote').value=''}};
 $('#pickupAddress').onchange=()=>{const current=findSupplierByInput($('#supplierSearch').value),name=current?.name||$('#supplierSearch').value;const match=state.suppliers.find(s=>norm(s.name)===norm(name)&&norm(s.address)===norm($('#pickupAddress').value));if(match){$('#supplierId').value=match.id;$('#supplierSearch').value=match.name;$('#pickupNote').value=match.pickupNote||match.note||''}};
+/* V83 – A LERAKÓ CÍMÉT NEM ÍRJUK FELÜL MINDEN BILLENTYŰLEÜTÉSNÉL
+
+   Ez a kezelő minden gépelésnél újraszámolta a lerakó címét, ezért amit a
+   cím mezőben kiválasztottál, azonnal visszaíródott a törzsadatira. Így a
+   telephelyet nem lehetett megváltoztatni.
+
+   A felrakó oldalon nincs ilyen kezelő – ott a cím csak akkor változik, ha
+   MÁSIK céget vagy projektet választasz. Most a lerakó is így működik:
+   megjegyezzük, melyik célhoz tartozik a mostani cím, és csak akkor írjuk
+   felül, ha a cél tényleg megváltozott. */
+let lastDropTargetKeyV83='';
 $('#projectSearch').oninput=()=>{
   // V60: a lerakó lehet beszállítói telephely is (visszáru, bérelt eszköz).
   const target=findDropTargetByInput($('#projectSearch').value);
+  const targetKey=target?`${target.kind}:${norm(target.ref?.name||target.name||'')}`:'';
+  const targetChanged=targetKey!==lastDropTargetKeyV83;
+  lastDropTargetKeyV83=targetKey;
   if(target?.kind==='supplier'){
     $('#projectId').value='';
     setCustomProjectMode(true);
-    $('#dropAddress').value=target.address||'';
+    if(targetChanged||!$('#dropAddress').value)$('#dropAddress').value=target.address||'';
     $('#recipientId').innerHTML='<option value="">Egyedi átvevő</option>';
     $('#recipientName').value=target.ref.name||'';
     $('#recipientPhone').value='';$('#recipientEmail').value='';
     return;
   }
-  const p=findProjectByInput($('#projectSearch').value);$('#projectId').value=p?.id||'';setCustomProjectMode(!p);if(p){$('#dropAddress').value=p.address||'';$('#recipientId').innerHTML=recipientOptions(p.name,p.defaultRecipientId);const r=state.recipients.find(x=>x.id===p.defaultRecipientId);$('#recipientName').value=r?.name||'';$('#recipientPhone').value=r?.phone||p.phone||'';$('#recipientEmail').value=r?.email||''}else{$('#recipientId').innerHTML='<option value="">Egyedi átvevő</option>'}};
+  const p=findProjectByInput($('#projectSearch').value);$('#projectId').value=p?.id||'';setCustomProjectMode(!p);if(p){if(targetChanged||!$('#dropAddress').value)$('#dropAddress').value=p.address||'';$('#recipientId').innerHTML=recipientOptions(p.name,p.defaultRecipientId);const r=state.recipients.find(x=>x.id===p.defaultRecipientId);$('#recipientName').value=r?.name||'';$('#recipientPhone').value=r?.phone||p.phone||'';$('#recipientEmail').value=r?.email||''}else{$('#recipientId').innerHTML='<option value="">Egyedi átvevő</option>'}};
 $('#recipientId').onchange=()=>{const r=state.recipients.find(x=>x.id===$('#recipientId').value);$('#recipientName').value=r?.name||$('#recipientName').value||'';$('#recipientPhone').value=r?.phone||'';$('#recipientEmail').value=r?.email||''};
 function deleteOne(id){const o=state.orders.find(x=>x.id===id);if(o&&confirm(`Törlöd ezt a fuvart?\n${o.orderNo} · ${o.projectName||o.dropAddress}`)){state.orders=state.orders.filter(x=>x.id!==id);save()}}
 function deleteAll(){const date=selectedDate(),count=state.orders.filter(o=>o.scheduleDate===date).length;if(!count)return alert('Az aktuális napon nincs törölhető fuvar.');if(confirm(`Biztosan törölni szeretnéd a(z) ${date} nap összes (${count}) fuvarját?`)&&prompt('Írd be: TÖRLÉS')?.toUpperCase()==='TÖRLÉS'){state.orders=state.orders.filter(o=>o.scheduleDate!==date);save()}}
