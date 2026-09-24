@@ -510,7 +510,7 @@
         <div class="bubble-main-line order-number-line"><b>Rendelésszám:</b><span>${escHtml(orderNos.join(', ') || 'Nincs megadva')}</span></div>
         <div class="tags"><span class="tag">${group.orders.length} rendelés</span><span class="tag">${itemCount} tétel</span>${deliveryPhotoCount(group) ? `<span class="tag delivery-tag" title="A sofőr feltöltötte a szállítólevelet">Szállítólevél · ${deliveryPhotoCount(group)}</span>` : ''}${longReasons.map(reason => `<span class="tag long">${escHtml(reason)}</span>`).join('')}${pinned ? '<span class="tag pin-tag">Rögzítve</span>' : ''}${fullLoad ? '<span class="tag full-load-tag">Teljes autó</span>' : ''}${resolved ? '<span class="tag resolved-tag">✓ Elintézve</span>' : ''}${options.ungrouped && (options.samePickupCount || 0) > 1 ? '<span class="tag ungrouped-tag">Külön mozgatható</span>' : ''}</div>
         ${manualItemsOfGroup(group) ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${escHtml(manualItemsOfGroup(group))}</div>` : ''}
-        <div class="bubble-actions"><button onclick="editOrder('${escHtml(first.id)}')">Szerkesztés</button><button class="secondary" title="Visszaszállítás: a projekt lesz a felrakó, a beszállító a lerakó" onclick="returnOrder('${escHtml(first.id)}')">↩ Visszáru</button><button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button>${group.orders.some(hasOutlookSource) ? `<button onclick="openSourceMail('${escHtml((group.orders.find(hasOutlookSource) || first).id)}')">Csatolmány</button>` : ''}<button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button><button class="secondary ${deliveryPhotoCount(group) ? 'has-photos' : ''}" title="${deliveryPhotoCount(group) ? `${deliveryPhotoCount(group)} feltöltött szállítólevél-fotó` : 'Még nincs feltöltött fotó'}" onclick="openMediaGallery('${escHtml(ids)}')">📎 Mentett fotók${deliveryPhotoCount(group) ? ` (${deliveryPhotoCount(group)})` : ''}</button></div>
+        <div class="bubble-actions"><button onclick="editOrder('${escHtml(first.id)}')">Szerkesztés</button><button class="secondary" title="Visszaszállítás: a projekt lesz a felrakó, a beszállító a lerakó" onclick="returnOrder('${escHtml(first.id)}')">↩ Visszáru</button>${companyMoveControl(group, vehicleId)}<button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button>${group.orders.some(hasOutlookSource) ? `<button onclick="openSourceMail('${escHtml((group.orders.find(hasOutlookSource) || first).id)}')">Csatolmány</button>` : ''}<button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button><button class="secondary ${deliveryPhotoCount(group) ? 'has-photos' : ''}" title="${deliveryPhotoCount(group) ? `${deliveryPhotoCount(group)} feltöltött szállítólevél-fotó` : 'Még nincs feltöltött fotó'}" onclick="openMediaGallery('${escHtml(ids)}')">📎 Mentett fotók${deliveryPhotoCount(group) ? ` (${deliveryPhotoCount(group)})` : ''}</button></div>
         <button class="complete-button ${complete ? 'done' : ''}" onclick="v37ToggleGroupComplete('${escHtml(ids)}')">${complete ? '✓' : '○'}</button>
         <button class="trash" onclick="v33DeleteGroup('${escHtml(ids)}')">🗑</button>
       </article>
@@ -581,7 +581,7 @@
     const map = focusMap, date = selectedDate();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
     let events = state.routePlans?.[selectedDate()]?.[vehicleId] || [];
-    const currentPlanner = global.V91Planner || global.V65Planner || global.V64Planner;
+    const currentPlanner = global.V92Planner || global.V65Planner || global.V64Planner;
     const snapshot = currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
     const isCurrent = () => focusMap === map && selectedDate() === date
       && snapshot === currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
@@ -690,6 +690,87 @@
       });
     });
   }
+
+  /* V92 – EGY BESZÁLLÍTÓ ÖSSZES AZNAPI FUVARA EGY SOFŐRHÖZ
+
+     A húzás eddig is vitte magával az azonos TELEPHELYRŐL induló fuvarokat,
+     de a cég másik telephelye külön maradt, és húzni kellett hozzá.
+
+     Ez a művelet a CÉG összes aznapi fuvarát átteszi a választott sofőrhöz,
+     telephelytől függetlenül – például minden Lambda-fuvart Martinhoz, akkor
+     is, ha közben a Hengermalom Máriónál, az Akna utca Patriknál volt.
+
+     Amit NEM mozgat: az elintézett hátralékokat és a már kész fuvarokat –
+     azok a helyükön maradnak, mert ott már megtörtént a munka. */
+  /* A sofőrválasztó: csak akkor jelenik meg, ha van hova mozgatni, és csak
+     azokat a sofőröket kínálja, akiknél a cég NEM teljes egészében van már. */
+  function companyMoveControl(group, currentVehicleId) {
+    const seed = (group.orders || [])[0];
+    if (!seed) return '';
+    const related = companyOrdersOnDay(seed);
+    if (related.length < 2) return '';                      // egy fuvarnál a húzás is elég
+    const elsewhere = related.filter(order => order.vehicleId !== currentVehicleId).length;
+    const drivers = activeVehicles().filter(vehicle => vehicle.id !== currentVehicleId);
+    if (!drivers.length) return '';
+    const ids = (group.orders || []).map(order => order.id).join(',');
+    const label = elsewhere
+      ? `Mind a ${related.length} ${seed.pickupName} fuvar ide` : `Mind a ${related.length} ${seed.pickupName} fuvar`;
+    return `<select class="company-move" title="${escHtml(seed.pickupName)}: az aznapi összes fuvar áthelyezése egy sofőrhöz"
+      onchange="if(this.value){moveCompanyOrdersToDriver('${escHtml(ids)}',this.value);this.value=''}">
+      <option value="">${escHtml(label)} →</option>
+      ${drivers.map(vehicle => `<option value="${escHtml(vehicle.id)}">${escHtml(vehicle.driverName || vehicle.name || 'sofőr')}</option>`).join('')}
+    </select>`;
+  }
+
+  function companyOrdersOnDay(seedOrder) {
+    if (!seedOrder) return [];
+    const company = nrm(seedOrder.pickupName || '');
+    if (!company) return [];
+    return (state.orders || []).filter(order =>
+      order.scheduleDate === seedOrder.scheduleDate
+      && nrm(order.pickupName || '') === company
+      && !order.completed
+      && !isResolvedBacklogOrder(order));
+  }
+
+  function moveCompanyOrdersToDriver(seedIds, targetVehicleId) {
+    const ids = Array.isArray(seedIds) ? seedIds.filter(Boolean) : String(seedIds || '').split(',').filter(Boolean);
+    const seed = ids.map(id => (state.orders || []).find(order => order.id === id)).find(Boolean);
+    if (!seed || !targetVehicleId) return 0;
+    const related = companyOrdersOnDay(seed);
+    if (!related.length) return 0;
+
+    const date = seed.scheduleDate;
+    const relatedIds = new Set(related.map(order => order.id));
+    related.forEach(order => { order.vehicleId = targetVehicleId; });
+
+    // a cég fuvarjai egymás mellé kerülnek, telephelyenként csoportosítva
+    const ordered = related.slice().sort((a, b) =>
+      String(a.pickupAddress || '').localeCompare(String(b.pickupAddress || ''), 'hu')
+      || String(a.orderNo || '').localeCompare(String(b.orderNo || ''), 'hu'));
+    const others = (state.orders || []).filter(order => order.scheduleDate === date
+      && order.vehicleId === targetVehicleId && !relatedIds.has(order.id))
+      .sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
+    others.push(...ordered);
+    others.forEach((order, index) => { order.sequence = index + 1; });
+
+    for (const vehicle of activeVehicles()) {
+      if (vehicle.id === targetVehicleId) continue;
+      (state.orders || []).filter(order => order.scheduleDate === date && order.vehicleId === vehicle.id)
+        .sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999))
+        .forEach((order, index) => { order.sequence = index + 1; });
+    }
+    save();
+    if (typeof renderRoutes === 'function') setTimeout(renderRoutes, 0);
+    return related.length;
+  }
+
+  global.moveCompanyOrdersToDriver = (seedIds, vehicleId) => {
+    const moved = moveCompanyOrdersToDriver(seedIds, vehicleId);
+    if (!moved && typeof alert === 'function') alert('Nincs áthelyezhető fuvar ehhez a beszállítóhoz ezen a napon.');
+    return moved;
+  };
+  global.companyOrdersOnDay = companyOrdersOnDay;
 
   function moveSupplierOrdersTogether(seedIds, targetVehicleId, anchorSequence = null) {
     const ids = Array.isArray(seedIds) ? seedIds.filter(Boolean) : String(seedIds || '').split(',').filter(Boolean);
@@ -808,7 +889,7 @@
         // útvonalterv épül újra a kézi sequence értékekből, és csak utána
         // rajzolunk. Fordítva a rajzoló üres tervet találna, és
         // újraoptimalizálná az útvonalat, felülírva a te sorrendedet.
-        const buildManual = global.V91Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
+        const buildManual = global.V92Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
         setTimeout(async () => {
           if (typeof buildManual === 'function') {
             try {

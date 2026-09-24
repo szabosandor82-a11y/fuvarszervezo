@@ -711,3 +711,8 @@ button.mail-file{font:inherit;cursor:pointer}
   box-shadow:0 0 0 3px #d8e8f8}
 .v56-row .v56-index.drag:active{cursor:grabbing}
 .v56-row-block.resolved-pickup-block .v56-index.drag{cursor:not-allowed;opacity:.6}
+
+/* V92 – egy beszállító összes aznapi fuvarának áthelyezése */
+select.company-move{height:28px;max-width:230px;font-size:12px;padding:0 6px;
+  border:.5px solid #a9b8cf;border-radius:7px;background:#eef3fb;color:var(--ink);cursor:pointer}
+select.company-move:hover{background:#dfe9f7}

@@ -1683,12 +1683,15 @@
       setDropStatus(category, `Feldolgozás: ${index + 1} / ${files.length} · ${file.name}`, 'busy');
       try {
         const entries = await parseDroppedFile(file, category);
-        pending.push(...entries);
+        /* V92: az újonnan behúzott rendelés a lista TETEJÉRE kerül, hogy ne
+           kelljen mindig az aljára görgetni. Egy fájlon belül a sorrend
+           megmarad. */
+        pending.unshift(...entries);
         success += entries.length;
       } catch (error) {
         failures++;
         console.error('[V43] Outlook import hiba', file.name, error);
-        pending.push({
+        pending.unshift({
           _id: id(), approved: false, category, sourceName: file.name, subject: '', pdfName: '', attachmentNames: [], scheduleDate: selectedImportDate(), orderNo: '', pickupName: '', pickupAddress: '', projectName: '', dropAddress: '', items: [], warnings: [`Feldolgozási hiba: ${error?.message || error}`], duplicate: false, extractionReason: ''
         });
       }

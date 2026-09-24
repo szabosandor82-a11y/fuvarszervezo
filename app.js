@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V91Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V92Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -722,6 +722,94 @@ function seedPoint(addr){
   return null;
 }
 const streetGeoPendingV69=new Map(),streetGeoRetryV69=new Map();
+/* V92 – TÖBBFÉLE ALAKKAL KERESSÜK A CÍMET
+
+   A geokódoló eddig EGYETLEN kérdést küldött, a nyers címmel. Ha az nem
+   talált, a program a kerület közepére rakta a pontot – ezért osztozott 22
+   cím ugyanazon a koordinátán, és ezért nem volt a Maglódi út 14B a helyén.
+
+   Most több alakot próbálunk, a legpontosabbtól a leglazábbig:
+     1. strukturált keresés (utca+házszám, város, irányítószám külön mezőben)
+     2. a nyers cím
+     3. a házszám egybeírva (14/B -> 14B) és per-jellel (14B -> 14/B)
+     4. a házszám betűjele nélkül (14B -> 14)
+     5. házszám nélkül, csak az utca – ez legalább az utcát eltalálja
+
+   Az első találat nyer. A találat forrását eltesszük, hogy később látszódjon,
+   melyik pont mennyire megbízható. */
+/* V92 – A BECSÜLT PONTOK ÚJRAPRÓBÁLÁSA
+
+   A korábbi kudarcok beragadtak a törzsadatba: 410 cím osztozik kerületi
+   becsléseken. Ez a takarítás megjelöli őket újrakereshetőnek, hogy a
+   pontosabb keresés érvényesülni tudjon.
+
+   Csak a BECSÜLT pontokat érinti; a pontos találatokhoz és a kézzel megadott
+   koordinátákhoz nem nyúl. Egyszerre legfeljebb 40-et enged el, mert a
+   Nominatim másodpercenként egy kérést fogad – így egy nap alatt fokozatosan
+   pontosodik minden. */
+function retryApproxGeoV92(limit=40){
+  if(!state.geo)return 0;
+  const approx=state.geoApprox||{};
+  const shared=new Map();
+  for(const [address,point] of Object.entries(state.geo)){
+    if(!Array.isArray(point))continue;
+    const key=point.join(',');
+    if(!shared.has(key))shared.set(key,[]);
+    shared.get(key).push(address);
+  }
+  let released=0;
+  for(const [address,point] of Object.entries(state.geo)){
+    if(released>=limit)break;
+    if(!Array.isArray(point))continue;
+    const source=state.geoSources?.[address]||'';
+    if(source==='nominatim'||source==='nominatim-strukturalt'||source==='manual')continue;
+    const osztott=(shared.get(point.join(','))||[]).length>1;
+    if(!approx[address]&&!osztott)continue;      // valoszinuleg pontos, marad
+    delete state.geo[address];
+    if(state.geoSources)delete state.geoSources[address];
+    if(state.geoApprox)delete state.geoApprox[address];
+    released++;
+  }
+  if(released)console.info('[V92] újrakereshető cím:',released);
+  return released;
+}
+window.retryApproxGeoV92=retryApproxGeoV92;
+
+function addressVariantsV92(addr){
+  const raw=String(addr||'').trim();
+  if(!raw)return [];
+  const out=[];
+  const add=v=>{const t=String(v||'').trim();if(t&&!out.some(x=>x.toLowerCase()===t.toLowerCase()))out.push(t)};
+  add(raw);
+  // 14/B <-> 14B
+  add(raw.replace(/(\d+)\s*\/\s*([a-zA-Z])\b/g,'$1$2'));
+  add(raw.replace(/(\d+)([a-zA-Z])\b/g,'$1/$2'));
+  // a hazszam betujele nelkul: 14B -> 14
+  add(raw.replace(/(\d+)\s*\/?\s*[a-zA-Z]\b/g,'$1'));
+  // tartomany elso tagja: 2-4 -> 2 ; 156-158 -> 156
+  add(raw.replace(/(\d+)\s*-\s*\d+/g,'$1'));
+  // hazszam nelkul, csak az utca
+  add(raw.replace(/[, ]+\d+[a-zA-Z]?(\s*[-\/]\s*\d*[a-zA-Z]?)?\.?\s*$/,''));
+  return out;
+}
+
+/* A strukturált keresés pontosabb, mint a szabad szöveg: a Nominatim így
+   nem keveri össze a házszámot az irányítószámmal. */
+function structuredQueryV92(addr){
+  const text=String(addr||'');
+  const zip=(text.match(/\b(\d{4})\b/)||[])[1]||'';
+  let rest=text.replace(/\b\d{4}\b/,' ').replace(/magyarorszag|magyarország/ig,' ');
+  const parts=rest.split(',').map(x=>x.trim()).filter(Boolean);
+  let city='',street='';
+  if(parts.length>=2){ city=parts[0]; street=parts.slice(1).join(' '); }
+  else {
+    const m=rest.trim().match(/^([A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű.\- ]+?)\s+(.*\d.*)$/);
+    if(m){ city=m[1]; street=m[2]; } else { street=rest.trim(); }
+  }
+  if(!street&&!city)return null;
+  return { zip, city:city.replace(/^[-\s]+|[-\s]+$/g,''), street:street.replace(/\s+/g,' ').trim() };
+}
+
 async function geo(addr){if(!addr)return null;
   const precise=preciseStreetAddress(addr);
   state.geo=state.geo||{};
@@ -745,6 +833,35 @@ async function geo(addr){if(!addr)return null;
     const timeout=controller?setTimeout(()=>controller.abort(),6000):null;
     try{
       const query=precise==='ezer-kada'?'1106 Budapest, Kada utca 149':precise==='proconsul-porcelan'?'1106 Budapest, Porcelán utca 3-9':addr;
+      /* V92: előbb a STRUKTURÁLT keresés, aztán a cím többféle alakja.
+         Az első értelmes találat nyer. */
+      const tryFetch=async url=>{
+        const r=await fetch(url,controller?{signal:controller.signal}:{});
+        if(r.ok===false)return null;
+        const j=await r.json();
+        const hit=j&&j[0]&&[+j[0].lat,+j[0].lon];
+        return hit&&hit.every(Number.isFinite)?hit:null;
+      };
+      const base='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=hu';
+      const attempts=[];
+      const structured=structuredQueryV92(query);
+      if(structured&&structured.street){
+        attempts.push({url:`${base}&street=${encodeURIComponent(structured.street)}`
+          +(structured.city?`&city=${encodeURIComponent(structured.city)}`:'')
+          +(structured.zip?`&postalcode=${encodeURIComponent(structured.zip)}`:''),source:'nominatim-strukturalt'});
+      }
+      for(const variant of addressVariantsV92(query)){
+        attempts.push({url:`${base}&q=${encodeURIComponent(variant)}`,source:'nominatim'});
+      }
+      for(const attempt of attempts){
+        const point=await tryFetch(attempt.url).catch(()=>null);
+        if(point){
+          state.geo[addr]=point;state.geoSources[addr]=attempt.source;
+          if(state.geoApprox)delete state.geoApprox[addr];
+          save(false);await new Promise(res=>setTimeout(res,1050));return point;
+        }
+        await new Promise(res=>setTimeout(res,1050));   // a Nominatim másodpercenként egy kérést enged
+      }
       const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=hu&q='+encodeURIComponent(query),controller?{signal:controller.signal}:{});
       if(r.ok===false)throw new Error('Geokódolás nem elérhető');
       const j=await r.json(),point=j[0]&&[+j[0].lat,+j[0].lon];
