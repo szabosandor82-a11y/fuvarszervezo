@@ -1,8 +1,8 @@
-const CACHE_NAME = 'fuvarszervezo-v92-online-20260924-1';
+const CACHE_NAME = 'fuvarszervezo-v93-online-20260924-2';
 const APP_ASSETS = [
   './', './index.html', './styles.css?v=69.0', './app.js?v=69.0', './data.js?v=69.0',
   './planner-v32.js?v=69.0', './planner-v33.js?v=69.0', './planner-v34.js?v=69.0',
-  './planner-v35.js?v=69.0', './planner-v37.js?v=69.0', './planner-v41.js?v=69.0',
+  './planner-v35.js?v=69.0', './planner-v37.js?v=69.0', './daily-list-v93.js?v=93.0', './planner-v41.js?v=69.0',
   './planner-v43.js?v=69.0', './planner-v44.js?v=69.0', './auth-v44-2.js?v=69.0',
   './online-config.js?v=69.0', './online-v44-2.js?v=69.0',
   './delivery-camera-v69.js?v=69.0', './ole-msg-reader.js?v=69.0', './manifest.webmanifest', './icon-192.png', './icon-512.png'

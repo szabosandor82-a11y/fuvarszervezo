@@ -712,7 +712,29 @@ button.mail-file{font:inherit;cursor:pointer}
 .v56-row .v56-index.drag:active{cursor:grabbing}
 .v56-row-block.resolved-pickup-block .v56-index.drag{cursor:not-allowed;opacity:.6}
 
-/* V92 – egy beszállító összes aznapi fuvarának áthelyezése */
-select.company-move{height:28px;max-width:230px;font-size:12px;padding:0 6px;
-  border:.5px solid #a9b8cf;border-radius:7px;background:#eef3fb;color:var(--ink);cursor:pointer}
-select.company-move:hover{background:#dfe9f7}
+
+/* ===== V93 – NAPI FUVARLISTA ===================================== */
+.v93-head-date{font-size:13px;color:var(--muted)}
+.v93-hint{margin:0 0 12px;padding:9px 12px;background:#eef5fa;border:1px solid var(--border);
+  border-radius:9px;font-size:12.5px;color:#47606e}
+.v93-board{display:grid;gap:14px;align-items:start}
+.v93-col{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;min-width:0}
+.v93-col-head{display:flex;align-items:center;gap:8px;padding:11px 13px;background:var(--navy);color:#fff}
+.v93-col-head b{font-size:15px}
+.v93-col-head span{font-size:12px;color:#bcd9ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v93-col-head em{margin-left:auto;font-style:normal;font-size:12px;color:#dcecf6;white-space:nowrap}
+.v93-col[data-driver="patrik"] .v93-col-head{background:#4a2f6e}
+.v93-col[data-driver="martin"] .v93-col-head{background:var(--green)}
+.v93-list{padding:10px;display:flex;flex-direction:column;gap:8px;min-height:120px}
+.v93-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--border);
+  border-radius:9px;background:#fff}
+.v93-row.v93-done{background:#edf0f4;border-color:#cbd3dd;opacity:.82}
+.v93-main{min-width:0;flex-grow:1}
+.v93-name{display:block;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v93-meta{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v93-drop{padding:20px 10px;border:2px dashed #a9c9e4;border-radius:9px;background:#f4fafe;
+  text-align:center;font-size:12px;color:#47606e}
+.v93-empty{padding:24px;text-align:center;color:var(--muted)}
+@media(max-width:900px){
+  .v93-board{grid-template-columns:1fr!important}
+}
