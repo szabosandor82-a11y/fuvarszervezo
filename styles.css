@@ -747,3 +747,19 @@ button.mail-file{font:inherit;cursor:pointer}
 .v94-days input[type=date]{height:36px;padding:0 8px;border:1px solid #a9b8cf;border-radius:8px;font-size:13px}
 .v94-days b{font-size:14px;min-width:96px;text-align:center}
 .v93-row.v93-done .v56-index{cursor:grab}
+
+/* V95 JAVÍTÁS: ugyanez a napi fuvarlista soraira is kell.
+
+   A globális .drag szabály position:absolute-ot ad, ezért a sorszám kiugrott
+   a sorból a jobb felső sarokba – nem volt mit megfogni, és a húzás nem
+   indult el. A V83-ban ezt már javítottuk, de csak a Nézet soraira; az új
+   napi lista másik osztálynevet visel, ezért kimaradt. */
+.v93-row .v56-index.drag{position:static!important;right:auto!important;top:auto!important;
+  flex:none;width:30px;height:30px;border-radius:50%;background:#dbeafd;color:#0c447c;
+  font-size:14px;font-weight:700;border:1px solid #9cc4ea;
+  display:flex!important;align-items:center;justify-content:center;cursor:grab;
+  touch-action:none;user-select:none}
+.v93-row .v56-index.drag:hover{background:#0c447c;color:#fff;border-color:#0c447c;
+  box-shadow:0 0 0 3px #d8e8f8}
+.v93-row .v56-index.drag:active{cursor:grabbing}
+.v93-row.v93-done .v56-index.drag{background:#e2e7ee;border-color:#b6c0cc;color:#47606e}
