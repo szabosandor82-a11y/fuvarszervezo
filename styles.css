@@ -763,3 +763,13 @@ button.mail-file{font:inherit;cursor:pointer}
   box-shadow:0 0 0 3px #d8e8f8}
 .v93-row .v56-index.drag:active{cursor:grabbing}
 .v93-row.v93-done .v56-index.drag{background:#e2e7ee;border-color:#b6c0cc;color:#47606e}
+
+/* V96 – a napi fuvarlista fogópontja SAJÁT osztálynevet visel, hogy a régi
+   buborékok .drag szabálya (position:absolute) ne vihesse ki a sorból. */
+.v96-grip{flex:none;width:30px;height:30px;border-radius:50%;background:#dbeafd;color:#0c447c;
+  font-size:14px;font-weight:700;border:1px solid #9cc4ea;
+  display:flex;align-items:center;justify-content:center;
+  cursor:grab;touch-action:none;user-select:none}
+.v96-grip:hover{background:#0c447c;color:#fff;border-color:#0c447c;box-shadow:0 0 0 3px #d8e8f8}
+.v96-grip:active{cursor:grabbing}
+.v93-row.v93-done .v96-grip{background:#e2e7ee;border-color:#b6c0cc;color:#47606e}
