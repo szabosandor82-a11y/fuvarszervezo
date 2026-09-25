@@ -738,3 +738,12 @@ button.mail-file{font:inherit;cursor:pointer}
 @media(max-width:900px){
   .v93-board{grid-template-columns:1fr!important}
 }
+
+/* V94 – napléptető a napi fuvarlistán */
+.v94-days{display:flex;align-items:center;gap:8px}
+.v94-days button{width:36px;height:36px;border:1px solid #a9b8cf;border-radius:8px;background:#fff;
+  font-size:17px;line-height:1;cursor:pointer;color:var(--ink)}
+.v94-days button:hover{background:var(--sky)}
+.v94-days input[type=date]{height:36px;padding:0 8px;border:1px solid #a9b8cf;border-radius:8px;font-size:13px}
+.v94-days b{font-size:14px;min-width:96px;text-align:center}
+.v93-row.v93-done .v56-index{cursor:grab}
