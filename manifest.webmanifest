@@ -1,6 +1,6 @@
 {
-  "name": "Fuvarszervező V99",
-  "short_name": "Fuvar V99",
+  "name": "Fuvarszervező V100",
+  "short_name": "Fuvar V100",
   "description": "Stand 98 fuvarszervező admin- és mobil sofőralkalmazás",
   "start_url": "./index.html",
   "scope": "./",

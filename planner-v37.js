@@ -581,7 +581,7 @@
     const map = focusMap, date = selectedDate();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
     let events = state.routePlans?.[selectedDate()]?.[vehicleId] || [];
-    const currentPlanner = global.V99Planner || global.V65Planner || global.V64Planner;
+    const currentPlanner = global.V100Planner || global.V65Planner || global.V64Planner;
     const snapshot = currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
     const isCurrent = () => focusMap === map && selectedDate() === date
       && snapshot === currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
@@ -892,7 +892,7 @@
         // útvonalterv épül újra a kézi sequence értékekből, és csak utána
         // rajzolunk. Fordítva a rajzoló üres tervet találna, és
         // újraoptimalizálná az útvonalat, felülírva a te sorrendedet.
-        const buildManual = global.V99Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
+        const buildManual = global.V100Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
         setTimeout(async () => {
           if (typeof buildManual === 'function') {
             try {
@@ -944,6 +944,11 @@
     syncAllBacklogStatuses();
     ensureFocusDialog();
     const vehicles = activeVehicles();
+    /* V100: a rács a járművek számához igazodik – a negyedik autó a többi
+       MELLÉ kerül, nem alá. A beállítás korábban az app.js renderRoutes
+       függvényébe került, de a főoldalt VALÓJÁBAN ez a függvény rajzolja,
+       és felülírja azt. */
+    document.querySelector('#routes').style.setProperty('--route-cols', Math.max(1, vehicles.length));
     document.querySelector('#routes').innerHTML = vehicles.map(vehicle => {
       const list = dayOrders(vehicle.id).sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
       const groupCount = bubbleGroups(list).length;

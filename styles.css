@@ -915,3 +915,7 @@ button.mail-file{font:inherit;cursor:pointer}
 .v99-note{display:block;margin-top:10px}
 .v99-note textarea{width:100%;min-height:52px;padding:9px 11px;font:13px/1.45 inherit;
   border:1px solid var(--border);border-radius:9px;background:#fff;resize:vertical}
+
+/* V100 – a járműlistán látszik, állandó-e vagy napra szóló */
+.v100-dayonly{margin:4px 0 0;font-size:12px;font-weight:700;color:var(--amber)}
+.v100-always{margin:4px 0 0;font-size:12px;color:var(--muted)}
