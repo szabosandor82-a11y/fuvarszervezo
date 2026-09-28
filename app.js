@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V97Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V99Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -1387,7 +1387,10 @@ window.openBacklogResult=(id,date)=>{const o=state.orders.find(x=>x.id===id);$('
 function openCamera(id){const o=state.orders.find(x=>x.id===id);if(!o)return;window.V69DeliveryCamera?.reset();window.markUserCommentRead?.(id);$('#cameraOrderId').value=id;$('#cameraTitle').textContent=`${o.orderNo} · Szállítólevél`;$('#cameraPreview').innerHTML='';$('#cameraNote').value='';$('#cameraInput').value='';$('#cameraDialog').showModal()}
 window.openCamera=openCamera;$('#chooseCameraFile').onclick=()=>$('#cameraInput').click();$('#cameraInput').onchange=e=>{$('#cameraPreview').innerHTML=[...e.target.files].map(f=>`<img src="${URL.createObjectURL(f)}">`).join('')};$('#cameraForm').onsubmit=e=>{e.preventDefault();const o=state.orders.find(x=>x.id===$('#cameraOrderId').value);o.deliveryReports=o.deliveryReports||[];o.deliveryReports.push({at:new Date().toISOString(),note:$('#cameraNote').value,photoCount:(window.V69DeliveryCamera?.files()||[...$('#cameraInput').files]).length,hasAudio:!!audioBlob});$('#cameraDialog').close();save();alert('A fotó és megjegyzés helyben rögzítve.')};
 function editVehicle(id){const v=state.vehicles.find(x=>x.id===id)||{};
-  if($('#vehicleDayOnly')){$('#vehicleDayOnly').checked=!!String(v.dayOnly||'').trim();}
+  /* V99: ÚJ járműnél a napra szólás az alapértelmezés – a három alapautó
+     állandó, minden újabb pedig jellemzően alkalmi. Meglévő jármű
+     szerkesztésekor a saját beállítása marad. */
+  if($('#vehicleDayOnly')){$('#vehicleDayOnly').checked=v.id?!!String(v.dayOnly||'').trim():true;}
   if($('#vehicleDayOnlyDate')){$('#vehicleDayOnlyDate').textContent=String(v.dayOnly||'').trim()||selectedDate();}
 $('#vehicleTitle').textContent=v.id?'Jármű szerkesztése':'Új jármű';$('#editVehicleId').value=v.id||'';$('#driverName').value=v.driverName||'';$('#vehicleName').value=v.name||'';$('#vehicleType').innerHTML=VEHICLE_TYPES.map(t=>option(t,t,v.type)).join('');$('#homeCity').value=v.homeCity||'';$('#vehicleActive').checked=v.active!==false;$('#vehicleDialog').showModal()}
 window.editVehicle=editVehicle;$('#vehicleForm').onsubmit=e=>{e.preventDefault();const id=$('#editVehicleId').value,v={id:id||uid(),driverName:$('#driverName').value,name:$('#vehicleName').value,type:$('#vehicleType').value,homeCity:$('#homeCity').value,active:$('#vehicleActive').checked,dayOnly:$('#vehicleDayOnly')?.checked?selectedDate():''};const i=state.vehicles.findIndex(x=>x.id===id);if(i>=0)state.vehicles[i]=v;else state.vehicles.push(v);$('#vehicleDialog').close();save()}
@@ -2045,16 +2048,53 @@ function openItems(id){
           </div>`;
         })()
       : '<span class="item-dash">—</span>';
-    return `<div class="item-row item-grid ${it.received?'done':''} ${open?'shortage':''}">
-      <input type="checkbox" ${it.received?'checked':''} title="Hiánytalanul megkapta" onchange="toggleItem('${o.id}',${i},this.checked)" aria-label="Hiánytalanul megkapta">
-      <div class="item-main">
-        <b class="item-name">${esc(it.description||it.productName||it.name||'Tétel')}</b>
-        <div class="item-sub"><span class="v56-item-code">${esc(it.code||'Cikkszám nélkül')}</span> · ${esc(it.qty)} ${esc(it.unit)}${it.longMaterial?' · hosszú szál':''}${rec?` · <span class="item-moved">áthelyezve ${esc(rec.movedToDate)}</span>`:''}</div>
-        <label class="item-note-edit"><textarea placeholder="Tétel megjegyzés" oninput="updateItemNote('${o.id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label>
+    /* ===== V99 – EGY TÉTEL EGY KÁRTYA ==============================
+
+       A korábbi négyoszlopos rács (jelölőnégyzet | név | hiányzik | dátum)
+       telefonon összetorlódott: a név ráfutott a jelölőnégyzetre, a mezők
+       9-11 pixelesek lettek, és a hiányzás megnyitásakor a sor szerkezete
+       megváltozott – ezért nézett ki másképp a nyitott és a zárt sor.
+
+       Helyette kártyák: a név teljes szélességben, a hiányzás pedig a
+       kártyán BELÜL nyílik ki, két mezővel. A mennyiség egy cella, a dátum
+       egy cella (három résszel, ahogy az adminon – a kurzor magától lép). */
+    const nev=esc(it.description||it.productName||it.name||'Tétel');
+    const alcim=`${esc(it.code||'Cikkszám nélkül')} · ${esc(it.qty)} ${esc(it.unit)}${it.longMaterial?' · hosszú szál':''}`;
+    const megjegyzes=esc(itemNoteValue(it));
+    const allapot=it.received?'v99-ok':(open?'v99-hiany':'');
+    return `<article class="v99-item ${allapot}">
+      <div class="v99-head">
+        <button type="button" class="v99-tick" aria-pressed="${it.received?'true':'false'}"
+          title="Hiánytalanul megkapta" onclick="toggleItem('${o.id}',${i},${it.received?'false':'true'})">
+          ${it.received?'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>':''}
+        </button>
+        <span class="v99-main">
+          <span class="v99-name">${nev}</span>
+          <span class="v99-sub">${alcim}${it.received?' · megvan':''}</span>
+        </span>
+        ${it.received||open?'':`<button type="button" class="v99-miss" onclick="openShortage('${o.id}','${esc(it._id)}')">Hiányzik</button>`}
       </div>
-      ${qtyCell}
-      ${dateCell}
-    </div>`;
+      ${open?`<div class="v99-panel">
+        <label class="v99-field"><span>Mennyi hiányzik?</span>
+          <input class="missing-qty-input" type="number" min="0" step="any" placeholder="mind"
+            aria-label="Hiányzó mennyiség" value="${esc(it.missingQty??'')}"
+            oninput="updateMissingQty('${o.id}',${i},this.value)"></label>
+        <label class="v99-field"><span>Mikor jön meg?</span>
+          <span class="v99-date item-date-parts" data-item-date="${o.id}::${esc(it._id)}">
+            <input inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Év"
+              data-part="year" value="${esc(String(rec?.targetDate||'').slice(0,4))}">
+            <span aria-hidden="true">–</span>
+            <input inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Hónap"
+              data-part="month" value="${esc(String(rec?.targetDate||'').slice(5,7))}">
+            <span aria-hidden="true">–</span>
+            <input inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Nap"
+              data-part="day" value="${esc(String(rec?.targetDate||'').slice(8,10))}">
+          </span></label>
+        <button type="button" class="v99-cancel" onclick="closeShortage('${o.id}','${esc(it._id)}')">Mégsem</button>
+      </div>`:''}
+      ${megjegyzes||open?`<label class="v99-note"><textarea placeholder="Tétel megjegyzés"
+        oninput="updateItemNote('${o.id}',${i},this.value)">${megjegyzes}</textarea></label>`:''}
+    </article>`;
   }).join('');
   /* V65: van olyan fuvar, ahol nincs konkrét tétel, csak egy elvégzendő
      feladat. A megjegyzés ezért a Tételek ablak tetején is megjelenik, és ha
@@ -2618,6 +2658,10 @@ function v24DropoffSummary(list){
 }
 function renderRoutes(){
   const vehicles=activeVehicles();
+  /* V98: a rács a járművek számához igazodik. A javítás korábban a fájlban
+     FELJEBB álló, azonos nevű függvénybe került – az viszont soha nem fut,
+     mert ez a későbbi definíció írja felül. */
+  $('#routes').style.setProperty('--route-cols',Math.max(1,vehicles.length));
   $('#routes').innerHTML=vehicles.map(v=>{const list=dayOrders(v.id).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999));return`<section class="route" data-driver="${v24DriverKey(v)}"><header class="route-head"><h2><input value="${esc(v.driverName)}" onchange="renameDriver('${v.id}',this.value)"></h2><small>${esc(v.name)} · ${esc(v.type)} · ${list.length} fuvar</small><div class="route-summary" id="summary-${v.id}"></div></header><div id="map-${v.id}" class="map"></div><div id="route-${v.id}" class="route-list">${bubbles(list)}</div>${v24DropoffSummary(list)}</section>`}).join('')||'<div class="notice">Nincs aktív jármű.</div>';
   setTimeout(initMaps,30);setTimeout(initSortables,40);setTimeout(updateSummaries,60);
   // V93: ha a napi lista van nyitva, az is kövesse a változást
