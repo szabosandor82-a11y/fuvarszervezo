@@ -70,7 +70,7 @@ main{max-width:1900px;padding:18px 18px calc(92px + env(safe-area-inset-bottom))
   .nav{display:flex;align-items:center;gap:13px;color:#d4e2f2;padding:12px 13px;border-radius:10px;text-align:left}.nav span{font-size:18px;width:24px}.nav small{font-size:12px;font-weight:750}.nav.active{background:#1671df;color:#fff}.nav:hover{background:#ffffff12;color:#fff}
   .topbar{left:220px;width:calc(100% - 220px);padding-left:22px}
   main{margin-left:220px;max-width:none;padding-bottom:30px}
-  .routes{grid-template-columns:repeat(3,minmax(300px,1fr))}
+  .routes{grid-template-columns:repeat(var(--route-cols,3),minmax(0,1fr))}
 }
 @media(max-width:1023px){.topbar{color:var(--ink)}.top-buttons{flex-wrap:wrap}.routes{grid-template-columns:repeat(auto-fit,minmax(310px,1fr))}}
 @media(max-width:760px){
@@ -773,3 +773,61 @@ button.mail-file{font:inherit;cursor:pointer}
 .v96-grip:hover{background:#0c447c;color:#fff;border-color:#0c447c;box-shadow:0 0 0 3px #d8e8f8}
 .v96-grip:active{cursor:grabbing}
 .v93-row.v93-done .v96-grip{background:#e2e7ee;border-color:#b6c0cc;color:#47606e}
+
+/* ===== V97 – MOBIL: SEMMI NE CSÚSZHASSON KI VÍZSZINTESEN =============
+
+   A csatolmány ablak megnyitásakor szétesett az oldal. Az ok nem egyetlen
+   hiba volt, hanem több apró: hosszú fájlnevek és feladócímek, amiket a
+   böngésző nem tört el, tördelés nélküli tételnevek, és a párbeszédablak
+   fejlécének negatív margója.
+
+   Ez a blokk keretet ad az egésznek: mobilon semmi nem lehet szélesebb a
+   képernyőnél. Ahol tényleg széles a tartalom (táblázat), az a saját
+   dobozán belül görgethető, nem az egész oldal. */
+@media(max-width:760px){
+  html,body{max-width:100%;overflow-x:hidden}
+
+  /* a párbeszédablak és a tartalma a képernyőn belül marad */
+  dialog{max-width:100vw}
+  .dialog-body,.dialog-head{max-width:100%}
+
+  /* a levélablak: a hosszú fájlnevek és címek eltörnek */
+  .source-mail{max-width:100%;overflow-x:hidden}
+  .mail-body{overflow-wrap:anywhere}
+  .mail-meta,.mail-meta div{max-width:100%;overflow-wrap:anywhere}
+  .mail-file,.mail-file-missing{max-width:100%;text-align:left;
+    white-space:normal;overflow-wrap:anywhere}
+
+  /* a rugalmas dobozok gyermekei zsugorodhassanak – enélkül a leghosszabb
+     szó feszíti szét a sort */
+  .driver-task,.driver-task *,.v56-row,.v56-row *,.bubble,.bubble *{min-width:0}
+
+  /* a sofőri tételnevek inkább törjenek, mint kifussanak */
+  .bl-item-name,.bl-item-sub{white-space:normal;overflow-wrap:anywhere}
+
+  /* a széles tartalom a SAJÁT dobozában görgethető */
+  .table-wrap{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{max-width:100%}
+  img,video,canvas{max-width:100%;height:auto}
+}
+
+
+/* ===== V97 – TETSZŐLEGES SZÁMÚ JÁRMŰ A FŐOLDALON ====================
+
+   Az oszlopok száma eddig HÁROMRA volt rögzítve, ezért a negyedik jármű a
+   többi ALÁ törött. Mostantól a rács a járművek számához igazodik: a
+   renderRoutes a --route-cols változóban adja meg, hányan vannak, és az
+   oszlopok arányosan keskenyednek.
+
+   Négy autónál 300 pixel alá csökkenhet egy oszlop, ezért ott a belső
+   szövegek is kisebbek, hogy ne törjenek szét. */
+.routes[style*="--route-cols: 4"] .route-head h2 input,
+.routes[style*="--route-cols: 5"] .route-head h2 input{font-size:15px}
+.routes[style*="--route-cols: 4"] .bubble,
+.routes[style*="--route-cols: 5"] .bubble{padding:9px 10px}
+.routes[style*="--route-cols: 4"] .v56-name,
+.routes[style*="--route-cols: 5"] .v56-name{font-size:12.5px}
+.routes[style*="--route-cols: 5"] .v56-meta{font-size:11px}
+
+/* V97 – a napra szóló jármű magyarázata az űrlapon */
+.v97-hint{display:block;margin:-4px 0 10px;font-size:12px;color:var(--muted);line-height:1.5}

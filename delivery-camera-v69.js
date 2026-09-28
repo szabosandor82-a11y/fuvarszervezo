@@ -12,6 +12,65 @@
   if (!dialog || !video || !start || !capture || !input) return;
 
   let stream = null, generation = 0, files = [], previewUrls = [];
+
+  /* ===== V97 – A KÉPEK MÉRETÉNEK CSÖKKENTÉSE =========================
+
+     Egy nyers telefonos fotó 3-6 MB. A szállítólevélből viszont csak az
+     olvashatóság számít, ezért a képet a hosszabb oldala mentén 1800 pixelre
+     kicsinyítjük, és 72%-os minőséggel mentjük.
+
+     Miért pont ennyi: egy A4-es lap 1800 pixel hosszú oldallal kb. 150 dpi,
+     ami nyomtatásban is jól olvasható. A fájl így jellemzően 200-400 kB –
+     tizede az eredetinek –, tehát gyorsabb a feltöltés a telefonos neten, és
+     kevesebb helyet foglal a tárolóban.
+
+     A PDF-hez és minden nem képfájlhoz nem nyúlunk. Ha a kicsinyítés bármi
+     okból nem sikerül, az EREDETI fájl megy fel – a szállítólevél soha nem
+     veszhet el a tömörítés miatt. */
+  const MAX_EDGE_V97 = 1800;
+  const JPEG_QUALITY_V97 = 0.72;
+
+  function targetSizeV97(width, height, maxEdge = MAX_EDGE_V97) {
+    const longest = Math.max(width, height);
+    if (!longest || longest <= maxEdge) return { width, height, scaled: false };
+    const ratio = maxEdge / longest;
+    return { width: Math.round(width * ratio), height: Math.round(height * ratio), scaled: true };
+  }
+
+  function optimiseImageV97(file) {
+    return new Promise(resolve => {
+      if (!file || !/^image\//.test(file.type || '') || /svg/i.test(file.type || '')) return resolve(file);
+      const url = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = () => {
+        try {
+          const size = targetSizeV97(image.naturalWidth, image.naturalHeight);
+          const canvas = document.createElement('canvas');
+          canvas.width = size.width;
+          canvas.height = size.height;
+          const context = canvas.getContext('2d');
+          if (!context) { URL.revokeObjectURL(url); return resolve(file); }
+          context.drawImage(image, 0, 0, size.width, size.height);
+          canvas.toBlob(blob => {
+            URL.revokeObjectURL(url);
+            // ha a tömörítés nem hozott nyereséget, marad az eredeti
+            if (!blob || blob.size >= file.size) return resolve(file);
+            const name = String(file.name || 'foto.jpg').replace(/\.[a-z0-9]+$/i, '') + '.jpg';
+            resolve(new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() }));
+          }, 'image/jpeg', JPEG_QUALITY_V97);
+        } catch (error) { URL.revokeObjectURL(url); resolve(file); }
+      };
+      image.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      image.src = url;
+    });
+  }
+
+  async function addFilesV97(incoming) {
+    for (const file of incoming) files.push(await optimiseImageV97(file));
+    renderFiles();
+  }
+
+
   function message(text) {
     status.textContent = text;
     status.classList.toggle('hidden', !text);
@@ -129,17 +188,20 @@
       if (request !== generation || !dialog.open) return;
       ready();
       if (!blob) { message('Nem sikerült fényképet készíteni. Próbáld újra.'); return; }
-      files.push(new File([blob], 'szallitolevel-' + Date.now() + '-' + (files.length + 1) + '.jpg', { type: 'image/jpeg' }));
-      renderFiles();
-      message('A fénykép elkészült. A Mentés a rendeléshez gombbal mentheted el.');
+      const shot = new File([blob], 'szallitolevel-' + Date.now() + '-' + (files.length + 1) + '.jpg', { type: 'image/jpeg' });
+      optimiseImageV97(shot).then(ready2 => {
+        files.push(ready2);
+        renderFiles();
+        message('A fénykép elkészült. A Mentés a rendeléshez gombbal mentheted el.');
+      });
     }, 'image/jpeg', 0.92);
   };
   byId('stopDeliveryCamera').onclick = () => { stop(); message('Kamera leállítva.'); };
   byId('chooseCameraFile').onclick = () => input.click();
   input.onchange = () => {
-    files.push(...Array.from(input.files || []));
+    const incoming = Array.from(input.files || []);
     input.value = '';
-    renderFiles();
+    addFilesV97(incoming);
   };
   dialog.addEventListener('close', reset);
   dialog.addEventListener('cancel', stop);
@@ -147,5 +209,5 @@
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && stream) { stop(); message('Kamera leállítva.'); }
   });
-  global.V69DeliveryCamera = { reset, files: () => files.slice() };
+  global.V69DeliveryCamera = { reset, files: () => files.slice(), optimiseImageV97, targetSizeV97 };
 })(window);
