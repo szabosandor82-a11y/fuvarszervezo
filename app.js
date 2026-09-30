@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V100Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V101Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -1748,6 +1748,29 @@ function renderReports(){
       previous?.(event);
       const saved=id?state.orders.find(item=>item.id===id):state.orders[state.orders.length-1];
       if(!saved)return;
+      /* V101 – NAPVÁLTÁSNÁL NINCS CSOPORTOS HATÁS
+
+         A mentés utáni tanulás a módosításokat átviszi ugyanannak a
+         beszállítónak vagy projektnek a TÖBBI fuvarjára is, az adott naptól
+         kezdve. Ez akkor hasznos, ha a törzsadatot javítod.
+
+         Ha viszont csak ÁTÜTEMEZED a fuvart egy másik napra, az kizárólag
+         erre az egy rendelésre vonatkozik – a beszállító többi fuvarjához
+         semmi köze. Ilyenkor a tanulást kihagyjuk. */
+      /* V101: CSAK akkor hagyjuk ki a tanulást, ha kizárólag a nap változott.
+         Ha a cím vagy a projekt is módosult, az valódi javítás – az a többi
+         fuvarra is átterjed, a napváltástól függetlenül. */
+      const napValtozott = before && before.scheduleDate && saved.scheduleDate !== before.scheduleDate;
+      const egyebValtozott = before && [
+        'pickupName', 'pickupAddress', 'projectName', 'dropAddress',
+        'recipientName', 'recipientPhone', 'pickupNote'
+      ].some(mezo => String(before[mezo] || '') !== String(saved[mezo] || ''));
+      const csakNapValtozott = napValtozott && !egyebValtozott;
+      if (csakNapValtozott) {
+        localStorage.setItem(KEY, JSON.stringify(state));
+        render();
+        return;
+      }
       learnFromOrder(saved,before,draft);
       localStorage.setItem(KEY,JSON.stringify(state));
       render();
@@ -2630,8 +2653,9 @@ async function vehicleHome(v){return await geo(v?.homeAddress||v?.homeCity||stat
 
 (function installV23Handlers(){
   const input=$('#masterExcelInput'),exportBtn=$('#exportMastersBtn'),syncBtn=$('#resyncMastersBtn');if(input)input.onchange=async()=>{const file=input.files?.[0];if(file)await importMasterDataExcelV23(file);input.value=''};if(exportBtn)exportBtn.onclick=exportMasterDataExcel;if(syncBtn)syncBtn.onclick=()=>resyncAllMasterData(true);
-  const oldEdit=window.editVehicle||editVehicle;window.editVehicle=id=>{oldEdit(id);const v=state.vehicles.find(x=>x.id===id)||{};if($('#homeCity'))$('#homeCity').value=v.homeAddress||v.homeCity||''};
-  const vf=$('#vehicleForm');if(vf)vf.onsubmit=e=>{e.preventDefault();const id=$('#editVehicleId').value,v={...(state.vehicles.find(x=>x.id===id)||{}),id:id||uid(),driverName:$('#driverName').value,name:$('#vehicleName').value,type:$('#vehicleType').value,homeAddress:$('#homeCity').value,homeCity:$('#homeCity').value,active:$('#vehicleActive').checked};const i=state.vehicles.findIndex(x=>x.id===id);if(i>=0)state.vehicles[i]=v;else state.vehicles.push(v);$('#vehicleDialog').close();save()};
+  const oldEdit=window.editVehicle||editVehicle;window.editVehicle=id=>{oldEdit(id);const v=state.vehicles.find(x=>x.id===id)||{};if($('#homeCity'))$('#homeCity').value=v.homeAddress||v.homeCity||'';/* V101: ÚJ járműnél a napra szólás az alapértelmezés; meglévőnél a saját beállítása. */if($('#vehicleDayOnly'))$('#vehicleDayOnly').checked=v.id?!!String(v.dayOnly||'').trim():true;if($('#vehicleDayOnlyDate'))$('#vehicleDayOnlyDate').textContent=String(v.dayOnly||'').trim()||selectedDate();};
+  const vf=$('#vehicleForm');if(vf)vf.onsubmit=e=>{e.preventDefault();const id=$('#editVehicleId').value,v={...(state.vehicles.find(x=>x.id===id)||{}),id:id||uid(),driverName:$('#driverName').value,name:$('#vehicleName').value,type:$('#vehicleType').value,homeAddress:$('#homeCity').value,homeCity:$('#homeCity').value,active:$('#vehicleActive').checked,/* V101: a napra szoló jelölés ebben a kezelőben is elmentődik. A
+   korábbi javítás egy azonos nevű, FELÜLÍRT kezelőbe került. */dayOnly:$('#vehicleDayOnly')?.checked?selectedDate():''};const i=state.vehicles.findIndex(x=>x.id===id);if(i>=0)state.vehicles[i]=v;else state.vehicles.push(v);$('#vehicleDialog').close();save()};
   state.orders.forEach(o=>syncOrderFromMasters(o));localStorage.setItem(KEY,JSON.stringify(state));
 })();
 

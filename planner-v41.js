@@ -982,33 +982,57 @@
      Enélkül a mohó névrész elnyelné az egyest, és 1000 helyett 000 lenne a
      mennyiség. Csak számjegy + szóköz + pontosan három számjegy alakot von
      össze, tehát a "105 M10x30mm" és a "(100/doboz) 500" érintetlen marad. */
+  /* V101 – AZ EZRES ÖSSZEVONÁS NE RÁNTSA ÖSSZE A MÉRETEKET
+
+     A szóközös ezres elválasztót összevonjuk (1 000 db -> 1000 db). Eddig
+     viszont TIZEDESVESSZŐ után is összevont, ezért a méretmegjelölés és a
+     mennyiség egybeolvadt:
+
+        ... csőszigeteléssel, 25x2,5 200m   ->   ... 25x2,5200m
+
+     Így a sor végén nem maradt felismerhető mennyiség, és a rendelésről
+     EGYETLEN tételt sem ismert fel a program.
+
+     Mostantól nem vonunk össze, ha a bal oldali szám tizedes törtből jön
+     (tehát ponttal vagy vesszővel folytatódó szám része), mert az méret,
+     nem ezres elválasztó. */
   function joinThousandsV71(line) {
     let out = String(line || '');
     for (let i = 0; i < 3; i++) {
-      const next = out.replace(/(\d)[ \u00a0](\d{3})(?![0-9])/g, '$1$2');
+      const next = out.replace(/(?<![.,]\d{0,6})(\d)[ \u00a0](\d{3})(?![0-9])/g, '$1$2');
       if (next === out) break;
       out = next;
     }
     return out;
   }
 
+  /* V101 – ÉKEZETES CIKKSZÁM
+
+     A cikkszám mintája eddig csak ékezet nélküli nagybetűt engedett, ezért a
+     magyar betűt tartalmazó kódok kiestek, és a rendelésről EGYETLEN tételt
+     sem ismert fel:
+
+        1 . SZKÖSZ35015  Kaucsuk öntapadó ragszalag 3x50mmx15m  24db
+
+     Az Ö miatt egyik minta sem illeszkedett. Mostantól az Á É Í Ó Ö Ő Ú Ü Ű
+     is szerepelhet a kódban. */
   function parsePdfItemsFromLines(lines) {
     const items = [];
     for (let raw of lines || []) {
       const line = joinThousandsV71(String(raw || '').replace(/\s+/g, ' ').trim());
       if (!line || /egys[eé]g[aá]r|engedm[eé]ny|nett[oó]|[oö]sszesen|alapbizonylat|rendel[eé]s\s*:/i.test(line)) continue;
       let code = '', name = '', qty = '', unit = '';
-      let match = line.match(/^\s*\d+\s*\.\s*([A-Z0-9._\/-]+)\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+      let match = line.match(/^\s*\d+\s*\.\s*([A-ZÁÉÍÓÖŐÚÜŰ0-9._\/-]+)\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
       if (match) [, code, name, qty, unit] = match;
       if (!match) {
-        match = line.match(/^\s*\d+\s+([A-Z0-9._\/-]{3,})\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+        match = line.match(/^\s*\d+\s+([A-ZÁÉÍÓÖŐÚÜŰ0-9._\/-]{3,})\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
         if (match) [, code, name, qty, unit] = match;
       }
       if (!match) {
         // V71: a cikkszám kezdődhet SZÁMMAL is (pl. 77702D02), nem csak betűvel.
         //      Legalább egy betűt vagy két számjegyet várunk, hogy a fejlécsorok
         //      és a dátumok ne illeszkedjenek rá.
-        match = line.match(/^\s*((?=[A-Z0-9._\/-]*[A-Z0-9])[A-Z0-9][A-Z0-9._\/-]{2,})\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+        match = line.match(/^\s*((?=[A-ZÁÉÍÓÖŐÚÜŰ0-9._\/-]*[A-Z0-9])[A-Z0-9][A-ZÁÉÍÓÖŐÚÜŰ0-9._\/-]{2,})\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
         if (match) [, code, name, qty, unit] = match;
       }
       if (!match || /^huf$/i.test(code) || name.length < 3) continue;
