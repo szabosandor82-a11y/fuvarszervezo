@@ -919,3 +919,34 @@ button.mail-file{font:inherit;cursor:pointer}
 /* V100 – a járműlistán látszik, állandó-e vagy napra szóló */
 .v100-dayonly{margin:4px 0 0;font-size:12px;font-weight:700;color:var(--amber)}
 .v100-always{margin:4px 0 0;font-size:12px;color:var(--muted)}
+
+/* ===== V102 – A SZÖVEG SOHA NE LÓGJON RÁ AZ IKONOKRA ==================
+
+   A buborék vezérlősora (rögzítés, teljes rakomány, újracsoportosítás)
+   ABSZOLÚT pozícióban ül a bal felső sarokban, a cím pedig a normál
+   folyamban indul. Amíg három oszlop volt, elfért mellette – negyedik
+   járműnél viszont az oszlop keskenyebb lett, a cím visszatört, és
+   ráfutott az ikonokra.
+
+   Ezért a cím mostantól kihagyja az ikonok helyét: annyi behúzást kap,
+   amennyi az ikonsor szélessége. A behúzás a gombok számához igazodik, és
+   a szöveg tördelhető, tehát bármilyen keskeny oszlopban megáll. */
+.bubble{position:relative}
+.bubble h3{
+  margin:0 35px 5px 0;
+  padding-left:82px;                 /* két gomb (34+34) + a köztük lévő rés */
+  min-height:32px;                   /* ne legyen alacsonyabb az ikonsornál */
+  display:flex;align-items:center;
+  overflow-wrap:anywhere;word-break:break-word;
+}
+/* három gombnál (ha az újracsoportosítás is látszik) szélesebb a hely */
+.bubble-control-row:has(button:nth-child(3))~h3{padding-left:122px}
+
+/* a fejléc alatti adatok is tördeljenek, ne feszítsék szét az oszlopot */
+.bubble .master-highlight,.bubble .master-highlight *{min-width:0;overflow-wrap:anywhere}
+
+/* keskeny oszlopnál kisebb ikonok, hogy több hely jusson a szövegnek */
+.routes[style*="--route-cols: 4"] .bubble-control-row button,
+.routes[style*="--route-cols: 5"] .bubble-control-row button{width:30px;height:28px;font-size:14px}
+.routes[style*="--route-cols: 4"] .bubble h3{padding-left:72px;font-size:13px}
+.routes[style*="--route-cols: 5"] .bubble h3{padding-left:72px;font-size:12.5px}
