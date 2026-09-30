@@ -950,3 +950,39 @@ button.mail-file{font:inherit;cursor:pointer}
 .routes[style*="--route-cols: 5"] .bubble-control-row button{width:30px;height:28px;font-size:14px}
 .routes[style*="--route-cols: 4"] .bubble h3{padding-left:72px;font-size:13px}
 .routes[style*="--route-cols: 5"] .bubble h3{padding-left:72px;font-size:12.5px}
+
+/* ===== V103 – AZ IKONOK IS IGAZODNAK, NEM CSAK A SZÖVEG =============
+
+   A buborék alján a KÉSZ-jelölő (bal alsó sarok) és a KUKA (jobb alsó
+   sarok) abszolút pozícióban ült, a művelet-gombsor viszont a normál
+   folyamban. Három oszlopnál elfértek egymás mellett; negyedik járműnél az
+   oszlop keskenyebb lett, a gombsor visszatört, és RÁCSÚSZOTT a két
+   ikonra – a Kamera és a Mentett fotók a zöld pöttyre.
+
+   Megoldás: a két ikon is a folyamba kerül, egy sorba a gombokkal. Így
+   bármilyen szélességnél egymás mellé rendeződnek, és ha nem férnek el,
+   új sorba törnek – egymásra sosem. */
+.bubble .bubble-actions{
+  position:relative;                 /* nem kell külön pozicionálás */
+  display:flex;flex-wrap:wrap;align-items:center;gap:6px;
+  margin-top:10px;padding-bottom:0;
+}
+.bubble .complete-button,
+.bubble .trash{
+  position:static!important;         /* kikerülnek az abszolút sarokból */
+  left:auto!important;right:auto!important;bottom:auto!important;
+  flex:none;margin:0;
+}
+.bubble .complete-button{order:-1}   /* a kész-jelölő a sor elején */
+.bubble .trash{margin-left:auto}     /* a kuka a sor végén */
+
+/* keskeny oszlopnál kisebb ikonok és gombok, hogy több férjen egy sorba */
+.routes[style*="--route-cols: 4"] .bubble .complete-button,
+.routes[style*="--route-cols: 4"] .bubble .trash,
+.routes[style*="--route-cols: 5"] .bubble .complete-button,
+.routes[style*="--route-cols: 5"] .bubble .trash{width:36px;height:36px;font-size:17px}
+.routes[style*="--route-cols: 4"] .bubble-actions button,
+.routes[style*="--route-cols: 5"] .bubble-actions button{padding:6px 8px;font-size:10px}
+
+/* a buborék alja ne tartson fenn helyet a régi, abszolút ikonoknak */
+.bubble{padding-bottom:12px}
