@@ -357,8 +357,11 @@
         }
       }
     } catch (error) {
+      /* V106: ha a megjegyzés-lekérdezés hibázik, EDDIG minden fájl
+         "nem forrásmelléklet" lett – ezért tűnt el a Csatolmány tartalma.
+         Most inkább ISMERETLEN marad, és a felület dönt a fájlnév alapján. */
       console.warn('[V70] A jelentés-megjegyzések nem tölthetők be', error);
-      for (const row of result) { row.report_note = ''; row.is_source_mail = false; }
+      for (const row of result) { row.report_note = ''; row.is_source_mail = null; }
     }
     return result;
   }

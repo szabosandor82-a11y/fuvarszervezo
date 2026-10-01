@@ -122,7 +122,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V105Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V106Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -699,7 +699,33 @@
          forrásmellékletet – így a sofőr saját szállítólevél-fotói kerültek
          ide. Azokat a Mentett fotók gomb mutatja, ez a kettő nem keveredhet. */
       const all = (list || []).filter(file => /\.(pdf|jpe?g|png)$/i.test(file.file_name || ''));
-      const sources = all.filter(file => file.is_source_mail);
+
+      /* V106 – A CSATOLMÁNY TÖBB JELRE TÁMASZKODIK
+
+         A forrásmelléklet felismerése eddig EGYETLEN dolgon múlt: a jelentés
+         megjegyzésében szerepel-e az "Outlook forrás". Azt viszont külön
+         lekérdezés hozza, és ha az hibázott, MINDEN fájl kiesett – a
+         Csatolmány üresen maradt, pedig a PDF fent volt.
+
+         Mostantól három jel bármelyike elég:
+           - a megjegyzés "Outlook forrás" (ez a biztos jel),
+           - a fájl neve szerepel a levél mellékletei között,
+           - a megjegyzés ISMERETLEN (a lekérdezés hibázott), és a fájl nem
+             a sofőr fényképe.
+
+         A sofőr fotói így sem keverednek ide: azok neve szallitolevel-… */
+      const mellekletNevek = new Set([
+        ...(mail.attachmentNames || []),
+        mail.fileName || ''
+      ].map(nev => String(nev || '').trim().toLowerCase()).filter(Boolean));
+      const soforFotoja = file => /^szallitolevel-/i.test(String(file.file_name || ''))
+        || /^(foto|photo|img)[-_]/i.test(String(file.file_name || ''));
+      const sources = all.filter(file => {
+        if (file.is_source_mail === true) return true;
+        const nev = String(file.file_name || '').trim().toLowerCase();
+        if (nev && mellekletNevek.has(nev)) return true;
+        return file.is_source_mail == null && !soforFotoja(file);
+      });
       files.innerHTML = localHtml + (sources.length
         ? `<div class="mail-files-title">Szerverről (${sources.length})</div>`
           + sources.map(attachmentLinkV71).join('')
