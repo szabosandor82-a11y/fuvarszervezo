@@ -1018,9 +1018,44 @@
      is szerepelhet a kódban. */
   function parsePdfItemsFromLines(lines) {
     const items = [];
+
+    /* V105 – A TÉTEL MEGJEGYZÉSE NEM ÖNÁLLÓ TÉTEL
+
+       A bizonylaton a megjegyzés külön sorban áll a tétel alatt, az ár után:
+
+          1 . FES017        Festék 2,5L                    2db
+                  HUF            14 803,-        29 606,-
+                  DUNAPLASZT PRIMER VÖRÖS 800 2,5 L
+
+       A harmadik sor végén a "2,5 L" mennyiségnek látszik, ezért a program
+       MÁSODIK TÉTELKÉNT vette fel. A megkülönböztetés egyértelmű jele a
+       SORSZÁM: ebben a rendszerben minden valódi tétel számozott, a
+       megjegyzés soha.
+
+       Ezért ha a bizonylaton van legalább egy számozott tétel, csak a
+       számozott sorokat vesszük tételnek, a köztes szövegsorok pedig az
+       előző tétel megjegyzésévé válnak. Ha nincs számozás (más beszállító
+       más formátuma), marad a korábbi viselkedés. */
+    const tisztit = raw => joinThousandsV71(String(raw || '').replace(/\s+/g, ' ').trim());
+    const szamozott = sor => /^\s*\d+\s*[.)]?\s+[A-ZÁÉÍÓÖŐÚÜŰ0-9._\/-]/.test(sor);
+    const vanSorszam = (lines || []).some(raw => szamozott(tisztit(raw)));
+    const arSor = sor => /^(HUF|EUR|USD)\b/i.test(sor) || /^[\d\s.,-]+$/.test(sor);
+
     for (let raw of lines || []) {
       const line = joinThousandsV71(String(raw || '').replace(/\s+/g, ' ').trim());
       if (!line || /egys[eé]g[aá]r|engedm[eé]ny|nett[oó]|[oö]sszesen|alapbizonylat|rendel[eé]s\s*:/i.test(line)) continue;
+
+      /* Számozott bizonylaton a nem számozott sor nem lehet tétel. Ha
+         értelmes szöveg, az ELŐZŐ tétel megjegyzése lesz. */
+      if (vanSorszam && !szamozott(line)) {
+        const utolso = items[items.length - 1];
+        // a bizonylat kísérőszövegei nem a tétel megjegyzései
+        const labjegyzet = /copyright|serpa|progen|oldal\s*\d|^\d+\s*$|alairas|alá[ií]r|k[eé]zbes|kelt\b|p\.h\.|bankszaml|ad[oó]sz[aá]m|^stand\s*98/i.test(line);
+        if (utolso && !arSor(line) && !labjegyzet && line.length > 3) {
+          utolso.note = [utolso.note, line].filter(Boolean).join(' · ');
+        }
+        continue;
+      }
       let code = '', name = '', qty = '', unit = '';
       let match = line.match(/^\s*\d+\s*\.\s*([A-ZÁÉÍÓÖŐÚÜŰ0-9._\/-]+)\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
       if (match) [, code, name, qty, unit] = match;
@@ -1212,10 +1247,24 @@
     return [{ ...buildExtractedEntry({ category, sourceName, subject, body, attachmentNames }), messageOrderNos }];
   }
 
+  /* V105 – A BEHÚZOTT PDF IS FELKERÜL CSATOLMÁNYKÉNT
+
+     Eddig csak a .msg levél mellékletei kerültek fel a fuvarhoz; ha valaki
+     magát a PDF-et húzta be, a bizonylat sehol nem volt megnyitható.
+
+     A feltöltés a sourceMail.files tömbből dolgozik, ezért a behúzott PDF-et
+     ugyanúgy odatesszük – a levélnél megszokott "Outlook forrás" jelöléssel. */
   async function parsePdfFile(file, category) {
-    const parsed = await pdfTextAndLines(await file.arrayBuffer());
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const parsed = await pdfTextAndLines(bytes.buffer.slice(0));
     const pdf = { name: file.name, ...parsed };
-    return entriesFromPdfDocument({ category, sourceName: file.name, subject: file.name, body: '', pdf, attachmentNames: [file.name] });
+    const entries = entriesFromPdfDocument({ category, sourceName: file.name, subject: file.name, body: '', pdf, attachmentNames: [file.name] });
+    for (const entry of entries) {
+      entry.sourceMail = entry.sourceMail || { subject: file.name, from: '', body: '', fileName: file.name, attachmentNames: [file.name] };
+      entry.sourceMail.files = [{ name: file.name, content: bytes }];
+      entry.sourceMail.inlineFiles = [{ name: file.name, dataUrl: bytesToDataUrlV73(bytes, 'application/pdf') }];
+    }
+    return entries;
   }
 
   async function parseMsgFile(file, category) {
