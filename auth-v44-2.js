@@ -122,7 +122,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V103Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V104Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -409,6 +409,60 @@
     return Number.isFinite(time) ? time : 0;
   }
 
+  /* V104 – A SOFŐR MUNKÁJA MEZŐSZINTEN MARAD MEG
+
+     Az összefésülés eddig EGÉSZBEN választott a helyi és a távoli fuvar
+     közül, időbélyeg alapján. Ha a sofőr fotót töltött fel vagy hátralékot
+     jelölt, majd az admin hozzányúlt ugyanahhoz a fuvarhoz – akár csak
+     átrendezte a sorrendet –, az admin változata nyert, és a sofőr munkája
+     ELTŰNT.
+
+     Ez okozta mind a hármat: a hátralék nem került át, a Mentett fotók gomb
+     nem zöldült be, és a tételek átvétele is visszaállhatott.
+
+     Ezért a sofőri mezőket külön fésüljük: a szállítólevelek egyesülnek
+     (azonosító szerint, duplikáció nélkül), a tételek átvétele és a
+     hiányjelzés pedig onnan jön, ahol FRISSEBB. A sorrend és a sofőrkiosztás
+     marad a győztes változaté – azt az admin kezeli. */
+  function mergeDriverFieldsV104(nyertes, vesztes) {
+    if (!nyertes || !vesztes) return nyertes;
+    const egyesult = { ...nyertes };
+
+    // szállítólevelek: minden fotó megmarad, azonosító szerint egyszer
+    const jelentesek = new Map();
+    for (const forras of [vesztes.deliveryReports, nyertes.deliveryReports]) {
+      for (const jelentes of forras || []) {
+        const kulcs = String(jelentes?.id || jelentes?.at || JSON.stringify(jelentes));
+        jelentesek.set(kulcs, jelentes);
+      }
+    }
+    if (jelentesek.size) {
+      egyesult.deliveryReports = [...jelentesek.values()]
+        .sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
+    }
+
+    /* Tételek: az admin SOHA nem veszi vissza az átvételt, csak a sofőr
+       jelöl. Ezért tételenként azt az oldalt vesszük, amelyik TÖBBET tud:
+       ha az egyik oldalon át van véve vagy van hiányjelzés, az marad – a
+       másik oldal üres állapota nem törölheti. */
+    if (Array.isArray(vesztes.items) && Array.isArray(nyertes.items)) {
+      const vesztesTetel = new Map(vesztes.items.map(item => [String(item?._id || item?.code || ''), item]));
+      egyesult.items = nyertes.items.map(item => {
+        const par = vesztesTetel.get(String(item?._id || item?.code || ''));
+        if (!par) return item;
+        const hiany = value => String(value ?? '').trim() !== '';
+        return {
+          ...item,
+          received: item.received || par.received,
+          missingQty: hiany(item.missingQty) ? item.missingQty : par.missingQty,
+          note: String(item.note || '').trim() ? item.note : par.note
+        };
+      });
+    }
+    if (vesztes.completed) egyesult.completed = true;
+    return egyesult;
+  }
+
   function mergeOrdersByTimestampV70(localOrders, remoteOrders) {
     const remoteById = new Map((remoteOrders || []).map(order => [String(order.id), order]));
     const keptLocalIds = new Set();
@@ -417,8 +471,8 @@
       const remote = remoteById.get(String(local.id));
       if (!remote) { orders.push(local); keptLocalIds.add(String(local.id)); continue; }
       remoteById.delete(String(local.id));
-      if (orderStampV70(local) > orderStampV70(remote)) { orders.push(local); keptLocalIds.add(String(local.id)); }
-      else orders.push(remote);
+      if (orderStampV70(local) > orderStampV70(remote)) { orders.push(mergeDriverFieldsV104(local, remote)); keptLocalIds.add(String(local.id)); }
+      else orders.push(mergeDriverFieldsV104(remote, local));
     }
     for (const remote of remoteById.values()) orders.push(remote);
     return { orders, keptLocalIds };
@@ -687,23 +741,60 @@
     const ids = String(orderIds || '').split(',').map(id => id.trim()).filter(Boolean);
     if (!ids.length || ids.some(id => !canAccessOrder(id))) return alert('Ehhez a fuvarhoz nincs jogosultságod.');
     ids.forEach(id => global.markUserCommentRead?.(id));
-    const orders = ids.map(id => (state.orders || []).find(item => String(item.id) === id)).filter(Boolean);
+    let orders = ids.map(id => (state.orders || []).find(item => String(item.id) === id)).filter(Boolean);
+
+    /* V104 – A SZÁLLÍTÓLEVELEK A RENDELÉSSZÁMHOZ TARTOZNAK
+
+       Ha a sofőr egy hátralékos tételt fényképez le, a fotó az AZNAPI
+       fuvarhoz kerül. Az admin viszont a rendelésre keres rá, és ott minden
+       hozzá tartozó szállítólevelet látni akar – akár hetek alatt, több
+       fuvaron gyűltek össze.
+
+       Ezért valódi rendelésszámnál hozzávesszük az összes azonos számú
+       fuvart. A 000000 gyűjtőkód és a kötőjel NEM azonosít: minden ilyen
+       fuvar önálló, mindig más rendelés, ezért azoknál maradunk a fuvarnál. */
+    const gyujtokod = no => {
+      const t = String(no || '').trim();
+      return !t || t === '-' || /^0+$/.test(t.replace(/\D/g, '')) && /^[0\s-]+$/.test(t);
+    };
+    const valodiSzamok = [...new Set(orders.map(order => String(order.orderNo || '').trim())
+      .filter(no => no && !gyujtokod(no)))];
+    if (valodiSzamok.length) {
+      const bovitett = new Map(orders.map(order => [String(order.id), order]));
+      for (const order of state.orders || []) {
+        const no = String(order.orderNo || '').trim();
+        if (no && valodiSzamok.includes(no)) bovitett.set(String(order.id), order);
+      }
+      orders = [...bovitett.values()].sort((a, b) =>
+        String(a.scheduleDate || '').localeCompare(String(b.scheduleDate || '')));
+    }
     const orderNos = [...new Set(orders.map(order => order.orderNo).filter(Boolean))];
     const host = byId('mediaGalleryBody');
     if (byId('mediaGalleryTitle')) byId('mediaGalleryTitle').textContent = `${orderNos.join(', ') || 'Fuvar'} · mentett fotók`;
     if (host) host.innerHTML = '<div class="mobile-empty">Fotók betöltése…</div>';
     byId('mediaGalleryDialog')?.showModal();
     try {
-      const groups = await Promise.all(ids.map(async id => {
-        const order = (state.orders || []).find(item => String(item.id) === id);
-        const files = await global.V44Online.listDeliveryFiles(id);
-        return (files || []).map(file => ({ ...file, orderNo: order?.orderNo || '' }));
+      /* V104: a KIBŐVÍTETT listából töltünk, hogy a rendelésszámhoz tartozó
+         összes szállítólevél meglegyen, és mindegyik tudja, melyik napról
+         való. */
+      const groups = await Promise.all(orders.map(async order => {
+        const files = await global.V44Online.listDeliveryFiles(String(order.id));
+        return (files || []).map(file => ({
+          ...file, orderNo: order?.orderNo || '', fuvarNap: order?.scheduleDate || ''
+        }));
       }));
       /* V70: a Mentett fotók CSAK a sofőr által készített szállítóleveleket
          mutatja. Az Outlook-importból feltöltött forrásmellékletek a
          Csatolmány gomb mögé tartoznak, nem ide. */
-      const files = groups.flat().filter(file => !file.is_source_mail);
-      if (host) host.innerHTML = files.length ? files.map(file => file.mime_type?.startsWith('audio/') ? `<article><audio controls src="${safe(file.url)}"></audio><small>${safe(file.orderNo)} · ${safe(file.file_name || 'Hangjegyzet')}</small></article>` : `<article><a href="${safe(file.url)}" target="_blank" rel="noopener"><img src="${safe(file.url)}" alt="Szállítólevél"></a><small>${safe(file.orderNo)} · ${safe(file.file_name || 'Fotó')}</small></article>`).join('') : '<div class="mobile-empty">Ehhez a fuvarhoz még nincs elmentett fotó.</div>';
+      /* V104: időrendben, a LEGFRISSEBB elöl – utólagos kereséskor a
+         legutóbbi szállítólevél az érdekes. A dátum a kép alatt látszik. */
+      const files = groups.flat().filter(file => !file.is_source_mail)
+        .sort((a, b) => String(b.created_at || b.fuvarNap || '').localeCompare(String(a.created_at || a.fuvarNap || '')));
+      const napja = file => {
+        const forras = String(file.created_at || file.fuvarNap || '').slice(0, 10);
+        return forras ? forras.replace(/-/g, '. ') + '.' : '';
+      };
+      if (host) host.innerHTML = files.length ? files.map(file => file.mime_type?.startsWith('audio/') ? `<article><audio controls src="${safe(file.url)}"></audio><small>${safe(file.orderNo)} · ${safe(napja(file))} · ${safe(file.file_name || 'Hangjegyzet')}</small></article>` : `<article><a href="${safe(file.url)}" target="_blank" rel="noopener"><img src="${safe(file.url)}" alt="Szállítólevél"></a><small><b>${safe(napja(file))}</b> · ${safe(file.orderNo)} · ${safe(file.file_name || 'Fotó')}</small></article>`).join('') : '<div class="mobile-empty">Ehhez a fuvarhoz még nincs elmentett fotó.</div>';
     } catch (error) { if (host) host.innerHTML = `<div class="mobile-empty">Betöltési hiba: ${safe(error.message)}</div>`; }
   }
   global.openMediaGallery = openMediaGallery;

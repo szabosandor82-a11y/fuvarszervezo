@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V103Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V104Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -937,7 +937,34 @@ async function optimizeAll(){for(const v of activeVehicles()){const orders=dayOr
 async function updateSummaries(){for(const v of activeVehicles()){const orders=dayOrders(v.id),pick=new Set(orders.map(o=>norm(o.pickupAddress)).filter(Boolean)),drop=new Set(orders.map(o=>norm(o.dropAddress)).filter(Boolean));const el=$('#summary-'+v.id);if(el)el.textContent=`${pick.size} felrakó · ${drop.size} lerakó · kb. ${Math.max(0,orders.length*35)} perc rakodás`}}
 function toggleComplete(id){const o=state.orders.find(x=>x.id===id);if(!o)return;o.completed=!o.completed;o.completedAt=o.completed?new Date().toISOString():'';(o.items||[]).forEach(i=>i.received=o.completed);save()}
 function applyAfterFourRule(){const now=new Date();if(now.getHours()<16)return;const d=today(),nd=shiftWorkday(d,1);let changed=false;state.orders.forEach(o=>{if(o.scheduleDate===d&&!o.completed&&!o.carriedAfter16){o.scheduleDate=nd;o.carriedAfter16=true;changed=true}});if(changed){localStorage.setItem(KEY,JSON.stringify(state));$('#dayWarning').classList.remove('hidden');$('#dayWarning').textContent='A 16:00 után nem teljesített mai fuvarokat a program áthelyezte a következő munkanapra.'}}
-function searchableOrderText(o){return norm(JSON.stringify(o)+' '+(o.items||[]).map(i=>Object.values(i).join(' ')).join(' '))}function renderOrders(){const q=norm($('#orderSearch').value),vf=$('#orderVehicleFilter').value;const rows=state.orders.filter(o=>(!q||searchableOrderText(o).includes(q))&&(!vf||o.vehicleId===vf)).sort((a,b)=>a.scheduleDate.localeCompare(b.scheduleDate));$('#orderList').innerHTML=rows.map(o=>`<article class="card search-result" onclick="openSearchResult('${o.id}')"><h3>${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p>${o.scheduleDate} · ${esc(state.vehicles.find(v=>v.id===o.vehicleId)?.driverName||'Nincs kiosztva')}</p><p>${esc(o.pickupName||'')} → ${esc(o.dropAddress||'')}</p><div class="card-actions"><button onclick="event.stopPropagation();openSearchResult('${o.id}')">Megnyitás</button><button onclick="event.stopPropagation();editOrder('${o.id}')">Szerkesztés</button><button onclick="event.stopPropagation();openItems('${o.id}')">Tételek</button><button class="secondary" onclick="event.stopPropagation();openMediaGallery('${o.id}')">📎 Mentett fotók</button><button onclick="event.stopPropagation();deleteOne('${o.id}')">Törlés</button></div></article>`).join('')||'<div class="notice">Nincs találat.</div>'}window.openSearchResult=id=>{const o=state.orders.find(x=>x.id===id);if(!o)return;$('#workDate').value=o.scheduleDate;showPage('planner');render();setTimeout(()=>{const el=document.querySelector(`.bubble[data-id="${id}"]`);if(el){el.classList.add('search-highlight');el.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>el.classList.remove('search-highlight'),7000)}},180)}
+function searchableOrderText(o){return norm(JSON.stringify(o)+' '+(o.items||[]).map(i=>Object.values(i).join(' ')).join(' '))}function renderOrders(){const q=norm($('#orderSearch').value),vf=$('#orderVehicleFilter').value;const talalt=state.orders.filter(o=>(!q||searchableOrderText(o).includes(q))&&(!vf||o.vehicleId===vf)).sort((a,b)=>a.scheduleDate.localeCompare(b.scheduleDate));
+  /* V104 – EGY SOR RENDELÉSSZÁMONKÉNT
+
+     Ha egy rendelés több napon át mozog – például hátralék miatt –, eddig
+     minden napja külön sorként jelent meg a keresésben. Utólagos
+     visszakereséskor viszont a RENDELÉS az érdekes, nem a napjai.
+
+     Valódi rendelésszámnál ezért egy sort adunk, a legutóbbi nappal és az
+     összes hozzá tartozó szállítólevéllel. A 000000 gyűjtőkód és a kötőjel
+     NEM azonosít: minden ilyen fuvar önálló, mindig más rendelés, ezért
+     azok külön sorban maradnak. */
+  const gyujtoKodV104=no=>{const t=String(no||'').trim();return !t||t==='-'||/^[0\s-]+$/.test(t)};
+  const osszevont=new Map(); const rows=[];
+  for(const o of talalt){
+    const no=String(o.orderNo||'').trim();
+    if(gyujtoKodV104(no)){rows.push({...o,_fuvarok:[o]});continue}
+    const meglevo=osszevont.get(no);
+    if(meglevo){
+      meglevo._fuvarok.push(o);
+      if(String(o.scheduleDate||'')>String(meglevo.scheduleDate||'')){
+        meglevo.scheduleDate=o.scheduleDate;meglevo.vehicleId=o.vehicleId;
+      }
+      continue;
+    }
+    const uj={...o,_fuvarok:[o]};osszevont.set(no,uj);rows.push(uj);
+  }
+  const foto=sor=>(sor._fuvarok||[]).reduce((sum,x)=>sum+(x.deliveryReports||[]).reduce((n,r)=>n+(+r.photoCount||+r.fileCount||1),0),0);
+  const napok=sor=>[...new Set((sor._fuvarok||[]).map(x=>x.scheduleDate).filter(Boolean))].sort();$('#orderList').innerHTML=rows.map(o=>`<article class="card search-result" onclick="openSearchResult('${o.id}')"><h3>${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p>${o.scheduleDate} · ${esc(state.vehicles.find(v=>v.id===o.vehicleId)?.driverName||'Nincs kiosztva')}${napok(o).length>1?` · ${napok(o).length} napon át`:''}${foto(o)?` · ${foto(o)} szállítólevél`:''}</p><p>${esc(o.pickupName||'')} → ${esc(o.dropAddress||'')}</p><div class="card-actions"><button onclick="event.stopPropagation();openSearchResult('${o.id}')">Megnyitás</button><button onclick="event.stopPropagation();editOrder('${o.id}')">Szerkesztés</button><button onclick="event.stopPropagation();openItems('${o.id}')">Tételek</button><button class="secondary" onclick="event.stopPropagation();openMediaGallery('${o.id}')">📎 Mentett fotók</button><button onclick="event.stopPropagation();deleteOne('${o.id}')">Törlés</button></div></article>`).join('')||'<div class="notice">Nincs találat.</div>'}window.openSearchResult=id=>{const o=state.orders.find(x=>x.id===id);if(!o)return;$('#workDate').value=o.scheduleDate;showPage('planner');render();setTimeout(()=>{const el=document.querySelector(`.bubble[data-id="${id}"]`);if(el){el.classList.add('search-highlight');el.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>el.classList.remove('search-highlight'),7000)}},180)}
 /* V102 – EGY KATTINTÁSSAL ÁLLÍTHATÓ, HOGY A JÁRMŰ ÁLLANDÓ-E
 
    A napra szólás jelölése eddig csak a szerkesztő űrlapon volt elérhető, és
