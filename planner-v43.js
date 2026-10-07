@@ -137,6 +137,7 @@
 
     for (const vehicle of state.vehicles || []) {
       const key = driverKey(vehicle);
+      if (vehicle.homeManualV108) continue;   // V108: kézi beállítást nem írunk felül
       if (key === 'mario' && !String(vehicle.homeAddress || vehicle.homeCity || '').trim()) { vehicle.homeAddress = HOME_FALLBACKS.mario.address; vehicle.homeCity = HOME_FALLBACKS.mario.address; changed = true; }
       if (key === 'martin' && !String(vehicle.homeAddress || vehicle.homeCity || '').trim()) { vehicle.homeAddress = HOME_FALLBACKS.martin.address; vehicle.homeCity = HOME_FALLBACKS.martin.address; changed = true; }
     }
@@ -275,8 +276,13 @@
       return HOME_FALLBACKS.patrik.point;
     }
     let address = vehicle?.homeAddress || vehicle?.homeCity || '';
-    if (key === 'mario' && (!address || /kispest|kozponti\s*raktar|szigetszentmiklos/i.test(nrm(address)))) address = HOME_FALLBACKS.mario.address;
-    if (key === 'martin' && (!address || /kozponti\s*raktar|szigetszentmiklos/i.test(nrm(address)))) address = HOME_FALLBACKS.martin.address;
+    /* V108: ha az indulási pontot KÉZZEL állították be a beállításoknál, azt
+       tiszteletben tartjuk. A régi javító szabály csak az üres vagy hibásan
+       maradt címeket pótolja – különben nem lehetne Máriót a központi
+       raktárból indítani, pedig a beállításban pont ez választható. */
+    const kezzel = !!vehicle?.homeManualV108;
+    if (!kezzel && key === 'mario' && (!address || /kispest|kozponti\s*raktar|szigetszentmiklos/i.test(nrm(address)))) address = HOME_FALLBACKS.mario.address;
+    if (!kezzel && key === 'martin' && (!address || /kozponti\s*raktar|szigetszentmiklos/i.test(nrm(address)))) address = HOME_FALLBACKS.martin.address;
     if (typeof geo === 'function') {
       const point = await geo(address);
       if (point) return point;

@@ -122,7 +122,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V106Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V107Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -606,6 +606,19 @@
       <i class="ti ti-paperclip" aria-hidden="true"></i> ${name}</button>`;
   }
 
+  /* V107: a hivatkozás nélkül maradt fájlok is LÁTSZANAK, a feltöltés
+     dátumával – így kiderül, hogy a melléklet fent van, csak a megnyitása
+     akadt el, és nem úgy tűnik, mintha nem is létezne. */
+  function missingLinkListV107(files) {
+    const hibas = (files || []).filter(file => !file.url);
+    if (!hibas.length) return '';
+    return `<div class="mail-files-title">Nem megnyitható (${hibas.length})</div>`
+      + hibas.map(file => `<span class="mail-file mail-file-missing"
+          title="A fájl fent van, de a megnyitó hivatkozás nem jött létre. Frissítsd az oldalt.">
+          <i class="ti ti-alert-triangle" aria-hidden="true"></i> ${safe(file.file_name || 'melléklet')}
+          ${file.created_at ? '· ' + safe(String(file.created_at).slice(0, 10)) : ''}</span>`).join('');
+  }
+
   global.openAttachmentV71 = function (url) {
     if (!url) return alert('Ehhez a melléklethez nem jött létre megnyitható hivatkozás. Frissítsd az oldalt, és próbáld újra.');
     let win = null;
@@ -698,7 +711,7 @@
          tartalék ág, ami minden fájlt megmutatott, ha nem találtunk
          forrásmellékletet – így a sofőr saját szállítólevél-fotói kerültek
          ide. Azokat a Mentett fotók gomb mutatja, ez a kettő nem keveredhet. */
-      const all = (list || []).filter(file => /\.(pdf|jpe?g|png)$/i.test(file.file_name || ''));
+      const all = (list || []).filter(file => /\.(pdf|docx?|xlsx?|xlsm|csv)$/i.test(file.file_name || ''));
 
       /* V106 – A CSATOLMÁNY TÖBB JELRE TÁMASZKODIK
 
@@ -726,9 +739,10 @@
         if (nev && mellekletNevek.has(nev)) return true;
         return file.is_source_mail == null && !soforFotoja(file);
       });
-      files.innerHTML = localHtml + (sources.length
-        ? `<div class="mail-files-title">Szerverről (${sources.length})</div>`
-          + sources.map(attachmentLinkV71).join('')
+      const megnyithato = sources.filter(file => file.url);
+      files.innerHTML = localHtml + missingLinkListV107(sources) + (megnyithato.length
+        ? `<div class="mail-files-title">Szerverről (${megnyithato.length})</div>`
+          + megnyithato.map(attachmentLinkV71).join('')
         : (localHtml ? '' : `<small>${mail.attachmentsUnreadable
             ? 'A levél mellékletét nem sikerült kibontani az importkor – ez továbbított (FW:) leveleknél fordul elő. Mentsd el az EREDETI levelet .msg fájlként, és azt húzd be az importba.'
             : (mail.attachmentNames || []).length

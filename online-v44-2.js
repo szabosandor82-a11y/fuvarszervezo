@@ -333,14 +333,47 @@
     return { report: { ...report, fileCount: fileRows.length }, files: fileRows };
   }
 
+  /* V107 – A RÉGI FUVAR MELLÉKLETEINEK ÁTKÖTÉSE
+
+     Az import a meglévő fuvart törli, és ÚJ azonosítóval hozza létre. A
+     korábban feltöltött fájlok viszont a régi azonosítóhoz tartoznak, ezért
+     az új fuvarnál nem jelentek meg.
+
+     Ez a művelet csak az adatbázis-hivatkozást írja át; magukat a fájlokat
+     nem mozgatja, tehát gyors és visszafordítható. */
+  async function relinkDeliveryFiles(oldOrderId, newOrderId) {
+    const regi = String(oldOrderId || '').trim(), uj = String(newOrderId || '').trim();
+    if (!regi || !uj || regi === uj) return { moved: 0 };
+    const rows = await dbRequest(`delivery_report_files?${qs({ select: 'id', order_id: `eq.${regi}` })}`);
+    if (!rows || !rows.length) return { moved: 0 };
+    await dbRequest(`delivery_report_files?${qs({ order_id: `eq.${regi}` })}`, {
+      method: 'PATCH', body: { order_id: uj }, headers: { Prefer: 'return=minimal' }
+    });
+    return { moved: rows.length };
+  }
+
   async function listDeliveryFiles(orderId) {
     const rows = await dbRequest(`delivery_report_files?${qs({ select: 'id,report_id,order_id,storage_path,file_name,mime_type,file_size,created_at', order_id: `eq.${String(orderId)}`, order: 'created_at.desc' })}`);
     const result = [];
     for (const row of rows || []) {
+      /* V107 – EGY ROSSZ FÁJL NE VIGYE EL AZ EGÉSZ LISTÁT
+
+         A hivatkozást fájlonként kell aláíratni a tárolóval. Ha EGY aláírás
+         hibázott, a hiba kiszállt a ciklusból, és a hívó "a mellékletek nem
+         tölthetők be" üzenetet kapott – az összes többi melléklet is eltűnt,
+         pedig azok rendben voltak.
+
+         Mostantól a hibás fájl url nélkül, de LÁTHATÓAN bekerül a listába, a
+         többi pedig megnyitható marad. */
+      let signedUrl = '';
+      try {
       const signed = await rawRequest(`${baseUrl()}/storage/v1/object/sign/delivery-docs/${pathEncode(row.storage_path)}`, { method: 'POST', body: { expiresIn: 3600 } });
       const signedPath = signed?.signedURL || signed?.signedUrl || '';
-      const signedUrl = !signedPath ? '' : /^https?:/i.test(signedPath) ? signedPath : signedPath.startsWith('/storage/v1') ? `${baseUrl()}${signedPath}` : `${baseUrl()}/storage/v1${signedPath.startsWith('/') ? '' : '/'}${signedPath}`;
-      result.push({ ...row, url: signedUrl });
+      signedUrl = !signedPath ? '' : /^https?:/i.test(signedPath) ? signedPath : signedPath.startsWith('/storage/v1') ? `${baseUrl()}${signedPath}` : `${baseUrl()}/storage/v1${signedPath.startsWith('/') ? '' : '/'}${signedPath}`;
+      } catch (error) {
+        console.warn('[V107] a melléklet hivatkozása nem jött létre', row.file_name, error);
+      }
+      result.push({ ...row, url: signedUrl, urlError: !signedUrl });
     }
     /* V70: a fájl mellé odatesszük a jelentés megjegyzését. Ebből derül ki,
        hogy a sofőr által készített szállítólevél-fotóról van-e szó, vagy az
@@ -391,7 +424,7 @@
     setStatusListener: listener => { statusListener = listener; },
     signInWithPassword, signOut, refreshSession, ensureSession, fetchProfile, listUsers,
     fetchOrders, fetchBacklog, syncOrders, syncBacklog, loadOrdersIntoState, fetchMasterData, syncMasterData, loadMasterIntoState, masterSnapshot, requestTransfer, acceptTransfer, rejectTransfer, cancelTransfer, listTransfers,
-    createDeliveryReport, listDeliveryFiles,
+    createDeliveryReport, listDeliveryFiles, relinkDeliveryFiles,
     startPolling, stopPolling, driverKeyFromOrder, DRIVER_VEHICLES
   };
 })(typeof window !== 'undefined' ? window : globalThis);

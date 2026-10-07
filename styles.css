@@ -986,3 +986,26 @@ button.mail-file{font:inherit;cursor:pointer}
 
 /* a buborék alja ne tartson fenn helyet a régi, abszolút ikonoknak */
 .bubble{padding-bottom:12px}
+
+/* V107 – a 16 órás átvitel felajánlása és jelzése */
+#dayWarning .v107-carry,#dayWarning .v107-dismiss{margin-left:10px;height:34px;padding:0 13px;
+  border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid #a9b8cf}
+#dayWarning .v107-carry{background:var(--blue);color:#fff;border-color:var(--blue)}
+#dayWarning .v107-dismiss{background:#fff;color:var(--ink)}
+.v107-carried{margin:4px 0 6px;padding:4px 9px;border-radius:7px;background:#fff3dc;
+  border:1px solid #e6cfa3;color:#7a4d06;font-size:11.5px;font-weight:600;display:inline-block}
+
+/* V108 – indulási pontok és központi raktár */
+.v108-base{margin-bottom:16px}
+.v108-base h3{margin:0 0 4px;font-size:16px}
+.v108-hint{margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:1.55}
+.v108-homes{display:flex;flex-direction:column;gap:9px;margin:12px 0}
+.v108-row{display:flex;align-items:center;gap:12px;margin:0}
+.v108-row>span{flex:none;width:170px;font-size:13px;font-weight:700;display:flex;flex-direction:column}
+.v108-row>span small{font-weight:400;font-size:11.5px;color:var(--muted)}
+.v108-row input{flex-grow:1;min-width:0;height:42px}
+.v108-empty{padding:10px;color:var(--muted);font-size:13px}
+@media(max-width:760px){
+  .v108-row{flex-direction:column;align-items:stretch;gap:4px}
+  .v108-row>span{width:auto;flex-direction:row;gap:7px;align-items:baseline}
+}

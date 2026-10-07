@@ -1300,10 +1300,27 @@
     };
     for (const attachment of attachments) {
       const attachmentName = attachment.fileName || attachment.fileNameShort || '';
-      if (!/\.(pdf|jpe?g|png)$/i.test(attachmentName)) continue;
+      /* V107 – CSAK DOKUMENTUM-MELLÉKLET
+
+         A levelek alján ott ül az aláírás 4-6 apró képe (image001.png és
+         társai). Ezek eddig mind felkerültek a fuvarhoz, és elnyomták a
+         listában az egyetlen fontos fájlt, a megrendelést.
+
+         Mostantól csak a dokumentumok kerülnek fel: PDF, Word, Excel, CSV.
+         A képmellékletek kimaradnak. */
+      if (!/\.(pdf|docx?|xlsx?|xlsm|csv)$/i.test(attachmentName)) continue;
       try {
         const extracted = reader.getAttachment(attachment);
-        const content = extracted?.content || extracted?.data;
+        /* V107: a beolvasó többféle néven adhatja vissza a tartalmat. Ha
+           egyiket sem találjuk, a melléklet EDDIG csendben elveszett: a neve
+           látszott a levél alján, de gomb nem tartozott hozzá. Most
+           olvashatatlanként jelöljük, hogy a felületen is látszódjon. */
+        const content = extracted?.content || extracted?.data || extracted?.bytes
+          || (extracted instanceof Uint8Array ? extracted : null);
+        if (!content) {
+          sourceMail.unreadable = sourceMail.unreadable || [];
+          sourceMail.unreadable.push(attachmentName);
+        }
         if (content) {
           sourceMail.files.push({ name: attachmentName, content });
           /* V73: a PDF-et azonnal eltesszük helyben is, hogy a Csatolmány
@@ -1323,7 +1340,7 @@
        jelezzük. Továbbított (FW:) leveleknél előfordul, hogy a beolvasó csak
        a nyers levélforrást látja – ilyenkor a fuvar a tárgysorból jön létre,
        de a PDF nem kerül fel, és a Csatolmány üres marad. */
-    const wantedFiles = names.filter(name => /\.(pdf|jpe?g|png)$/i.test(name));
+    const wantedFiles = names.filter(name => /\.(pdf|docx?|xlsx?|xlsm|csv)$/i.test(name));
     if (wantedFiles.length && !sourceMail.files.length) {
       sourceMail.attachmentsUnreadable = true;
     }
@@ -1379,13 +1396,35 @@
     for (let index = 0; index < entries.length; index++) {
       const mail = entries[index]?.sourceMail;
       const order = orders[index];
-      if (!mail?.files?.length || !order?.id) continue;
+
+      /* V107 – A CSENDES KIHAGYÁS LÁTHATÓVÁ TÉTELE
+
+         Eddig minden olyan bejegyzést szó nélkül átugrottunk, amelynél nem
+         volt feltölthető fájl. Így állt elő az az állapot, hogy a levél
+         alján LÁTSZIK a melléklet neve, de a Csatolmány üres, és semmi nem
+         mondja meg, miért.
+
+         Mostantól, ha a levélnek VAN melléklete, de a tartalmát nem sikerült
+         kibontani, azt ugyanúgy jelezzük, mint a feltöltési hibát. */
+      if (!order?.id) continue;
+      if (!mail?.files?.length) {
+        const nevek = (mail?.attachmentNames || []).filter(nev => /\.(pdf|docx?|xlsx?|xlsm|csv)$/i.test(nev));
+        if (nevek.length) {
+          failed.push(`${order.orderNo || order.id}: a melléklet tartalma nem volt kibontható (${nevek.join(', ')})`);
+        }
+        continue;
+      }
       const files = [];
       for (const item of mail.files) {
         try {
           const bytes = item.content instanceof Uint8Array ? item.content : new Uint8Array(item.content);
           const mime = /\.pdf$/i.test(item.name) ? 'application/pdf'
-            : /\.png$/i.test(item.name) ? 'image/png' : 'image/jpeg';
+            : /\.docx$/i.test(item.name) ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            : /\.doc$/i.test(item.name) ? 'application/msword'
+            : /\.xlsx$/i.test(item.name) ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : /\.xlsm?$/i.test(item.name) ? 'application/vnd.ms-excel'
+            : /\.csv$/i.test(item.name) ? 'text/csv'
+            : 'application/octet-stream';
           files.push(new File([bytes], item.name, { type: mime }));
         } catch (error) { /* egy melléklet kihagyható */ }
       }
@@ -1399,7 +1438,8 @@
       }
     }
     if (failed.length && typeof alert === 'function') {
-      alert('A levél mellékletei nem töltődtek fel, ezért a Csatolmány gombbal nem lesznek megnyithatók:\n\n'
+      alert('A levél mellékletei nem töltődtek fel, ezért a Csatolmány gombbal nem lesznek megnyithatók.\n'
+        + 'Továbbított (FW:) levélnél mentsd el az EREDETI levelet .msg fájlként, és azt húzd be.\n\n'
         + failed.slice(0, 5).join('\n') + (failed.length > 5 ? `\n… és további ${failed.length - 5}` : ''));
     }
   }
@@ -1927,6 +1967,21 @@ ${entry.subject || ''}`) || project;
         .forEach(order => replaceIds.add(order.id));
     }
     const replacementCount = replaceIds.size;
+    /* V107 – A FRISSÍTETT FUVAR ÖRÖKLI A RÉGI MELLÉKLETEIT
+
+       Az import a meglévő fuvart TÖRLI, és új azonosítóval hozza létre
+       újra. A korábban feltöltött szállítólevelek és csatolmányok viszont a
+       RÉGI azonosítóhoz tartoznak a tárolóban – így az új fuvar üresen állt,
+       és a Csatolmány azt írta, hogy a fájlok nincsenek feltöltve.
+
+       Ezért megjegyezzük, melyik régi fuvar helyére jön az új, és a
+       feltöltés után átkötjük a régi fájlokat. */
+    const lecsereltek = (state.orders || []).filter(order => replaceIds.has(order.id));
+    const elozoAzonositok = new Map();
+    for (const regi of lecsereltek) {
+      const kulcs = `${String(regi.orderNo || '').trim()}|${norm(regi.pickupName || '')}`;
+      elozoAzonositok.set(kulcs, String(regi.id));
+    }
     if (replaceIds.size) {
       state.orders = (state.orders || []).filter(order => !replaceIds.has(order.id));
       state.backlog = (state.backlog || []).filter(record => !replaceIds.has(record.sourceOrderId) && !replaceIds.has(record.targetOrderId));
@@ -1957,6 +2012,17 @@ ${entry.subject || ''}`) || project;
         global.saveOrderAttachmentsV73(order.id, inline);
       }
     });
+    /* a régi fuvar mellékleteinek átkötése az újra */
+    if (elozoAzonositok.size && global.V44Online?.relinkDeliveryFiles) {
+      for (const order of accepted) {
+        const kulcs = `${String(order.orderNo || '').trim()}|${norm(order.pickupName || '')}`;
+        const regiId = elozoAzonositok.get(kulcs);
+        if (regiId && regiId !== String(order.id)) {
+          global.V44Online.relinkDeliveryFiles(regiId, String(order.id))
+            .catch(error => console.warn('[V107] a régi mellékletek átkötése nem sikerült', order.orderNo, error));
+        }
+      }
+    }
     uploadSourceMailFiles(acceptedEntries, accepted).catch(error =>
       console.warn('[V60] A levél mellékletének feltöltése nem sikerült', error));
 
