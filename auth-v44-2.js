@@ -122,7 +122,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V108Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V109Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -609,6 +609,17 @@
   /* V107: a hivatkozás nélkül maradt fájlok is LÁTSZANAK, a feltöltés
      dátumával – így kiderül, hogy a melléklet fent van, csak a megnyitása
      akadt el, és nem úgy tűnik, mintha nem is létezne. */
+  /* A tároló a feltöltéskor sorszámot tesz a név elé, és az ékezetes betűket
+     aláhúzásra cseréli (Megrendelés.pdf → 01-Megrendel_s.pdf). Ezért a
+     kulcsot UGYANAZZAL a cserével képezzük mindkét oldalon – így a két
+     változat egyezik, és a fájl nem jelenik meg kétszer. */
+  function nevKulcsV109(nev) {
+    return String(nev || '')
+      .replace(/^\d{2}-/, '')
+      .replace(/[^a-zA-Z0-9._-]+/g, '_')
+      .toLowerCase();
+  }
+
   function missingLinkListV107(files) {
     const hibas = (files || []).filter(file => !file.url);
     if (!hibas.length) return '';
@@ -743,10 +754,12 @@
          megnyithatók, kapcsolat nélkül is – a szerveri másolat csak
          kiegészítés. */
       let levelHtml = '';
+      const levelNevek = new Set();
       try {
         const sajat = await (global.mailAttachmentsV108?.(orderId) || []);
+        for (const rekord of sajat) levelNevek.add(nevKulcsV109(rekord.name));
         if (sajat.length) {
-          levelHtml = `<div class="mail-files-title">A levélből (${sajat.length})</div>`
+          levelHtml = `<div class="mail-files-title">Melléklet (${sajat.length})</div>`
             + sajat.map(rekord => {
                 const url = global.attachmentUrlV108?.(rekord) || '';
                 if (!url) return '';
@@ -757,8 +770,29 @@
         }
       } catch (error) { console.warn('[V108] a levélből mentett mellékletek', error); }
 
-      const megnyithato = sources.filter(file => file.url);
-      files.innerHTML = levelHtml + localHtml + missingLinkListV107(sources) + (megnyithato.length
+      /* V109 – UGYANAZ A FÁJL NE SZEREPELJEN KÉTSZER
+
+         Ugyanaz a melléklet két helyről is előkerül: a levélből mentett
+         eredetiből és a szerverre feltöltött másolatból. Eddig mindkettő
+         megjelent, ezért a PDF kétszer látszott.
+
+         A levélből mentett változat az elsődleges – az kapcsolat nélkül is
+         megnyílik –, ezért a szerveri listából kivesszük azt, ami név
+         szerint már ott van. A tárolóban a név elé sorszám kerül
+         (01-megrendeles.pdf), ezt a kulcsképzés leválasztja. */
+      const megnyithato = sources.filter(file =>
+        file.url && !levelNevek.has(nevKulcsV109(file.file_name)));
+      /* V109 – HA A LEVÉLBŐL MEGVAN, CSAK AZ KELL
+
+         A levélből mentett eredeti melléklet mindig megnyílik: a fájl bájtjai
+         a fuvarnál vannak, kapcsolat sem kell hozzá. A szerveri másolat
+         viszont aláírt hivatkozást igényel, ami néha nem jön létre – olyankor
+         a sor ott állt, de nem nyílt meg.
+
+         Ezért ha a levélből van melléklet, CSAK azt mutatjuk. A szerveri lista
+         akkor jön elő, ha a levélből semmi nincs. */
+      files.innerHTML = levelHtml ? levelHtml
+        : localHtml + missingLinkListV107(sources.filter(file => !levelNevek.has(nevKulcsV109(file.file_name)))) + (megnyithato.length
         ? `<div class="mail-files-title">Szerverről (${megnyithato.length})</div>`
           + megnyithato.map(attachmentLinkV71).join('')
         : (localHtml ? '' : `<small>${mail.attachmentsUnreadable
@@ -774,12 +808,34 @@
     const host = byId(targetId); if (!host) return;
     const ids = [...new Set((orderIds || []).flatMap(id => String(id || '').split(',')).map(id => id.trim()).filter(Boolean))];
     try {
+      /* V109 – A TÉTELEK ALATTI GOMB IS A LEVÉLBŐL DOLGOZIK
+
+         Ez a gomb eddig CSAK a szerveri másolatból listázott, a levélből
+         mentett eredeti mellékletet nem is nézte – ezért nem nyitott meg
+         semmit. Most ugyanúgy a levélből mentett fájlok az elsődlegesek,
+         mint a Csatolmány gombnál, és a szerveri lista csak akkor jön elő,
+         ha a levélből semmi nincs. */
+      let levelHtml = '';
+      for (const id of ids) {
+        const sajat = await (global.mailAttachmentsV108?.(id) || []);
+        for (const rekord of sajat) {
+          const url = global.attachmentUrlV108?.(rekord) || '';
+          if (!url) continue;
+          levelHtml += `<button type="button" class="mail-file" data-url="${safe(url)}"
+            onclick="openAttachmentV71(this.dataset.url)">
+            <i class="ti ti-paperclip" aria-hidden="true"></i> ${safe(rekord.name)}</button>`;
+        }
+      }
+      if (levelHtml) {
+        host.innerHTML = `<div class="item-attachments-title">Mellékletek</div>${levelHtml}`;
+        return;
+      }
       const lists = await Promise.all(ids.map(id => global.V44Online?.listDeliveryFiles ? listDeliveryFilesEventually(id) : Promise.resolve([])));
-      const files = lists.flat().filter(file => /\.pdf$/i.test(file.file_name || ''));
+      const files = lists.flat().filter(file => /\.(pdf|docx?|xlsx?|xlsm|csv)$/i.test(file.file_name || '') && file.url);
       host.innerHTML = files.length
-        ? `<div class="item-attachments-title">PDF mellékletek (${files.length})</div>${files.map(attachmentLinkV71).join('')}`
-        : '<small>Nincs elérhető PDF-melléklet ehhez a tételhez.</small>';
-    } catch (error) { host.innerHTML = `<small>A PDF-mellékletek nem tölthetők be: ${safe(error.message)}</small>`; }
+        ? `<div class="item-attachments-title">Mellékletek (${files.length})</div>${files.map(attachmentLinkV71).join('')}`
+        : '<small>Nincs elérhető melléklet ehhez a fuvarhoz.</small>';
+    } catch (error) { host.innerHTML = `<small>A mellékletek nem tölthetők be: ${safe(error.message)}</small>`; }
   }
   async function openOrderPdfAttachments(orderIds) {
     const ids = [...new Set(String(orderIds || '').split(',').map(id => id.trim()).filter(Boolean))];

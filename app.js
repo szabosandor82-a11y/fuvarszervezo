@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V108Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V109Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -1501,6 +1501,71 @@ window.openItems=openItems;window.toggleItem=(id,i,val)=>{const o=state.orders.f
 function backlogRecordData(b){const o=state.orders.find(x=>x.id===b.targetOrderId),it=o?.items?.find(i=>i._id===b.itemId);return{...b,orderNo:o?.orderNo||b.orderNo,supplier:o?.pickupName||b.supplier,projectName:o?.projectName||b.projectName,code:it?.code||b.code,name:it?.name||b.name,itemNote:it?itemNoteValue(it):b.itemNote,movedToDate:o?.scheduleDate||b.movedToDate,targetOrderId:o?.id||b.targetOrderId}}
 function renderBacklog(){const q=norm($('#backlogSearch')?.value||''),rows=(state.backlog||[]).map(backlogRecordData).filter(b=>!q||norm(Object.values(b).join(' ')).includes(q));if($('#backlogBody'))$('#backlogBody').innerHTML=rows.map(b=>`<tr class="backlog-row" onclick="openBacklogResult('${b.targetOrderId}','${b.movedToDate}')"><td>${esc(b.orderNo)}</td><td>${esc(b.supplier)}</td><td>${esc(b.projectName)}</td><td>${esc(b.code)}</td><td>${esc(b.name)}</td><td>${esc(b.itemNote)}</td><td>${esc(b.movedToDate)}</td></tr>`).join('')||'<tr><td colspan="7">Nincs találat.</td></tr>'}
 window.openBacklogResult=(id,date)=>{const o=state.orders.find(x=>x.id===id);$('#workDate').value=o?.scheduleDate||date;showPage('planner');render();setTimeout(()=>{const el=document.querySelector(`.bubble[data-id="${id}"]`);if(el){el.classList.add('search-highlight');el.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>el.classList.remove('search-highlight'),7000)}},180)};
+/* ===== V109 – ÁTHELYEZÉS A KÖVETKEZŐ MUNKANAPRA =====================
+
+   A buborékon új gomb. A fuvar ugyanahhoz a sofőrhöz kerül át, csak a
+   következő munkanapra – hétvégét átugorva, ugyanúgy, ahogy a nap léptetése
+   működik máshol.
+
+   Egy buborékban több rendelés is lehet (ugyanaz a felrakó, több
+   rendelésszám). Ilyenkor nem találgatunk: megkérdezzük, melyiket vagy
+   melyeket kell átvinni.
+
+   A fuvar a célnapon a sofőr listájának VÉGÉRE kerül, hogy a meglévő
+   sorrendet ne borítsa fel. */
+function nextWorkdayOrdersV109(ids){
+  return String(ids||'').split(',').map(id=>id.trim()).filter(Boolean)
+    .map(id=>(state.orders||[]).find(order=>String(order.id)===id)).filter(Boolean);
+}
+
+function performNextDayMoveV109(orders){
+  if(!orders.length)return;
+  let mozgatott=0;
+  for(const order of orders){
+    const celnap=shiftWorkday(order.scheduleDate||selectedDate(),1);
+    const utolso=(state.orders||[])
+      .filter(item=>item.scheduleDate===celnap&&item.vehicleId===order.vehicleId)
+      .reduce((max,item)=>Math.max(max,+item.sequence||0),0);
+    order.scheduleDate=celnap;
+    order.sequence=utolso+1;
+    mozgatott++;
+  }
+  save();
+  const celnap=orders[0].scheduleDate;
+  alert(mozgatott===1
+    ? `A fuvar átkerült a(z) ${celnap} napra, ugyanahhoz a sofőrhöz.`
+    : `${mozgatott} fuvar átkerült a(z) ${celnap} napra, ugyanahhoz a sofőrhöz.`);
+}
+
+function moveToNextWorkdayV109(ids){
+  const orders=nextWorkdayOrdersV109(ids);
+  if(!orders.length)return alert('A fuvar nem található.');
+
+  // egyetlen rendelés: nincs mit választani
+  if(orders.length===1){
+    const celnap=shiftWorkday(orders[0].scheduleDate||selectedDate(),1);
+    if(!confirm(`${orders[0].orderNo||'A fuvar'} áthelyezése erre a napra: ${celnap}?`))return;
+    return performNextDayMoveV109(orders);
+  }
+
+  // több rendelés egy buborékban: kérdezzük meg, melyiket
+  const dialog=$('#nextDayDialog'); if(!dialog)return;
+  const celnap=shiftWorkday(orders[0].scheduleDate||selectedDate(),1);
+  $('#nextDayLead').textContent=`${orders[0].pickupName||'A felrakó'} · ${orders.length} rendelés. Jelöld ki, melyik kerüljön át ${celnap} napra.`;
+  $('#nextDayList').innerHTML=orders.map(order=>`<label class="v109-row">
+    <input type="checkbox" value="${esc(order.id)}" checked>
+    <span><b>${esc(order.orderNo||'Rendelésszám nélkül')}</b>
+      <small>${esc(order.projectName||'Egyedi úticél')} · ${(order.items||[]).length} tétel</small></span></label>`).join('');
+  $('#nextDayConfirm').onclick=()=>{
+    const jelolt=[...$$('#nextDayList input:checked')].map(mezo=>mezo.value);
+    if(!jelolt.length)return alert('Jelölj ki legalább egy rendelést.');
+    dialog.close();
+    performNextDayMoveV109(orders.filter(order=>jelolt.includes(String(order.id))));
+  };
+  dialog.showModal();
+}
+window.moveToNextWorkdayV109=moveToNextWorkdayV109;
+
 function openCamera(id){const o=state.orders.find(x=>x.id===id);if(!o)return;window.V69DeliveryCamera?.reset();window.markUserCommentRead?.(id);$('#cameraOrderId').value=id;$('#cameraTitle').textContent=`${o.orderNo} · Szállítólevél`;$('#cameraPreview').innerHTML='';$('#cameraNote').value='';$('#cameraInput').value='';$('#cameraDialog').showModal()}
 window.openCamera=openCamera;$('#chooseCameraFile').onclick=()=>$('#cameraInput').click();$('#cameraInput').onchange=e=>{$('#cameraPreview').innerHTML=[...e.target.files].map(f=>`<img src="${URL.createObjectURL(f)}">`).join('')};$('#cameraForm').onsubmit=e=>{e.preventDefault();const o=state.orders.find(x=>x.id===$('#cameraOrderId').value);o.deliveryReports=o.deliveryReports||[];o.deliveryReports.push({at:new Date().toISOString(),note:$('#cameraNote').value,photoCount:(window.V69DeliveryCamera?.files()||[...$('#cameraInput').files]).length,hasAudio:!!audioBlob});$('#cameraDialog').close();save();alert('A fotó és megjegyzés helyben rögzítve.')};
 function editVehicle(id){const v=state.vehicles.find(x=>x.id===id)||{};
@@ -1673,6 +1738,7 @@ function formatQty(v){return Number.isInteger(v)?String(v):String(Math.round(v*1
 function openItems(id){
   const o=state.orders.find(x=>x.id===id);if(!o)return;window.markUserCommentRead?.(id);currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);
   $('#itemsTitle').textContent=`${o.orderNo} · Tételek`;
+
   $('#itemMovePanel').innerHTML=`<p><b>Nem kipipált tételek áthelyezése másik napra</b><br>Írd be a következő felvétel dátumát. A hiányzó darabszám kerül át; üres mező esetén a teljes rendelt mennyiség.</p><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN"></div>`;
   $('#itemsBody').innerHTML=(o.items||[]).map((it,i)=>`<div class="item-row ${it.received?'done':''}"><input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${id}',${i},this.checked)"><div><b class="item-name">${esc(it.name)}</b><br>${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)} ${it.longMaterial?'· hosszú szál':''}<div class="missing-qty-wrap ${it.received?'hidden':''}"><label>Nem kaptam meg – mennyiség<input type="number" min="0" step="any" placeholder="Üres = teljes mennyiség" value="${esc(it.missingQty||'')}" oninput="updateMissingQty('${id}',${i},this.value)"></label><small>Áthelyezéskor ez a mennyiség kerül a következő napra és a Hátralékba.</small></div><label class="item-note-edit">Tétel megjegyzés<textarea placeholder="Nincs megjegyzés" oninput="updateItemNote('${id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label></div></div>`).join('')||'<div class="notice">Nincs tétel.</div>';
   bindMoveDateParts();if(!$('#itemsDialog').open)$('#itemsDialog').showModal()
@@ -2320,7 +2386,7 @@ function openItems(id){
   const manualNote=String(o.manualItems||'').trim();
   const noteBlock=manualNote?`<div class="v65-manual-note"><b>Megjegyzés:</b> ${esc(manualNote)}</div>`:'';
   const emptyBlock=((o.items||[]).length||manualNote)?'':'<div class="notice">Nincs tétel.</div>';
-  $('#itemsBody').innerHTML=noteBlock+`<div class="item-attachments-toolbar"><button type="button" class="secondary item-pdf-button" onclick="openOrderPdfAttachments('${o.id}')">PDF mellékletek megnyitása</button><div id="itemAttachments" class="item-attachments"><small>Mellékletek betöltése…</small></div></div>`+itemRowsHtml+emptyBlock;
+  $('#itemsBody').innerHTML=noteBlock+`<div class="item-attachments-toolbar"><button type="button" class="secondary item-pdf-button" onclick="openOrderPdfAttachments('${o.id}')">📎 Mellékletek megnyitása</button><div id="itemAttachments" class="item-attachments"><small>Mellékletek betöltése…</small></div></div>`+itemRowsHtml+emptyBlock;
   bindV21MoveDateParts();bindItemDatePartsV71();if(!$('#itemsDialog').open)$('#itemsDialog').showModal(); if(window.renderOrderPdfAttachments) window.renderOrderPdfAttachments([o.id],'itemAttachments')
 }
 window.openItems=openItems;

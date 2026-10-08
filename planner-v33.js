@@ -602,7 +602,7 @@
     document.querySelector('#itemsTitle').textContent = `${orders.length} rendelés · tételek`;
     document.querySelector('#itemMovePanel').innerHTML = '<p>A tételek rendelési számonként elkülönítve láthatók. Dátumos áthelyezéshez nyisd meg az adott rendelést külön.</p>';
     const pdfIds = orders.map(order => order.id).join(',');
-    document.querySelector('#itemsBody').innerHTML = `<div class="item-attachments-toolbar"><button type="button" class="secondary item-pdf-button" onclick="openOrderPdfAttachments('${escHtml(pdfIds)}')">PDF mellékletek megnyitása</button><div id="groupItemAttachments" class="item-attachments"><small>Mellékletek betöltése…</small></div></div>` + orders.map(order => {
+    document.querySelector('#itemsBody').innerHTML = `<div class="item-attachments-toolbar"><button type="button" class="secondary item-pdf-button" onclick="openOrderPdfAttachments('${escHtml(pdfIds)}')">📎 Mellékletek megnyitása</button><div id="groupItemAttachments" class="item-attachments"><small>Mellékletek betöltése…</small></div></div>` + orders.map(order => {
       (order.items || []).forEach(item => typeof ensureItemId === 'function' && ensureItemId(item));
       const rows = (order.items || []).map((item, index) => {
         const record = typeof backlogRecordForItem === 'function' ? backlogRecordForItem(order.id, item._id) : null;
