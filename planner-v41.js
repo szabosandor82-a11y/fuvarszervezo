@@ -123,7 +123,13 @@
     const normalized = nrm(text);
     if (/uj kozponti raktar|kozponti raktar|szigetszentmiklos|\bkrpr\b/.test(normalized)) return { id: '', ...CENTRAL_WAREHOUSE, reason: 'központi raktár szabály' };
     const projects = typeof state !== 'undefined' ? state.projects || [] : [];
-    const suppliers = typeof state !== 'undefined' ? state.suppliers || [] : [];
+    /* V108: az INAKTÍV sorokra nem illesztünk. A törzsadatban 20 olyan sor
+       van, ahol a cégnév helyett cím áll (elcsúszott export). Ezeket nem
+       töröltük, mert régi fuvar hivatkozhat rájuk, de felrakóként soha nem
+       szabad kiválasztani őket – import közben ilyen "1158 Budapest,
+       Késmárk u." nevű felrakó keletkezett. */
+    const suppliers = (typeof state !== 'undefined' ? state.suppliers || [] : [])
+      .filter(item => item && item.active !== false);
     const all = [...projects.map(item => ({ ...item, _kind: 'project' })), ...suppliers.map(item => ({ ...item, _kind: 'supplier' }))];
     const ranked = all.map(item => ({ item, score: significantTokens(item.name).reduce((score, token) => score + (normalized.includes(token) ? 8 : 0), 0) + (normalized.includes(nrm(item.name)) ? 30 : 0) })).sort((a, b) => b.score - a.score);
     if (!ranked.length || ranked[0].score < 8) return null;
@@ -1237,14 +1243,22 @@
     }));
   }
 
-  function entriesFromMessageBody({ category, sourceName, subject, body, attachmentNames = [] }) {
+  function entriesFromMessageBody({ category, sourceName, subject, body, attachmentNames = [], sourceMail = null }) {
     const refs = extractOrderRefs(subject, sourceName, body);
     const messageOrderNos = unique(refs.map(ref => ref.no));
     const returnMode = isReturnText(subject, body);
+    /* V108 – A LEVÉL MELLÉKLETE A PDF NÉLKÜLI ÁGON IS MEGMARAD
+
+       Ha a bizonylatból nem sikerült tételt kiolvasni (vagy nincs is PDF),
+       a fuvar a levél szövegéből jön létre. Ez az ág viszont ELDOBTA a
+       sourceMail objektumot, benne a mellékletek bájtjaival – ezért a
+       Csatolmány üres maradt, pedig a levélben ott volt a PDF.
+
+       Mostantól a sourceMail ezen az ágon is rákerül a bejegyzésre. */
     if (!returnMode && refs.length > 1) {
-      return refs.map(ref => ({ ...buildExtractedEntry({ category, sourceName, subject, body, attachmentNames, forcedRefs: [ref] }), messageOrderNos }));
+      return refs.map(ref => ({ ...buildExtractedEntry({ category, sourceName, subject, body, attachmentNames, forcedRefs: [ref] }), messageOrderNos, sourceMail }));
     }
-    return [{ ...buildExtractedEntry({ category, sourceName, subject, body, attachmentNames }), messageOrderNos }];
+    return [{ ...buildExtractedEntry({ category, sourceName, subject, body, attachmentNames }), messageOrderNos, sourceMail }];
   }
 
   /* V105 – A BEHÚZOTT PDF IS FELKERÜL CSATOLMÁNYKÉNT
@@ -2022,6 +2036,26 @@ ${entry.subject || ''}`) || project;
             .catch(error => console.warn('[V107] a régi mellékletek átkötése nem sikerült', order.orderNo, error));
         }
       }
+    }
+    /* V108: a levél mellékletei a FUVARHOZ is elmentődnek, a levélből érkező
+       eredeti bájtokkal. Így a Csatolmány akkor is megnyitja őket, ha a
+       szerverre nem jutottak fel, vagy épp nincs internet. */
+    if (global.saveMailAttachmentsV108) {
+      acceptedEntries.forEach((entry, index) => {
+        const order = accepted[index];
+        const files = (entry?.sourceMail?.files || []).map(item => ({
+          name: item.name,
+          type: /\.pdf$/i.test(item.name) ? 'application/pdf'
+            : /\.docx$/i.test(item.name) ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            : /\.xlsx$/i.test(item.name) ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : 'application/octet-stream',
+          bytes: item.content instanceof Uint8Array ? item.content : new Uint8Array(item.content || [])
+        }));
+        if (order?.id && files.length) {
+          global.saveMailAttachmentsV108(String(order.id), files)
+            .catch(error => console.warn('[V108] a melléklet helyi mentése', error));
+        }
+      });
     }
     uploadSourceMailFiles(acceptedEntries, accepted).catch(error =>
       console.warn('[V60] A levél mellékletének feltöltése nem sikerült', error));

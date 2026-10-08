@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V107Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V108Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -2005,6 +2005,83 @@ function saveOrderAttachmentsV73(orderId, files) {
     catch (retryError) { console.warn('[V73] a melléklet helyben nem fért el', retryError); return 0; }
   }
 }
+
+/* ===== V108 – A MELLÉKLET MAGÁBÓL A LEVÉLBŐL ========================
+
+   Eddig a melléklet helyi másolata a böngésző 5 MB-os localStorage
+   rekeszébe került. Ez olyan szűk, hogy szigorú korlátok kellettek hozzá:
+   220 kB fájlonként, 1 MB összesen, 5 nap megőrzés. Emiatt a legtöbb
+   bizonylat vagy fel sem került ide, vagy pár nap múlva eltűnt – és ha a
+   szerveri másolat sem volt elérhető, a Csatolmány üresen maradt.
+
+   Mostantól IndexedDB tárolja őket. Ott nagyságrendekkel több fér el, nincs
+   napos lejárat, és a fájl a LEVÉLBŐL érkező eredeti bájtokkal nyílik meg –
+   akkor is, ha nincs internet, és akkor is, ha a szerverre nem jutott fel.
+
+   A régi localStorage-os másolatokat továbbra is olvassuk, hogy a korábban
+   importált fuvarok mellékletei se vesszenek el. */
+const ATTACH_DB_V108 = 'fuvarAttachV108', ATTACH_STORE_V108 = 'files';
+const ATTACH_MAX_V108 = 12 * 1024 * 1024;   // fájlonként 12 MB
+
+function openAttachDbV108() {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') return reject(new Error('Nincs IndexedDB.'));
+    const keres = indexedDB.open(ATTACH_DB_V108, 1);
+    keres.onupgradeneeded = () => {
+      const db = keres.result;
+      if (!db.objectStoreNames.contains(ATTACH_STORE_V108)) {
+        db.createObjectStore(ATTACH_STORE_V108, { keyPath: 'id' }).createIndex('orderId', 'orderId');
+      }
+    };
+    keres.onsuccess = () => resolve(keres.result);
+    keres.onerror = () => reject(keres.error || new Error('Az IndexedDB nem nyitható meg.'));
+  });
+}
+
+async function saveMailAttachmentsV108(orderId, files) {
+  const lista = (files || []).filter(file => file && file.bytes && file.bytes.length <= ATTACH_MAX_V108);
+  if (!orderId || !lista.length) return 0;
+  const db = await openAttachDbV108();
+  return new Promise((resolve, reject) => {
+    const tr = db.transaction(ATTACH_STORE_V108, 'readwrite');
+    const bolt = tr.objectStore(ATTACH_STORE_V108);
+    for (const file of lista) {
+      bolt.put({
+        id: `${orderId}::${file.name}`, orderId: String(orderId),
+        name: file.name, type: file.type || 'application/octet-stream',
+        bytes: file.bytes, savedAt: new Date().toISOString()
+      });
+    }
+    tr.oncomplete = () => { db.close(); resolve(lista.length); };
+    tr.onerror = () => { db.close(); reject(tr.error); };
+  });
+}
+
+async function mailAttachmentsV108(orderId) {
+  if (!orderId) return [];
+  try {
+    const db = await openAttachDbV108();
+    return await new Promise((resolve, reject) => {
+      const tr = db.transaction(ATTACH_STORE_V108, 'readonly');
+      const kereses = tr.objectStore(ATTACH_STORE_V108).index('orderId').getAll(String(orderId));
+      kereses.onsuccess = () => { db.close(); resolve(kereses.result || []); };
+      kereses.onerror = () => { db.close(); reject(kereses.error); };
+    });
+  } catch (error) { console.warn('[V108] helyi mellékletek olvasása', error); return []; }
+}
+
+/* A tárolt bájtokból megnyitható hivatkozás. A böngésző addig tartja, amíg
+   a lap nyitva van – ezért minden megnyitáskor újra előállítjuk. */
+function attachmentUrlV108(record) {
+  try {
+    const blob = new Blob([record.bytes], { type: record.type || 'application/octet-stream' });
+    return URL.createObjectURL(blob);
+  } catch (error) { return ''; }
+}
+
+window.saveMailAttachmentsV108 = saveMailAttachmentsV108;
+window.mailAttachmentsV108 = mailAttachmentsV108;
+window.attachmentUrlV108 = attachmentUrlV108;
 
 function loadOrderAttachmentsV73(orderId) {
   try {

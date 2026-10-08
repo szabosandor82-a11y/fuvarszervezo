@@ -122,7 +122,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V107Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V108Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -739,8 +739,26 @@
         if (nev && mellekletNevek.has(nev)) return true;
         return file.is_source_mail == null && !soforFotoja(file);
       });
+      /* V108: ELŐSZÖR a levélből mentett eredeti mellékletek. Ezek mindig
+         megnyithatók, kapcsolat nélkül is – a szerveri másolat csak
+         kiegészítés. */
+      let levelHtml = '';
+      try {
+        const sajat = await (global.mailAttachmentsV108?.(orderId) || []);
+        if (sajat.length) {
+          levelHtml = `<div class="mail-files-title">A levélből (${sajat.length})</div>`
+            + sajat.map(rekord => {
+                const url = global.attachmentUrlV108?.(rekord) || '';
+                if (!url) return '';
+                return `<button type="button" class="mail-file" data-url="${safe(url)}"
+                  onclick="openAttachmentV71(this.dataset.url)">
+                  <i class="ti ti-paperclip" aria-hidden="true"></i> ${safe(rekord.name)}</button>`;
+              }).join('');
+        }
+      } catch (error) { console.warn('[V108] a levélből mentett mellékletek', error); }
+
       const megnyithato = sources.filter(file => file.url);
-      files.innerHTML = localHtml + missingLinkListV107(sources) + (megnyithato.length
+      files.innerHTML = levelHtml + localHtml + missingLinkListV107(sources) + (megnyithato.length
         ? `<div class="mail-files-title">Szerverről (${megnyithato.length})</div>`
           + megnyithato.map(attachmentLinkV71).join('')
         : (localHtml ? '' : `<small>${mail.attachmentsUnreadable
