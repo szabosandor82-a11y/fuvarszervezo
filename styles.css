@@ -1022,3 +1022,25 @@ button.mail-file{font:inherit;cursor:pointer}
 .v109-row span{display:flex;flex-direction:column;min-width:0}
 .v109-row small{color:var(--muted);font-size:12px;margin-top:2px}
 .v109-foot{display:flex;gap:10px;justify-content:flex-end}
+
+/* V110 – kijelölő gombok az áthelyező ablakban */
+.v109-tools{display:flex;align-items:center;gap:9px;margin-bottom:11px;flex-wrap:wrap}
+.v109-tools button{height:34px;padding:0 12px;border-radius:8px;border:1px solid #a9b8cf;
+  background:#f4f7f9;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--ink)}
+.v109-tools button:hover{background:var(--sky)}
+#nextDayCount{margin-left:auto;font-size:12.5px;color:var(--muted);font-weight:600}
+#nextDayConfirm:disabled{opacity:.5;cursor:not-allowed}
+
+/* V110 – csatolmány a fuvar űrlapján */
+.v110-attach{margin:14px 0;padding:13px;border:1px solid var(--border);border-radius:11px;background:#fbfcfd}
+.v110-attach-head{font-size:13px;font-weight:700;margin-bottom:4px}
+.v110-attach-hint{margin:0 0 10px;font-size:12px;color:var(--muted);line-height:1.5}
+.v110-drop{padding:18px 12px;border:2px dashed #a9c7e4;border-radius:10px;background:#f4fafe;
+  text-align:center;font-size:13px;color:#13507f;cursor:pointer;font-weight:600}
+.v110-drop:hover,.v110-drop.dragover{background:#e7f3fc;border-color:var(--blue)}
+.v110-attach-list{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.v110-attach-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);
+  border-radius:8px;background:#fff;font-size:12.5px}
+.v110-attach-row span{min-width:0;overflow-wrap:anywhere;flex-grow:1}
+.v110-attach-row small{flex:none;color:var(--muted);font-size:11.5px}
+.v110-attach-empty{font-size:12.5px;color:var(--muted);padding:3px 2px}

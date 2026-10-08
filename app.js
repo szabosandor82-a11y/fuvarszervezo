@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V109Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V110Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -1433,6 +1433,9 @@ function returnOrder(id){
 window.returnOrder=returnOrder;
 
 function openOrder(o={}){
+  /* V110: a csatolmány-mező bekötése és a meglévő fájlok kiírása. */
+  orderAttachPendingV110=[];
+  setTimeout(()=>{ bindOrderAttachV110(); renderOrderAttachListV110(o.id||''); },0);
   /* V87: a cél-követő kulcsokat minden űrlapnyitáskor nullázzuk. Enélkül az
      ELŐZŐ fuvarnál választott cél megmaradt, a program változatlannak látta a
      célt, és nem töltötte ki a címet – például a Moxy bérleménynél. */
@@ -1513,6 +1516,105 @@ window.openBacklogResult=(id,date)=>{const o=state.orders.find(x=>x.id===id);$('
 
    A fuvar a célnapon a sofőr listájának VÉGÉRE kerül, hogy a meglévő
    sorrendet ne borítsa fel. */
+/* ===== V110 – CSATOLMÁNY A FUVAR ŰRLAPJÁN ===========================
+
+   Eddig csak az Outlook importon át kerülhetett melléklet a fuvarhoz. Ha
+   kézzel vettél fel egy fuvart – például egy feladatot, amihez nincs
+   rendelés –, a kérést csak a megjegyzésbe lehetett beírni.
+
+   Mostantól a fuvar űrlapján behúzható a levél (.msg) vagy maga a bizonylat
+   (PDF, Word, Excel). A fájl a fuvarhoz mentődik, és a sofőr ugyanazzal a
+   Csatolmány gombbal nyitja meg, mint az importáltaknál – kapcsolat nélkül
+   is, mert a bájtok a készüléken vannak.
+
+   Új fuvarnál a fájl a mentésig várakozik, mert addig nincs azonosító. */
+let orderAttachPendingV110 = [];
+
+function orderAttachTypeV110(nev){
+  const n = String(nev || '').toLowerCase();
+  if (n.endsWith('.pdf')) return 'application/pdf';
+  if (n.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (n.endsWith('.doc')) return 'application/msword';
+  if (n.endsWith('.xlsx')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (n.endsWith('.xls') || n.endsWith('.xlsm')) return 'application/vnd.ms-excel';
+  if (n.endsWith('.csv')) return 'text/csv';
+  if (n.endsWith('.msg')) return 'application/vnd.ms-outlook';
+  return 'application/octet-stream';
+}
+
+async function renderOrderAttachListV110(orderId){
+  const host = $('#orderAttachList'); if (!host) return;
+  const mentett = orderId && window.mailAttachmentsV108 ? await window.mailAttachmentsV108(String(orderId)) : [];
+  const sorok = [
+    ...mentett.map(rekord => ({ nev: rekord.name, jel: 'mentve' })),
+    ...orderAttachPendingV110.map(file => ({ nev: file.name, jel: 'mentés után kerül fel' }))
+  ];
+  host.innerHTML = sorok.length
+    ? sorok.map(sor => `<div class="v110-attach-row"><span>📎 ${esc(sor.nev)}</span><small>${esc(sor.jel)}</small></div>`).join('')
+    : '<div class="v110-attach-empty">Nincs csatolmány.</div>';
+}
+
+async function addOrderAttachmentsV110(fileList, orderId){
+  const fajlok = [...(fileList || [])].filter(file => file && file.size);
+  if (!fajlok.length) return;
+  const tulNagy = fajlok.filter(file => file.size > 12 * 1024 * 1024);
+  if (tulNagy.length) alert(`Ez a fájl túl nagy (12 MB a határ): ${tulNagy.map(f => f.name).join(', ')}`);
+  const jok = fajlok.filter(file => file.size <= 12 * 1024 * 1024);
+  if (!jok.length) return;
+
+  if (!orderId) { orderAttachPendingV110.push(...jok); return renderOrderAttachListV110(''); }
+  await saveOrderAttachmentFilesV110(orderId, jok);
+  await renderOrderAttachListV110(orderId);
+}
+
+async function saveOrderAttachmentFilesV110(orderId, fajlok){
+  const csomag = [];
+  for (const file of fajlok) {
+    try {
+      csomag.push({ name: file.name, type: file.type || orderAttachTypeV110(file.name),
+        bytes: new Uint8Array(await file.arrayBuffer()) });
+    } catch (error) { console.warn('[V110] a fájl nem olvasható', file.name, error); }
+  }
+  if (!csomag.length) return;
+  /* A fuvaron jelöljük, hogy van csatolmánya – a Csatolmány gomb eddig csak
+     az Outlook importból érkezett fuvaroknál jelent meg. */
+  const fuvar = (state.orders || []).find(order => String(order.id) === String(orderId));
+  if (fuvar) {
+    fuvar.hasManualAttachV110 = true;
+    fuvar.manualAttachNamesV110 = [...new Set([...(fuvar.manualAttachNamesV110 || []), ...csomag.map(f => f.name)])];
+    if (typeof save === 'function') save(false);
+  }
+  try { await window.saveMailAttachmentsV108?.(String(orderId), csomag); }
+  catch (error) { console.warn('[V110] a csatolmány mentése', error); alert('A csatolmány mentése nem sikerült.'); }
+}
+
+/* A mentés után kapott azonosítóhoz tesszük a várakozó fájlokat. */
+async function flushOrderAttachmentsV110(orderId){
+  if (!orderId || !orderAttachPendingV110.length) return;
+  const varakozo = orderAttachPendingV110.slice();
+  orderAttachPendingV110 = [];
+  await saveOrderAttachmentFilesV110(orderId, varakozo);
+}
+
+function bindOrderAttachV110(){
+  const drop = $('#orderAttachDrop'), input = $('#orderAttachInput');
+  if (!drop || !input || drop.dataset.v110 === '1') return;
+  drop.dataset.v110 = '1';
+  const aktualisId = () => $('#orderId')?.value || '';
+  drop.onclick = () => input.click();
+  drop.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); input.click(); } };
+  input.onchange = () => { addOrderAttachmentsV110(input.files, aktualisId()); input.value = ''; };
+  drop.ondragover = event => { event.preventDefault(); drop.classList.add('dragover'); };
+  drop.ondragleave = () => drop.classList.remove('dragover');
+  drop.ondrop = event => {
+    event.preventDefault(); drop.classList.remove('dragover');
+    addOrderAttachmentsV110(event.dataTransfer?.files, aktualisId());
+  };
+}
+window.bindOrderAttachV110 = bindOrderAttachV110;
+window.renderOrderAttachListV110 = renderOrderAttachListV110;
+window.flushOrderAttachmentsV110 = flushOrderAttachmentsV110;
+
 function nextWorkdayOrdersV109(ids){
   return String(ids||'').split(',').map(id=>id.trim()).filter(Boolean)
     .map(id=>(state.orders||[]).find(order=>String(order.id)===id)).filter(Boolean);
@@ -1549,13 +1651,36 @@ function moveToNextWorkdayV109(ids){
   }
 
   // több rendelés egy buborékban: kérdezzük meg, melyiket
-  const dialog=$('#nextDayDialog'); if(!dialog)return;
+  const dialog=$('#nextDayDialog');
+  /* V110: ha a választóablak bármiért nem érhető el, NE történjen semmi
+     némán – ilyenkor is megkérdezzük, csak egyszerűbb formában. Korábban a
+     gomb ilyenkor hatástalan volt, és úgy tűnt, mintha nem is működne. */
+  if(!dialog||typeof dialog.showModal!=='function'){
+    const celnapR=shiftWorkday(orders[0].scheduleDate||selectedDate(),1);
+    const lista=orders.map(order=>order.orderNo||'(szám nélkül)').join(', ');
+    if(!confirm(`${orders.length} rendelés tartozik ehhez a felrakóhoz:\n${lista}\n\nMindet áthelyezzük erre a napra: ${celnapR}?`))return;
+    return performNextDayMoveV109(orders);
+  }
   const celnap=shiftWorkday(orders[0].scheduleDate||selectedDate(),1);
   $('#nextDayLead').textContent=`${orders[0].pickupName||'A felrakó'} · ${orders.length} rendelés. Jelöld ki, melyik kerüljön át ${celnap} napra.`;
   $('#nextDayList').innerHTML=orders.map(order=>`<label class="v109-row">
     <input type="checkbox" value="${esc(order.id)}" checked>
     <span><b>${esc(order.orderNo||'Rendelésszám nélkül')}</b>
       <small>${esc(order.projectName||'Egyedi úticél')} · ${(order.items||[]).length} tétel</small></span></label>`).join('');
+  /* V110: kijelölő gombok – ha mindet át kell vinni, egy kattintás. A
+     számláló mindig mutatja, hány rendelés van kijelölve. */
+  const szamlalo=()=>{
+    const db=$$('#nextDayList input:checked').length;
+    const cimke=$('#nextDayCount');
+    if(cimke)cimke.textContent=`${db} / ${orders.length} kijelölve`;
+    const gomb=$('#nextDayConfirm');
+    if(gomb)gomb.disabled=!db;
+  };
+  const mind=jelolt=>{ for(const mezo of $$('#nextDayList input'))mezo.checked=jelolt; szamlalo(); };
+  if($('#nextDayAll'))$('#nextDayAll').onclick=()=>mind(true);
+  if($('#nextDayNone'))$('#nextDayNone').onclick=()=>mind(false);
+  for(const mezo of $$('#nextDayList input'))mezo.onchange=szamlalo;
+  szamlalo();
   $('#nextDayConfirm').onclick=()=>{
     const jelolt=[...$$('#nextDayList input:checked')].map(mezo=>mezo.value);
     if(!jelolt.length)return alert('Jelölj ki legalább egy rendelést.');
@@ -1955,6 +2080,8 @@ function renderReports(){
         render();
         return;
       }
+      /* V110: a mentés után kapott azonosítóhoz tesszük a behúzott fájlokat. */
+      flushOrderAttachmentsV110(String(saved.id)).catch(error=>console.warn('[V110] csatolmány',error));
       learnFromOrder(saved,before,draft);
       localStorage.setItem(KEY,JSON.stringify(state));
       render();

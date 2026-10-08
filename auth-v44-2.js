@@ -25,7 +25,9 @@
   const byId = id => document.getElementById(id);
   const normalizeEmail = value => String(value || '').trim().toLowerCase();
   const safe = value => typeof esc === 'function' ? esc(value || '') : String(value || '').replace(/[&<>"']/g, '');
-  const hasOutlookSource = order => !!(order && (order.sourceMail || order.outlookImport || order.outlookSourceFile || order.outlookPdfFile || /^outlook import/i.test(String(order.note || '')) || (order.deliveryReports || []).some(report => /^Outlook forrás/i.test(String(report.note || '')))));
+  /* V110: a kézzel feltöltött csatolmány is számít – enélkül a Csatolmány
+     gomb csak az importált fuvaroknál jelent meg. */
+  const hasOutlookSource = order => !!(order && (order.hasManualAttachV110 || order.sourceMail || order.outlookImport || order.outlookSourceFile || order.outlookPdfFile || /^outlook import/i.test(String(order.note || '')) || (order.deliveryReports || []).some(report => /^Outlook forrás/i.test(String(report.note || '')))));
   const localDate = offset => {
     const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + offset);
     return typeof localISO === 'function' ? localISO(d) : d.toISOString().slice(0, 10);
@@ -122,7 +124,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V109Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V110Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
