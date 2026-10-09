@@ -100,11 +100,28 @@
       : orderOrId;
   }
   /* Láthatóság: a sofőr a három munkanapot látja. */
+  /* V113 – MEDDIG LÁTHAT A SOFŐR
+
+     Visszafelé nincs korlát: a korábbi napok megtekinthetők. Előre a
+     következő munkanapig, ahogy eddig. */
+  function viewableDateV113(date) {
+    const nap = String(date || '').slice(0, 10);
+    if (!nap) return false;
+    const utolso = allowedDates()[2];       // a következő munkanap
+    return nap <= utolso;
+  }
+
   function canAccessOrder(orderOrId) {
     if (isAdmin()) return true;
     if (!currentProfile) return false;
     const order = orderOf(orderOrId);
-    if (!order || !allowedDates().includes(order.scheduleDate)) return false;
+    /* V113: a MEGTEKINTÉS korlátlanul visszanyílik – a sofőr a saját autója
+       bármelyik korábbi napját megnézheti. Előre marad holnapig, hogy ne
+       lássa a félkész terveket.
+
+       A SZERKESZTÉS szabálya nem változik: azt a canEditOrder dönti el, és
+       az továbbra is csak a mai napot engedi. */
+    if (!order || !viewableDateV113(order.scheduleDate)) return false;
     if (currentProfile.role === 'test') return true;
     const vehicle = vehicleForDriverKey(currentProfile.driver_key);
     return !!vehicle && order.vehicleId === vehicle.id;
@@ -124,7 +141,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V111Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V113Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -226,7 +243,8 @@
     /* V71: ha az eltárolt nap már nem érvényes – például átfordult a nap, vagy
        hétvége után hétfő lett –, mindig a MAI munkanap nyílik meg, nem a
        lista első eleme (az a tegnapi volna). */
-    selectedDriverDate = allowedDates().includes(selectedDriverDate) ? selectedDriverDate : currentWorkday();
+    /* V113: a korábbi napok is megmaradnak – csak a jövőbe nem engedünk. */
+    selectedDriverDate = viewableDateV113(selectedDriverDate) ? selectedDriverDate : currentWorkday();
     await renderDriverPortal();
   }
 
@@ -322,6 +340,111 @@
     return `<section class="incoming-transfers"><h2>Átvételre váró fuvarok</h2>${pending.map(item => `<article><div><b>${safe(item.order_no)} · ${safe(item.project_name || '')}</b><small>${safe(item.schedule_date || '')} · ${safe(DRIVER_LABELS[item.from_driver_key] || item.from_driver_key)} adná át</small></div><div><button type="button" onclick="respondTransfer('${safe(item.id)}','accept')">Elfogadom</button><button type="button" class="secondary" onclick="respondTransfer('${safe(item.id)}','reject')">Elutasítom</button></div></article>`).join('')}</section>`;
   }
 
+
+  /* ===== V113 – NAPLÉPTETŐ ÉS KERESŐ A SOFŐRI FELÜLETEN ==============
+
+     A sofőr eddig három munkanapot látott: tegnap, ma, holnap. Mostantól
+     korlátlanul visszanézhet, és kereshet is a saját fuvarjai között.
+
+     A SZERKESZTÉS szabálya nem változik: csak a mai nap módosítható. A
+     korábbi napokon a felület megmutat mindent, de a műveletek nem futnak
+     le – erre a canEditOrder figyel, és egy sáv is jelzi a képernyőn. */
+  function driverOwnOrdersV113() {
+    const sajat = visibleVehicles().map(vehicle => String(vehicle.id));
+    return (state.orders || []).filter(order => sajat.includes(String(order.vehicleId)));
+  }
+
+  function driverSearchTextV113(order) {
+    const tetelek = (order.items || [])
+      .map(item => [item.code, item.description, item.name, item.note].filter(Boolean).join(' '))
+      .join(' ');
+    return [order.orderNo, order.pickupName, order.pickupAddress, order.projectName,
+            order.dropAddress, order.recipientName, order.note, tetelek]
+      .filter(Boolean).join(' ').toLowerCase();
+  }
+
+  function renderDriverSearchV113() {
+    const mezo = byId('driverSearch'), host = byId('driverSearchResults');
+    if (!mezo || !host) return;
+    const q = String(mezo.value || '').trim().toLowerCase();
+    byId('driverSearchClear')?.classList.toggle('hidden', !q);
+    if (q.length < 2) { host.classList.add('hidden'); host.innerHTML = ''; return; }
+
+    /* A legfrissebb naptól visszafelé – a gyakori eset pár hetes
+       visszakeresés, az maradjon gyors akkor is, ha egy év adat gyűlt. */
+    const talalt = driverOwnOrdersV113()
+      .filter(order => viewableDateV113(order.scheduleDate) && driverSearchTextV113(order).includes(q))
+      .sort((a, b) => String(b.scheduleDate || '').localeCompare(String(a.scheduleDate || '')))
+      .slice(0, 60);
+
+    host.classList.remove('hidden');
+    host.innerHTML = talalt.length
+      ? `<div class="v113-results-head">${talalt.length} találat</div>` + talalt.map(order => `
+          <button type="button" class="v113-result" onclick="openDriverSearchHitV113('${safe(order.id)}')">
+            <span class="v113-result-main"><b>${safe(order.orderNo || 'Rendelésszám nélkül')}</b>
+              <small>${safe(order.pickupName || '')} → ${safe(order.projectName || order.dropAddress || '')}</small></span>
+            <span class="v113-result-date">${safe(order.scheduleDate)}</span></button>`).join('')
+      : '<div class="v113-results-empty">Nincs találat.</div>';
+  }
+
+  function openDriverSearchHitV113(orderId) {
+    const order = (state.orders || []).find(item => String(item.id) === String(orderId));
+    if (!order) return;
+    selectedDriverDate = order.scheduleDate;
+    byId('driverSearch').value = '';
+    renderDriverSearchV113();
+    renderDriverPortal();
+    setTimeout(() => {
+      const kartya = document.querySelector(`[data-order-id="${order.id}"]`);
+      kartya?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
+  }
+
+  function stepDriverDayV113(irany) {
+    const mostani = selectedDriverDate || currentWorkday();
+    selectedDriverDate = typeof shiftWorkday === 'function'
+      ? shiftWorkday(mostani, irany) : fallbackShiftWorkday(mostani, irany);
+    if (!viewableDateV113(selectedDriverDate)) selectedDriverDate = mostani;
+    renderDriverPortal();
+  }
+
+  function bindDriverToolsV113() {
+    const mezo = byId('driverSearch');
+    if (mezo && mezo.dataset.v113 !== '1') {
+      mezo.dataset.v113 = '1';
+      mezo.oninput = renderDriverSearchV113;
+      byId('driverSearchClear').onclick = () => { mezo.value = ''; renderDriverSearchV113(); mezo.focus(); };
+    }
+    const picker = byId('driverDayPicker');
+    if (picker && picker.dataset.v113 !== '1') {
+      picker.dataset.v113 = '1';
+      byId('driverDayPrev').onclick = () => stepDriverDayV113(-1);
+      byId('driverDayNext').onclick = () => stepDriverDayV113(1);
+      byId('driverDayToday').onclick = () => { selectedDriverDate = currentWorkday(); renderDriverPortal(); };
+      picker.onchange = () => {
+        const uj = String(picker.value || '').slice(0, 10);
+        if (!uj) return;
+        if (!viewableDateV113(uj)) { alert('A következő munkanapnál későbbi nap még nem nézhető meg.'); picker.value = selectedDriverDate; return; }
+        selectedDriverDate = uj;
+        renderDriverPortal();
+      };
+    }
+  }
+
+  /* A képernyő tetején jelezzük, ha a megnyitott nap csak megtekinthető. */
+  function renderDriverReadOnlyBarV113() {
+    const sav = byId('driverReadOnlyBar');
+    if (!sav) return;
+    const picker = byId('driverDayPicker');
+    if (picker) picker.value = selectedDriverDate || '';
+    const csakNezet = isReadOnlyDate(selectedDriverDate);
+    sav.classList.toggle('hidden', !csakNezet);
+    if (csakNezet) sav.textContent = `${selectedDriverDate} · csak megtekintés – módosítani a mai napon lehet`;
+  }
+
+  global.openDriverSearchHitV113 = openDriverSearchHitV113;
+  global.bindDriverToolsV113 = bindDriverToolsV113;
+
   async function refreshTransfers() {
     try { transferCache = await global.V44Online.listTransfers(); }
     catch (error) { console.warn('[V48] Átadások betöltési hibája', error); transferCache = []; }
@@ -330,6 +453,8 @@
 
   async function renderDriverPortal() {
     if (!currentProfile || isAdmin()) return;
+    /* V113: a kereső és a napléptető bekötése, majd a megtekintés-sáv. */
+    bindDriverToolsV113();
     await refreshTransfers();
     const identity = byId('driverPortalIdentity');
     if (identity) identity.textContent = `${currentProfile.display_name || currentSession?.user?.email} · ${currentProfile.role === 'test' ? 'TESZT' : 'SOFŐR'}`;
@@ -350,6 +475,7 @@
     }).join('');
     host.innerHTML = `${pendingTransferCards()}<div class="mobile-online-refresh"><button type="button" class="secondary" id="driverRefreshOnline">↻ Frissítés</button><span id="driverOnlineStatus">Online</span></div>${sections}`;
     byId('driverRefreshOnline')?.addEventListener('click', refreshOnlineNow);
+    renderDriverReadOnlyBarV113();
   }
 
   async function refreshOnlineNow() {

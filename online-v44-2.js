@@ -151,10 +151,35 @@
     };
   }
 
+  /* ===== V112 – A HIÁNYZÓ master_data TÁBLA NEM ÁLLÍTHATJA MEG A MUNKÁT
+
+     A törzsadat (projektek, beszállítók, átvevők, járművek) egy külön
+     Supabase-táblában tárolódik. Ha ez a tábla nincs létrehozva, a lekérés
+     hibát dobott, és az EGÉSZ frissítés megállt – pedig a fuvarok addigra
+     már betöltődtek.
+
+     Mostantól a hiányzó táblát úgy kezeljük, mintha üres volna: a helyi
+     törzsadat marad érvényben, a fuvarok frissülnek, és csak a konzolba
+     kerül megjegyzés. A tábla létrehozásához a SUPABASE_MASTER_DATA.sql
+     fájl tartalmazza a parancsot. */
+  function missingTableV112(error) {
+    const szoveg = String(error?.message || error || '').toLowerCase();
+    return szoveg.includes('master_data') &&
+      (szoveg.includes('could not find the table') || szoveg.includes('does not exist')
+        || szoveg.includes('schema cache') || szoveg.includes('pgrst205'));
+  }
+
   async function fetchMasterData() {
     if (!profile) profile = await fetchProfile();
     if (profile?.role !== 'admin') return null;
-    const rows = await dbRequest(`master_data?${qs({ select: 'payload,updated_at,updated_by', id: 'eq.current', limit: '1' })}`);
+    let rows;
+    try {
+      rows = await dbRequest(`master_data?${qs({ select: 'payload,updated_at,updated_by', id: 'eq.current', limit: '1' })}`);
+    } catch (error) {
+      if (!missingTableV112(error)) throw error;
+      console.warn('[V112] a master_data tábla nincs létrehozva – a helyi törzsadat marad érvényben.');
+      return null;
+    }
     return rows?.[0] ? { ...(rows[0].payload || {}), onlineUpdatedAt: rows[0].updated_at, onlineUpdatedBy: rows[0].updated_by } : null;
   }
 
@@ -162,11 +187,17 @@
     if (!currentProfile) currentProfile = await fetchProfile();
     if (currentProfile?.role !== 'admin') return null;
     const payload = masterSnapshot(source);
-    await dbRequest('master_data?on_conflict=id', {
-      method: 'POST',
-      body: [{ id: 'current', payload, updated_at: new Date().toISOString() }],
-      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }
-    });
+    try {
+      await dbRequest('master_data?on_conflict=id', {
+        method: 'POST',
+        body: [{ id: 'current', payload, updated_at: new Date().toISOString() }],
+        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }
+      });
+    } catch (error) {
+      if (!missingTableV112(error)) throw error;
+      console.warn('[V112] a master_data tábla nincs létrehozva – a törzsadat csak helyben mentődött.');
+      return null;
+    }
     return payload;
   }
 

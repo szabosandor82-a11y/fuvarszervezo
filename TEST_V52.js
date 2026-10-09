@@ -43,14 +43,14 @@ function ok(name, fn) {
 let passed = 0;
 
 passed += ok('A szétosztómotor kiadási verziója V70', () => {
-  assert.match(index, /Fuvarszervező V111/);
+  assert.match(index, /Fuvarszervező V113/);
   assert.match(app, /APP_VERSION=/);
-  assert.match(planner, /const VERSION = '111'/);
-  assert.equal(manifest.name, 'Fuvarszervező V111');
-  assert.equal(manifest.short_name, 'Fuvar V111');
-  assert.match(sw, /fuvarszervezo-v111-online-20261009-1/);
+  assert.match(planner, /const VERSION = '113'/);
+  assert.equal(manifest.name, 'Fuvarszervező V113');
+  assert.equal(manifest.short_name, 'Fuvar V113');
+  assert.match(sw, /fuvarszervezo-v113-online-20261009-3/);
   assert.ok(!index.includes('?v=51.0'));
-  assert.match(index, /\?v=111\.0/);
+  assert.match(index, /\?v=113\.0/);
 });
 
 passed += ok('Minden belépési felületen e-mail- és jelszómező van', () => {
@@ -95,7 +95,10 @@ passed += ok('Az öt engedélyezett fiók és a szerepkörök megmaradtak', () =
 });
 
 passed += ok('A sofőr jogosultsága továbbra is saját fuvarra és engedélyezett napra korlátozott', () => {
-  assert.match(auth, /allowedDates\(\)\.includes\(order\.scheduleDate\)/);
+  /* V113: a megtekintes korlatlanul visszanyilt, ezert a nap-ellenorzes a
+     viewableDateV113 fuggvenybe kerult. A SZANDEK valtozatlan: a sofor csak
+     engedelyezett napot es csak a sajat fuvarjat erheti el. */
+  assert.match(auth, /viewableDateV113\(order\.scheduleDate\)/);
   assert.match(auth, /order\.vehicleId === vehicle\.id/);
   assert.match(auth, /if \(currentProfile\.role === 'test'\) return true/);
 });
