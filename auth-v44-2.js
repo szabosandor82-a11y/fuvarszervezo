@@ -141,7 +141,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V113Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V114Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -592,6 +592,18 @@
       });
     }
     if (vesztes.completed) egyesult.completed = true;
+    if (vesztes.completedAtV111 && !egyesult.completedAtV111) egyesult.completedAtV111 = vesztes.completedAtV111;
+
+    /* V114: a sofőr fuvar szintű megjegyzése is megmarad. A frissebb beírásé
+       nyer; ha csak az egyik oldalon van, az marad. */
+    const megjegyzesek = [nyertes, vesztes].filter(o => String(o?.driverNoteV111 || '').trim());
+    if (megjegyzesek.length) {
+      const forras = megjegyzesek.sort((a, b) =>
+        String(b.driverNoteAtV111 || '').localeCompare(String(a.driverNoteAtV111 || '')))[0];
+      egyesult.driverNoteV111 = forras.driverNoteV111;
+      egyesult.driverNoteAtV111 = forras.driverNoteAtV111;
+      egyesult.driverNoteByV111 = forras.driverNoteByV111;
+    }
     return egyesult;
   }
 
@@ -1007,7 +1019,10 @@
       order.completed = false;
       delete order.completedAtV111;
     }
-    stampOrderChange(order);
+    /* V114: a módosítás idejét közvetlenül jelöljük. Korábban egy nem létező
+       függvényt hívtunk (stampOrderChange), ezért a gomb HIBÁRA FUTOTT, és a
+       változás sem mentődött el – az adminnál semmi nem látszott. */
+    order.localUpdatedAt = new Date().toISOString();
     save();
   }
 
@@ -1026,7 +1041,10 @@
     } else {
       delete order.driverNoteV111; delete order.driverNoteAtV111; delete order.driverNoteByV111;
     }
-    stampOrderChange(order);
+    /* V114: a módosítás idejét közvetlenül jelöljük. Korábban egy nem létező
+       függvényt hívtunk (stampOrderChange), ezért a gomb HIBÁRA FUTOTT, és a
+       változás sem mentődött el – az adminnál semmi nem látszott. */
+    order.localUpdatedAt = new Date().toISOString();
     save();
   }
 

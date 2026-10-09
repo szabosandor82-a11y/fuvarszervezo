@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V113Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V114Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -149,7 +149,11 @@ function stampLocalChanges(){
   const prev=window.__lastSavedSnapshotV70||{};
   const next={};
   for(const o of state.orders||[]){
-    const key=`${o.scheduleDate}|${o.vehicleId}|${o.sequence}|${o.completed?1:0}|${(o.items||[]).length}`;
+    /* V114: a sofőri megjegyzés és az átvett tételek is számítanak. Enélkül
+       a megjegyzés beírása nem frissítette az időbélyeget, ezért az
+       összefésülésnél elveszhetett. */
+    const atvett=(o.items||[]).filter(it=>it.received).length;
+    const key=`${o.scheduleDate}|${o.vehicleId}|${o.sequence}|${o.completed?1:0}|${(o.items||[]).length}|${atvett}|${String(o.driverNoteV111||'').length}|${o.driverNoteAtV111||''}`;
     next[o.id]=key;
     if(prev[o.id]!==key)o.localUpdatedAt=now;
   }
