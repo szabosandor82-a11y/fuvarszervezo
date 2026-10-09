@@ -141,7 +141,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V117Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V118Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -599,6 +599,7 @@
        nyer; ha csak az egyik oldalon van, az marad. */
     /* V115: az üzenetszál mindkét oldalról egyesül, azonosító szerint
        egyszer, időrendben. A törölt üzenet NEM jöhet vissza. */
+    /* V118: üres szál SOHA nem írhatja felül a meglévőt. */
     const szalFeso = (typeof globalThis !== 'undefined' && globalThis.mergeThreadsV115) || null;
     if (szalFeso) {
       const egyesitve = szalFeso(nyertes, vesztes);
@@ -1149,13 +1150,27 @@
            Ezért most a szinkron UTÁN küldjük fel azokat a fuvarokat, amelyek
            üzenetet hordoznak. */
         if (currentProfile.role !== 'admin' && global.V44Online?.updateOwnOrder) {
+          /* V118: a SZŰK CÉLÚ eljárás az elsődleges. A teljes fuvart író
+             eljárás sikerrel tér vissza, miközben kiszűri az új mezőt –
+             ezért a korábbi "tartalékként hívjuk" megoldás soha nem indult
+             el. Ha a szűk eljárás nincs létrehozva, egyértelműen szólunk. */
           const uzenetesek = orders.filter(order => (order.threadV115 || []).length);
           for (const order of uzenetesek) {
-            try { await global.V44Online.updateOwnOrder(order); }
-            catch (error) {
-              console.warn('[V117] a teljes fuvar feltöltése nem ment, próbáljuk a szűk utat', error);
-              try { await global.V44Online.syncOrderThread?.(order); }
-              catch (masodik) { console.warn('[V117] az üzenet feltöltése nem sikerült', order.orderNo, masodik); }
+            try {
+              await global.V44Online.syncOrderThread(order);
+            } catch (error) {
+              const hianyzik = /sync_order_thread|PGRST202|does not exist|schema cache/i.test(String(error?.message || ''));
+              if (hianyzik) {
+                console.warn('[V118] a sync_order_thread eljárás nincs létrehozva', error);
+                if (!global.__threadSqlWarnedV118) {
+                  global.__threadSqlWarnedV118 = true;
+                  alert('Az üzenetek feltöltéséhez a Supabase-ben le kell futtatni a SUPABASE_UZENETEK.sql fájlt, és engedélyezni a sync_order_thread függvényt.');
+                }
+              } else {
+                console.warn('[V118] az üzenet feltöltése nem sikerült', order.orderNo, error);
+              }
+              try { await global.V44Online.updateOwnOrder(order); }
+              catch (masodik) { console.warn('[V118] a teljes fuvar feltöltése sem ment', masodik); }
             }
           }
         }

@@ -224,7 +224,11 @@
       order_no: order.orderNo || '',
       project_name: order.projectName || '',
       sequence: +order.sequence || 999,
-      payload: order,
+      /* V118: üres üzenetszálat nem küldünk fel – a puszta kirajzolás
+         keletkeztethet ilyet, és felülírná a sofőr üzeneteit. */
+      payload: (order && Array.isArray(order.threadV115) && !order.threadV115.length)
+        ? (({ threadV115, ...tobbi }) => tobbi)(order)
+        : order,
       updated_at: new Date().toISOString()
     };
   }

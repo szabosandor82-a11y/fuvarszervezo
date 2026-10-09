@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V117Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V118Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -1570,21 +1570,34 @@ window.openBacklogResult=(id,date)=>{const o=state.orders.find(x=>x.id===id);$('
      - a törlés nyomtalan: ha a gond megoldódott, a szál legyen tiszta
 
    A V111-es megjegyzéseket első üzenetként átemeljük, hogy ne vesszenek el. */
+/* V118 – AZ OLVASÁS NEM ÍRHAT
+
+   A korábbi változat üres tömböt TETT a fuvarra, ha még nem volt rajta szál.
+   Elég volt kirajzolni a buborékot, és a fuvar máris kapott egy
+   threadV115: [] mezőt – az admin mentése pedig ezt küldte fel, FELÜLÍRVA
+   azt, amit a sofőr írt. A Supabase-ben ezért látszott a kulcs üresen.
+
+   Mostantól az olvasás csak OLVAS. A mező akkor keletkezik, amikor tényleg
+   üzenet születik. */
 function orderThreadV115(order){
   if(!order)return [];
-  if(!Array.isArray(order.threadV115)){
-    order.threadV115=[];
-    const regi=String(order.driverNoteV111||'').trim();
-    if(regi){
-      order.threadV115.push({
-        id:'m-'+(order.driverNoteAtV111||Date.now()),
-        text:regi,
-        at:order.driverNoteAtV111||new Date().toISOString(),
-        by:order.driverNoteByV111||'sofőr',
-        role:'driver'
-      });
-    }
-  }
+  if(Array.isArray(order.threadV115))return order.threadV115;
+
+  // a V111-es megjegyzés átemelése – másolatként, a fuvar érintése nélkül
+  const regi=String(order.driverNoteV111||'').trim();
+  if(!regi)return [];
+  return [{
+    id:'m-'+(order.driverNoteAtV111||'regi'),
+    text:regi,
+    at:order.driverNoteAtV111||'',
+    by:order.driverNoteByV111||'sofőr',
+    role:'driver'
+  }];
+}
+
+/* Íráshoz viszont kell a valódi tömb – ezt csak itt hozzuk létre. */
+function ensureThreadV115(order){
+  if(!Array.isArray(order.threadV115))order.threadV115=orderThreadV115(order).slice();
   return order.threadV115;
 }
 
@@ -1601,13 +1614,13 @@ function addThreadMessageV115(order, text, role, by){
     by:String(by||'').trim()||(role==='driver'?'sofőr':'diszpécser'),
     role:role==='driver'?'driver':'admin'
   };
-  orderThreadV115(order).push(uzenet);
+  ensureThreadV115(order).push(uzenet);
   order.localUpdatedAt=uzenet.at;
   return uzenet;
 }
 
 function removeThreadMessageV115(order, messageId){
-  const szal=orderThreadV115(order);
+  const szal=ensureThreadV115(order);
   const i=szal.findIndex(m=>String(m.id)===String(messageId));
   if(i<0)return false;
   szal.splice(i,1);
@@ -1634,6 +1647,7 @@ function mergeThreadsV115(a, b){
 }
 
 window.orderThreadV115=orderThreadV115;
+window.ensureThreadV115=ensureThreadV115;
 window.threadDriverCountV115=threadDriverCountV115;
 window.addThreadMessageV115=addThreadMessageV115;
 window.removeThreadMessageV115=removeThreadMessageV115;
