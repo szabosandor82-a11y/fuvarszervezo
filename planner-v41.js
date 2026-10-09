@@ -1593,7 +1593,14 @@
       const current = companies.get(key);
       if (!current || (item.isCentral && !current.isCentral)) companies.set(key, item);
     }
-    const suppliers = [...companies.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), 'hu'));
+    /* V111: egy cég lehet PROJEKT is (visszárunál a cég a lerakó). Ilyenkor a
+       neve kétszer kerülne a listába – egyszer projektként, egyszer
+       beszállítóként. A projekt az erősebb, mert ahhoz cím és átvevő is
+       tartozik, ezért a beszállítói másolatot kivesszük. */
+    const projektNevek = new Set(projects.map(item => nrm(item.name)));
+    const suppliers = [...companies.values()]
+      .filter(item => !projektNevek.has(nrm(item.name)))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'hu'));
     const supplierOptions = suppliers.length ? ['<optgroup label="Visszáru · beszállítóhoz">']
       .concat(suppliers.map(item => `<option value="${htmlEsc(item.name)}" data-supplier-address="${htmlEsc(item.address)}" ${nrm(item.name) === nrm(entry.projectName) ? 'selected' : ''}>${htmlEsc(item.name)}</option>`))
       .concat(['</optgroup>']) : [];

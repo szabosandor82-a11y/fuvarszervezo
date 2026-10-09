@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V110Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V111Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -1062,7 +1062,43 @@ function fillSelectors(){const vehicleOpts='<option value="">Nincs kiosztva</opt
 function renderMasters(){const q=norm($('#masterSearch').value),arr=state[masterType].filter(x=>!q||norm(Object.values(x).join(' ')).includes(q));$('#masterList').innerHTML=arr.map(x=>`<article class="card"><h3>${esc(x.name)}</h3><p>${esc(x.address||x.project||'')} ${esc(x.phone||'')}</p>${masterType==='suppliers'?`<p>${x.isCentral?'★ Központi telephely':''}</p>`:''}<div class="card-actions"><button onclick="editMaster('${x.id}')">Szerkesztés</button><button onclick="deleteMaster('${x.id}')">Törlés</button></div></article>`).join('')||'<div class="notice">Nincs találat.</div>'}
 function supplierOptions(sel=''){return'<option value="">Egyedi / nincs kiválasztva</option>'+state.suppliers.sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(s=>option(s.id,`${s.name}${s.isCentral?' ★ központ':''} · ${s.address}`,sel)).join('')}
 function projectOptions(sel=''){return'<option value="">Egyedi úticél</option>'+state.projects.sort((a,b)=>a.name.localeCompare(b.name,'hu')).map(p=>option(p.id,p.name,sel)).join('')}
-function recipientOptions(project,sel=''){return'<option value="">Nincs átvevő</option>'+state.recipients.filter(r=>!project||norm(r.project)===norm(project)).map(r=>option(r.id,`${r.name} · ${r.phone||''}`,sel)).join('')}
+/* ===== V111 – AZ ÁTVEVŐ EMBER, NEM PROJEKTHEZ KÖTÖTT SOR ============
+
+   Eddig minden átvevő EGY projekthez tartozott, és a lenyíló csak az adott
+   projekt átvevőit mutatta. Ha egy másik projekten beírtad ugyanazt a nevet,
+   a program nem megtalálta, hanem ÚJ SORT gyártott – Hostyánszki Tamás így
+   háromszor, Hergyó Balázs hatszor szerepelt. A felhalmozódott sorok pedig
+   mind megjelentek a lenyílóban: innen a tizenöt átvevő egy projektnél.
+
+   Mostantól az átvevő EMBER: név, telefon, e-mail, egyszer. A projekthez
+   csak egy MUTATÓ tartozik (defaultRecipientId), hogy ki az alapértelmezett
+   átvevője.
+
+   A lenyíló MINDENKIT kínál: elöl a projekt alapértelmezettje, alatta
+   elválasztóval a teljes névsor. Így bárki kiválasztható kézzel. */
+function projectDefaultRecipientV111(project){
+  if(!project)return null;
+  const rekord=typeof project==='string'
+    ? (state.projects||[]).find(item=>norm(item.name)===norm(project))
+    : project;
+  if(!rekord?.defaultRecipientId)return null;
+  return (state.recipients||[]).find(item=>item.id===rekord.defaultRecipientId)||null;
+}
+
+function recipientOptions(project,sel=''){
+  const mind=(state.recipients||[]).slice()
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'hu'));
+  const alap=projectDefaultRecipientV111(project);
+  const cimke=r=>`${r.name}${r.phone?' · '+r.phone:''}`;
+  let html='<option value="">Nincs átvevő</option>';
+  if(alap){
+    html+=`<optgroup label="A projekt átvevője">${option(alap.id,cimke(alap),sel||alap.id)}</optgroup>`;
+    html+=`<optgroup label="Minden átvevő">`
+      +mind.filter(r=>r.id!==alap.id).map(r=>option(r.id,cimke(r),sel)).join('')+'</optgroup>';
+    return html;
+  }
+  return html+mind.map(r=>option(r.id,cimke(r),sel)).join('');
+}
 function supplierDisplay(s){return s?`${s.name} · ${s.address}`:''}/* V71: ha csak a CÉGNEVET adjuk meg, a KÖZPONTI telephely nyer.
    Korábban a lista első eleme jött, ezért a Lambda az Akna utcát kapta a
    Hengermalom helyett, a Szatmári pedig Baját. A cím megadása változatlanul
@@ -1999,9 +2035,11 @@ function renderReports(){
     const typedName=String(draft.recipientName??order.recipientName??'').trim();
     const selectedMatches=!typedName||!selected||norm(selected.name)===norm(typedName);
     let recipient=selectedMatches?selected:null;
-    if(!recipient&&typedName)recipient=state.recipients.find(item=>norm(item.name)===norm(typedName)&&(!project?.name||norm(item.project)===norm(project.name)));
+    /* V111: PROJEKTTŐL FÜGGETLENÜL keresünk. Eddig a projekt is feltétel
+       volt, ezért ugyanaz az ember minden projekten új sort kapott. */
+    if(!recipient&&typedName)recipient=state.recipients.find(item=>norm(item.name)===norm(typedName));
     if(!recipient&&typedName){
-      recipient={id:uid(),project:project?.name||order.projectName||'',name:typedName,phone:String(draft.recipientPhone??order.recipientPhone??'').trim(),email:String(draft.recipientEmail??order.recipientEmail??'').trim(),active:true,manualOverride:true,learnedFromOrder:true,createdAt:stamp()};
+      recipient={id:uid(),name:typedName,phone:String(draft.recipientPhone??order.recipientPhone??'').trim(),email:String(draft.recipientEmail??order.recipientEmail??'').trim(),active:true,manualOverride:true,learnedFromOrder:true,createdAt:stamp()};
       state.recipients.push(recipient);
     }
     if(!recipient)return null;

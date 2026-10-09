@@ -124,7 +124,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V110Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V111Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -283,6 +283,10 @@
       ${(() => { const note = [order.note, order.manualItems].map(v => String(v || '').trim()).find(v => v && !/^outlook import/i.test(v)); return note ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${safe(note)}</div>` : ''; })()}
       <div class="v57-row-actions">
         <button type="button" onclick="openItems('${safe(order.id)}')">Tételek${items.length ? ` (${received}/${items.length})` : ''}</button>
+        <button type="button" class="v111-done${order.completed ? ' active' : ''}"
+          onclick="toggleOrderDoneV111('${safe(order.id)}')">${order.completed ? '✓ Teljesítve' : 'Fuvar teljesítve'}</button>
+        <button type="button" class="v111-note${String(order.driverNoteV111 || '').trim() ? ' has-note' : ''}"
+          onclick="openDriverNoteV111('${safe(order.id)}')">✎ Megjegyzés</button>
         <button type="button" class="camera-action${locked ? ' is-locked' : ''}" ${locked ? `disabled title="Csak az aktuális munkanapon tölthető fel"` : ''} onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>
         ${hasSourceMail ? `<button type="button" class="mail-action" onclick="openSourceMail('${safe(order.id)}')">Csatolmány</button>` : ''}
         ${canTransfer ? `<button type="button" class="transfer-action${locked ? ' is-locked' : ''}" ${locked ? `disabled title="Csak az aktuális munkanapon adható át"` : ''} onclick="openTransferDialog('${safe(order.id)}')">Fuvar átadása</button>` : ''}
@@ -851,6 +855,58 @@
   }
   global.renderOrderPdfAttachments = renderOrderPdfAttachments;
   global.openOrderPdfAttachments = openOrderPdfAttachments;
+
+  /* ===== V111 – FUVAR TELJESÍTÉSE ÉS SOFŐRI MEGJEGYZÉS ===============
+
+     Van olyan fuvar, amin nincs tétel – csak egy megjegyzés, hogy mit kell
+     elvégezni. Ott eddig nem volt mit kipipálni, így a sofőr nem tudta
+     lezárni. Ezért a buborék EGÉSZÉRE is kell egy teljesítés-gomb.
+
+     A megjegyzés pedig arra való, hogy a sofőr visszajelezzen: "felvettem,
+     de már nem tudtam az építkezésen lerakni". Ez a főoldalon pirossal
+     kiemelve jelenik meg, hogy az admin azonnal lássa. */
+  function toggleOrderDoneV111(orderId) {
+    const order = (state.orders || []).find(item => String(item.id) === String(orderId));
+    if (!order) return;
+    if (!canEditOrder(order.id)) return alert('Csak az aktuális munkanap szerkeszthető.');
+
+    if (!order.completed) {
+      const tetelek = (order.items || []).length;
+      if (tetelek && !confirm(`${tetelek} tétel tartozik ehhez a fuvarhoz. Mindet átvettnek jelöljük, és a fuvart teljesítettnek?`)) return;
+      for (const item of order.items || []) if (!item.received) item.received = true;
+      order.completed = true;
+      order.completedAtV111 = new Date().toISOString();
+    } else {
+      if (!confirm('Visszavonjuk a teljesítést?')) return;
+      order.completed = false;
+      delete order.completedAtV111;
+    }
+    stampOrderChange(order);
+    save();
+  }
+
+  function openDriverNoteV111(orderId) {
+    const order = (state.orders || []).find(item => String(item.id) === String(orderId));
+    if (!order) return;
+    if (!canEditOrder(order.id)) return alert('Csak az aktuális munkanap szerkeszthető.');
+    const eddigi = String(order.driverNoteV111 || '');
+    const uj = prompt('Megjegyzés a fuvarhoz – az admin a főoldalon látja:', eddigi);
+    if (uj === null) return;
+    const szoveg = String(uj).trim();
+    if (szoveg) {
+      order.driverNoteV111 = szoveg;
+      order.driverNoteAtV111 = new Date().toISOString();
+      order.driverNoteByV111 = activeProfile()?.driver_key || activeProfile()?.role || 'sofőr';
+    } else {
+      delete order.driverNoteV111; delete order.driverNoteAtV111; delete order.driverNoteByV111;
+    }
+    stampOrderChange(order);
+    save();
+  }
+
+  global.toggleOrderDoneV111 = toggleOrderDoneV111;
+  global.openDriverNoteV111 = openDriverNoteV111;
+
   global.openSourceMail = openSourceMail;
 
   async function openMediaGallery(orderIds) {

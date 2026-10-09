@@ -1044,3 +1044,16 @@ button.mail-file{font:inherit;cursor:pointer}
 .v110-attach-row span{min-width:0;overflow-wrap:anywhere;flex-grow:1}
 .v110-attach-row small{flex:none;color:var(--muted);font-size:11.5px}
 .v110-attach-empty{font-size:12.5px;color:var(--muted);padding:3px 2px}
+
+/* V111 – sofőri teljesítés és megjegyzés */
+.v111-done{background:#eef7ea!important;border:1px solid #a9cf9a!important;color:#2c5c22!important;font-weight:600}
+.v111-done.active{background:var(--green)!important;border-color:var(--green)!important;color:#fff!important}
+.v111-note{background:#f4f7f9!important;border:1px solid #a9b8cf!important;color:var(--ink)!important}
+.v111-note.has-note{background:#fdeaea!important;border:1px solid #d94b4b!important;color:#8d2b2b!important;font-weight:700}
+
+/* a főoldali buborékon pirossal kiemelve */
+.v111-driver-note{margin:8px 0 2px;padding:9px 11px;border:2px solid #d94b4b;border-radius:9px;
+  background:#fdeaea;color:#8d2b2b;font-size:12.5px;line-height:1.5}
+.v111-driver-note b{display:block;font-size:11px;letter-spacing:.6px;text-transform:uppercase;margin-bottom:3px}
+.v111-driver-note span{display:block;overflow-wrap:anywhere}
+.v111-driver-note small{color:#a35a5a;font-size:11px}

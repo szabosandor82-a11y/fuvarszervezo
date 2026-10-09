@@ -78,8 +78,8 @@ function whose(c, no) {
     catch (e) { console.error('HIBA', name, e.message); process.exitCode = 1; }
   }
 
-  await test('A motor verziója V110', async () => {
-    assert.match(fs.readFileSync(__dirname + '/planner-v44.js', 'utf8'), /const VERSION = '110'/);
+  await test('A motor verziója V111', async () => {
+    assert.match(fs.readFileSync(__dirname + '/planner-v44.js', 'utf8'), /const VERSION = '111'/);
   });
 
   await test('A törzsadat betöltődik: projektek, telephelyek, átvevők, autók', async () => {
@@ -87,7 +87,9 @@ function whose(c, no) {
     const seed = c.SEED_DATA;
     assert.ok(seed.projects.length >= 60, 'lecsokkent a projektek szama');
     assert.ok(seed.suppliers.length > 400, 'telephelyszám: ' + seed.suppliers.length);
-    assert.ok(seed.recipients.length >= 116, 'lecsokkent az atvevok szama');
+    /* V111: az atvevo mar EMBER, nem projektenkenti sor - ezert kevesebb,
+       de tobbet er: 131 sor helyett 114 kulonbozo ember. */
+    assert.ok(seed.recipients.length >= 100, 'lecsokkent az atvevok szama: ' + seed.recipients.length);
     assert.ok(seed.vehicles.length >= 3, 'lecsokkent az autok szama');
     // A hitelesített telephelyek száma nőhet, ha kézzel pótolunk egy hiányzó
     // központot (pl. Fanatik). Alsó korlátot ellenőrzünk, nem fix számot.
@@ -190,8 +192,8 @@ function whose(c, no) {
     const nodes = [{ textContent: 'régi' }, { textContent: 'régi' }];
     c.document = { title: 'Fuvarszervező V0', querySelectorAll: () => nodes, querySelector: () => null };
     c.V54Planner.applyVersionLabelV54();
-    assert.equal(c.document.title, 'Fuvarszervező V110');
-    for (const n of nodes) assert.equal(n.textContent, 'Fuvarszervező V110');
+    assert.equal(c.document.title, 'Fuvarszervező V111');
+    for (const n of nodes) assert.equal(n.textContent, 'Fuvarszervező V111');
   });
 
   await test('A felületen sehol nem maradt régi verziószám', async () => {
