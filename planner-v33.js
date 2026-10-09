@@ -579,9 +579,61 @@
     save();
   }
 
+  /* V115 – TÖBB RENDELÉSNÉL MEGKÉRDEZZÜK, MELYIKET TÖRÖLJÜK
+
+     Egy buborékban több rendelés is lehet ugyanattól a felrakótól, ugyanarra
+     a lerakóra. Eddig a kuka MINDET törölte, egyetlen kérdéssel – könnyű
+     volt véletlenül elvinni olyat is, ami kellett.
+
+     Egy rendelésnél marad a sima megerősítés; többnél választóablak jön,
+     ugyanúgy, mint a következő napra helyezésnél. */
   function v33DeleteGroup(idsCsv) {
-    const ids = idsCsv.split(',').filter(Boolean);
-    if (!confirm(`${ids.length} rendelés törlése ebből a fuvarbuborékból?`)) return;
+    const ids = String(idsCsv || '').split(',').map(id => id.trim()).filter(Boolean);
+    const orders = ids.map(id => state.orders.find(order => order.id === id)).filter(Boolean);
+    if (!orders.length) return;
+
+    if (orders.length === 1) {
+      const o = orders[0];
+      if (!confirm(`Törlöd ezt a fuvart?\n\n${o.orderNo || '(szám nélkül)'} · ${o.pickupName || ''} → ${o.projectName || o.dropAddress || ''}`)) return;
+      return v33PerformDeleteV115([o.id]);
+    }
+
+    const dialog = document.getElementById('deletePickDialog');
+    if (!dialog || typeof dialog.showModal !== 'function') {
+      const lista = orders.map(o => o.orderNo || '(szám nélkül)').join(', ');
+      if (!confirm(`${orders.length} rendelés tartozik ehhez a buborékhoz:\n${lista}\n\nMindet törlöd?`)) return;
+      return v33PerformDeleteV115(orders.map(o => o.id));
+    }
+
+    document.getElementById('deletePickLead').textContent =
+      `${orders[0].pickupName || 'A felrakó'} · ${orders.length} rendelés. Jelöld ki, melyiket törlöd.`;
+    document.getElementById('deletePickList').innerHTML = orders.map(order => `<label class="v109-row">
+      <input type="checkbox" value="${escHtml(order.id)}">
+      <span><b>${escHtml(order.orderNo || 'Rendelésszám nélkül')}</b>
+        <small>${escHtml(order.projectName || order.dropAddress || 'Egyedi úticél')} · ${(order.items || []).length} tétel</small></span></label>`).join('');
+
+    const szamlalo = () => {
+      const db = document.querySelectorAll('#deletePickList input:checked').length;
+      document.getElementById('deletePickCount').textContent = `${db} / ${orders.length} kijelölve`;
+      document.getElementById('deletePickConfirm').disabled = !db;
+    };
+    const mind = jelolt => { document.querySelectorAll('#deletePickList input').forEach(m => { m.checked = jelolt; }); szamlalo(); };
+    document.getElementById('deletePickAll').onclick = () => mind(true);
+    document.getElementById('deletePickNone').onclick = () => mind(false);
+    document.querySelectorAll('#deletePickList input').forEach(m => { m.onchange = szamlalo; });
+    szamlalo();
+
+    document.getElementById('deletePickConfirm').onclick = () => {
+      const jelolt = [...document.querySelectorAll('#deletePickList input:checked')].map(m => m.value);
+      if (!jelolt.length) return;
+      if (!confirm(`${jelolt.length} fuvar végleges törlése?`)) return;
+      dialog.close();
+      v33PerformDeleteV115(jelolt);
+    };
+    dialog.showModal();
+  }
+
+  function v33PerformDeleteV115(ids) {
     state.orders = state.orders.filter(order => !ids.includes(order.id));
     state.routePlans[selectedDate()] = {};
     save();

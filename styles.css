@@ -1095,3 +1095,34 @@ button.mail-file{font:inherit;cursor:pointer}
   .v113-days{width:100%;justify-content:space-between}
   .v113-days input[type=date]{flex-grow:1}
 }
+
+/* V115 – üzenetszál a fuvarnál */
+.v115-thread{background:#f4f7f9!important;border:1px solid #a9b8cf!important;color:var(--ink)!important}
+.v115-thread.has-unread{background:#fdeaea!important;border:1px solid #d94b4b!important;
+  color:#8d2b2b!important;font-weight:700}
+
+.v115-list{max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:9px;margin-bottom:12px}
+.v115-empty{padding:16px;text-align:center;color:var(--muted);font-size:13px}
+.v115-msg{padding:10px 12px;border-radius:11px;border:1px solid var(--border);background:#fff}
+.v115-msg.from-driver{background:#fff7f7;border-color:#e8bcbc}
+.v115-msg.from-admin{background:#f3f8fd;border-color:#c6dcf0}
+.v115-msg header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.v115-msg header b{font-size:12.5px}
+.v115-msg header small{font-size:11.5px;color:var(--muted)}
+.v115-del{margin-left:auto;width:26px;height:26px;border:1px solid var(--border);border-radius:7px;
+  background:#fff;color:#8d2b2b;font-size:15px;line-height:1;cursor:pointer}
+.v115-msg p{margin:0;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere}
+
+.v115-composer{display:flex;gap:9px;align-items:flex-end}
+.v115-composer.hidden{display:none}
+.v115-composer textarea{flex-grow:1;min-height:52px;padding:9px 11px;font:13.5px/1.45 inherit;
+  border:1px solid #a9b8cf;border-radius:10px;resize:vertical}
+.v115-composer button{flex:none;height:46px;padding:0 18px;border:0;border-radius:10px;
+  background:var(--blue);color:#fff;font-size:14px;font-weight:600;cursor:pointer}
+.v115-locked{padding:11px 13px;border-radius:10px;background:#fff3dc;border:1px solid #e6cfa3;
+  color:#7a4d06;font-size:12.5px}
+.v115-locked.hidden{display:none}
+
+/* V115 – törlés-választó */
+#deletePickConfirm,.v115-danger{background:#d94b4b!important;color:#fff!important;border:0!important}
+#deletePickConfirm:disabled{opacity:.5;cursor:not-allowed}

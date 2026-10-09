@@ -141,7 +141,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V114Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V115Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -303,8 +303,9 @@
         <button type="button" onclick="openItems('${safe(order.id)}')">Tételek${items.length ? ` (${received}/${items.length})` : ''}</button>
         <button type="button" class="v111-done${order.completed ? ' active' : ''}"
           onclick="toggleOrderDoneV111('${safe(order.id)}')">${order.completed ? '✓ Teljesítve' : 'Fuvar teljesítve'}</button>
-        <button type="button" class="v111-note${String(order.driverNoteV111 || '').trim() ? ' has-note' : ''}"
-          onclick="openDriverNoteV111('${safe(order.id)}')">✎ Megjegyzés</button>
+        <button type="button" class="v115-thread${global.threadHasUnreadV115?.(order) ? ' has-unread' : ''}"
+          onclick="openThreadV115('${safe(order.id)}')">✉ Üzenetek${(global.orderThreadV115?.(order) || []).length
+            ? ` (${(global.orderThreadV115?.(order) || []).length})` : ''}</button>
         <button type="button" class="camera-action${locked ? ' is-locked' : ''}" ${locked ? `disabled title="Csak az aktuális munkanapon tölthető fel"` : ''} onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>
         ${hasSourceMail ? `<button type="button" class="mail-action" onclick="openSourceMail('${safe(order.id)}')">Csatolmány</button>` : ''}
         ${canTransfer ? `<button type="button" class="transfer-action${locked ? ' is-locked' : ''}" ${locked ? `disabled title="Csak az aktuális munkanapon adható át"` : ''} onclick="openTransferDialog('${safe(order.id)}')">Fuvar átadása</button>` : ''}
@@ -596,6 +597,17 @@
 
     /* V114: a sofőr fuvar szintű megjegyzése is megmarad. A frissebb beírásé
        nyer; ha csak az egyik oldalon van, az marad. */
+    /* V115: az üzenetszál mindkét oldalról egyesül, azonosító szerint
+       egyszer, időrendben. A törölt üzenet NEM jöhet vissza. */
+    const szalFeso = (typeof globalThis !== 'undefined' && globalThis.mergeThreadsV115) || null;
+    if (szalFeso) {
+      const egyesitve = szalFeso(nyertes, vesztes);
+      if (egyesitve.thread.length || egyesitve.deleted.length) {
+        egyesult.threadV115 = egyesitve.thread;
+        if (egyesitve.deleted.length) egyesult.threadDeletedV115 = egyesitve.deleted;
+      }
+    }
+
     const megjegyzesek = [nyertes, vesztes].filter(o => String(o?.driverNoteV111 || '').trim());
     if (megjegyzesek.length) {
       const forras = megjegyzesek.sort((a, b) =>
@@ -1276,9 +1288,45 @@
     }
   }
 
+  /* ===== V115 – A SOFŐRI FELÜLET MAGÁTÓL FRISSÜL =====================
+
+     Eddig a Frissítés gombra kellett várni, ezért az admin változása — új
+     fuvar, átrendezés, üzenet — csak akkor jutott el a sofőrhöz, ha ő
+     rányomott. Mostantól a sofőri felület percenként magától lekérdezi a
+     fuvarokat.
+
+     Két dologra ügyelünk. Nem frissítünk, ha épp NYITVA van egy ablak (a
+     tételek, a kamera vagy az üzenetek) – különben kiesne a keze alól. És
+     nem frissítünk, ha a lap háttérben van, hogy ne fogyassza az adatot. */
+  let pollTimerV115 = null;
+
+  function pollBusyV115() {
+    if (document.hidden) return true;
+    return [...document.querySelectorAll('dialog')].some(d => d.open);
+  }
+
+  async function pollOnceV115() {
+    if (pollBusyV115() || refreshInProgress) return;
+    try {
+      suppressOnlineSave = true;
+      await global.V44Online.loadOrdersIntoState();
+      await refreshTransfers();
+      if (isAdmin()) { if (typeof render === 'function') render(); }
+      else await renderDriverPortal();
+    } catch (error) {
+      console.warn('[V115] automatikus frissítés', error);
+    } finally { suppressOnlineSave = false; }
+  }
+
   function startPolling() {
-    // V48: a főnézet nem frissül automatikusan. A felhasználó a Frissítés gombbal kér új adatokat.
     global.V44Online?.stopPolling?.();
+    if (pollTimerV115) clearInterval(pollTimerV115);
+    /* Az ADMIN felületen marad a kézi Frissítés: ott épp tervezel, és egy
+       magától érkező átrendezés zavaró volna. A sofőri felület viszont
+       követi az adminét. */
+    if (isAdmin()) return;
+    pollTimerV115 = setInterval(pollOnceV115, 60000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) pollOnceV115(); });
   }
 
   async function restoreOnlineSession() {

@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V114Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V115Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -153,7 +153,7 @@ function stampLocalChanges(){
        a megjegyzés beírása nem frissítette az időbélyeget, ezért az
        összefésülésnél elveszhetett. */
     const atvett=(o.items||[]).filter(it=>it.received).length;
-    const key=`${o.scheduleDate}|${o.vehicleId}|${o.sequence}|${o.completed?1:0}|${(o.items||[]).length}|${atvett}|${String(o.driverNoteV111||'').length}|${o.driverNoteAtV111||''}`;
+    const key=`${o.scheduleDate}|${o.vehicleId}|${o.sequence}|${o.completed?1:0}|${(o.items||[]).length}|${atvett}|${String(o.driverNoteV111||'').length}|${o.driverNoteAtV111||''}|${(o.threadV115||[]).length}|${(o.threadV115||[]).map(m=>m.id).join(',')}`;
     next[o.id]=key;
     if(prev[o.id]!==key)o.localUpdatedAt=now;
   }
@@ -1556,6 +1556,215 @@ window.openBacklogResult=(id,date)=>{const o=state.orders.find(x=>x.id===id);$('
 
    A fuvar a célnapon a sofőr listájának VÉGÉRE kerül, hogy a meglévő
    sorrendet ne borítsa fel. */
+/* ===== V115 – ÜZENETSZÁL A FUVARNÁL =================================
+
+   A sofőr és az admin ugyanannál a fuvarnál beszélget. Minden bejegyzésnél
+   látszik, ki írta és mikor.
+
+   SZABÁLYOK
+     - a sofőr CSAK a mai napi fuvarhoz ír és töröl (ugyanaz az engedély,
+       mint a tételek pipálásánál); ha van még teendő, a fuvar úgyis átkerül
+       a következő napra, és ott újra nyílik
+     - az admin bármikor ír és töröl
+     - mindenki csak a SAJÁT üzenetét törölheti
+     - a törlés nyomtalan: ha a gond megoldódott, a szál legyen tiszta
+
+   A V111-es megjegyzéseket első üzenetként átemeljük, hogy ne vesszenek el. */
+function orderThreadV115(order){
+  if(!order)return [];
+  if(!Array.isArray(order.threadV115)){
+    order.threadV115=[];
+    const regi=String(order.driverNoteV111||'').trim();
+    if(regi){
+      order.threadV115.push({
+        id:'m-'+(order.driverNoteAtV111||Date.now()),
+        text:regi,
+        at:order.driverNoteAtV111||new Date().toISOString(),
+        by:order.driverNoteByV111||'sofőr',
+        role:'driver'
+      });
+    }
+  }
+  return order.threadV115;
+}
+
+function threadDriverCountV115(order){
+  return orderThreadV115(order).filter(m=>m.role==='driver').length;
+}
+
+function addThreadMessageV115(order, text, role, by){
+  const szoveg=String(text||'').trim();
+  if(!order||!szoveg)return null;
+  const uzenet={
+    id:'m-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
+    text:szoveg, at:new Date().toISOString(),
+    by:String(by||'').trim()||(role==='driver'?'sofőr':'diszpécser'),
+    role:role==='driver'?'driver':'admin'
+  };
+  orderThreadV115(order).push(uzenet);
+  order.localUpdatedAt=uzenet.at;
+  return uzenet;
+}
+
+function removeThreadMessageV115(order, messageId){
+  const szal=orderThreadV115(order);
+  const i=szal.findIndex(m=>String(m.id)===String(messageId));
+  if(i<0)return false;
+  szal.splice(i,1);
+  order.localUpdatedAt=new Date().toISOString();
+  return true;
+}
+
+/* Két változat összefésülése: minden üzenet megmarad, azonosító szerint
+   egyszer, időrendben. A TÖRLÉS viszont nem jöhet vissza, ezért a törölt
+   azonosítókat külön tartjuk nyilván. */
+function mergeThreadsV115(a, b){
+  const torolt=new Set([...(a?.threadDeletedV115||[]),...(b?.threadDeletedV115||[])].map(String));
+  const minden=new Map();
+  for(const forras of [b,a]){
+    for(const m of (forras?.threadV115||[])){
+      if(torolt.has(String(m.id)))continue;
+      minden.set(String(m.id), m);
+    }
+  }
+  return {
+    thread:[...minden.values()].sort((x,y)=>String(x.at||'').localeCompare(String(y.at||''))),
+    deleted:[...torolt]
+  };
+}
+
+window.orderThreadV115=orderThreadV115;
+window.threadDriverCountV115=threadDriverCountV115;
+window.addThreadMessageV115=addThreadMessageV115;
+window.removeThreadMessageV115=removeThreadMessageV115;
+window.mergeThreadsV115=mergeThreadsV115;
+
+/* V115 – OLVASOTTSÁG
+
+   A gomb addig piros, amíg van olvasatlan sofőri üzenet. Elolvasás után
+   elhalványul; ha új üzenet érkezik, újra piros lesz.
+
+   Az olvasottságot a SAJÁT eszközön tartjuk nyilván (az admin és a sofőr
+   külön), mert a jelzés arról szól, hogy ÉN láttam-e már. */
+function threadReadKeyV115(){ return 'threadReadV115'; }
+function threadReadMapV115(){
+  try { return JSON.parse(localStorage.getItem(threadReadKeyV115()) || '{}') || {}; }
+  catch(error){ return {}; }
+}
+/* Az utolsó sofőri üzenet AZONOSÍTÓJÁT jegyezzük meg, nem az idejét: két
+   üzenet ugyanabban az ezredmásodpercben is születhet, és akkor az időbélyeg
+   nem különböztetné meg őket. */
+function lastDriverMessageIdV115(order){
+  const sofori=(orderThreadV115(order)||[]).filter(m=>m.role==='driver');
+  return sofori.length?String(sofori[sofori.length-1].id||''):'';
+}
+function threadHasUnreadV115(order){
+  if(!order)return false;
+  const utolso=lastDriverMessageIdV115(order);
+  if(!utolso)return false;
+  return threadReadMapV115()[String(order.id)]!==utolso;
+}
+function markThreadReadV115(order){
+  if(!order)return;
+  const utolso=lastDriverMessageIdV115(order);
+  const terkep=threadReadMapV115();
+  terkep[String(order.id)]=utolso;
+  try { localStorage.setItem(threadReadKeyV115(), JSON.stringify(terkep)); }
+  catch(error){ console.warn('[V115] olvasottság mentése', error); }
+}
+window.threadHasUnreadV115=threadHasUnreadV115;
+window.markThreadReadV115=markThreadReadV115;
+
+/* A beszélgetés ablaka. Ugyanaz az admin és a sofőri felületen – a
+   különbség csak annyi, hogy ki írhat bele. */
+let threadOrderIdV115 = '';
+
+function threadCanWriteV115(order){
+  if(!order)return false;
+  const profil=window.V44Online?.getProfile?.();
+  if(String(profil?.role||'')==='admin')return true;
+  if(!profil)return true;            // belépés nélküli (helyi) használat: admin
+  // sofőrnél a mai nap szabálya dönt, ugyanaz, mint a tételeknél
+  if(typeof window.canEditOrder==='function')return window.canEditOrder(order.id);
+  return true;
+}
+
+function threadWhoAmIV115(){
+  const profil=window.V44Online?.getProfile?.();
+  if(!profil)return { role:'admin', by:'diszpécser' };
+  const admin=String(profil.role||'')==='admin';
+  return { role:admin?'admin':'driver',
+           by:profil.full_name||profil.driver_key||profil.email||(admin?'diszpécser':'sofőr') };
+}
+
+function renderThreadV115(){
+  const order=(state.orders||[]).find(x=>String(x.id)===String(threadOrderIdV115));
+  const lista=$('#threadList'); if(!order||!lista)return;
+  const en=threadWhoAmIV115();
+  const irhat=threadCanWriteV115(order);
+  const szal=orderThreadV115(order);
+
+  lista.innerHTML=szal.length?szal.map(m=>{
+    const sajat=m.role===en.role;
+    const torolheto=sajat&&irhat;
+    const mikor=String(m.at||'').slice(0,16).replace('T',' ');
+    return `<article class="v115-msg ${m.role==='driver'?'from-driver':'from-admin'}">
+      <header><b>${esc(m.by||'')}</b><small>${esc(mikor)}</small>
+        ${torolheto?`<button type="button" class="v115-del" title="Törlés" onclick="deleteThreadMessageV115('${esc(m.id)}')">×</button>`:''}
+      </header><p>${esc(m.text)}</p></article>`;
+  }).join(''):'<div class="v115-empty">Még nincs üzenet ennél a fuvarnál.</div>';
+
+  $('#threadComposer').classList.toggle('hidden',!irhat);
+  const zar=$('#threadLocked');
+  zar.classList.toggle('hidden',irhat);
+  if(!irhat)zar.textContent='Ehhez a fuvarhoz már nem írhatsz – csak az aktuális munkanap szerkeszthető.';
+  lista.scrollTop=lista.scrollHeight;
+}
+
+function openThreadV115(orderId){
+  const order=(state.orders||[]).find(x=>String(x.id)===String(orderId));
+  if(!order)return;
+  threadOrderIdV115=String(order.id);
+  $('#threadTitle').textContent=`${order.orderNo||'Fuvar'} · üzenetek`;
+  $('#threadInput').value='';
+  $('#threadSend').onclick=sendThreadMessageV115;
+  renderThreadV115();
+  markThreadReadV115(order);        // megnyitás = elolvastam
+  $('#threadDialog').showModal();
+  if(typeof render==='function')setTimeout(render,0);
+}
+
+function sendThreadMessageV115(){
+  const order=(state.orders||[]).find(x=>String(x.id)===String(threadOrderIdV115));
+  const mezo=$('#threadInput');
+  if(!order||!mezo)return;
+  if(!threadCanWriteV115(order))return alert('Ehhez a fuvarhoz már nem írhatsz.');
+  const en=threadWhoAmIV115();
+  if(!addThreadMessageV115(order,mezo.value,en.role,en.by))return;
+  mezo.value='';
+  save();
+  renderThreadV115();
+  if(typeof render==='function')render();
+}
+
+function deleteThreadMessageV115(messageId){
+  const order=(state.orders||[]).find(x=>String(x.id)===String(threadOrderIdV115));
+  if(!order)return;
+  if(!threadCanWriteV115(order))return alert('Ezt az üzenetet már nem törölheted.');
+  const uzenet=orderThreadV115(order).find(m=>String(m.id)===String(messageId));
+  const en=threadWhoAmIV115();
+  if(!uzenet||uzenet.role!==en.role)return alert('Csak a saját üzenetedet törölheted.');
+  if(!confirm('Törlöd ezt az üzenetet?'))return;
+  order.threadDeletedV115=[...new Set([...(order.threadDeletedV115||[]),String(messageId)])];
+  removeThreadMessageV115(order,messageId);
+  save();
+  renderThreadV115();
+  if(typeof render==='function')render();
+}
+
+window.openThreadV115=openThreadV115;
+window.deleteThreadMessageV115=deleteThreadMessageV115;
+
 /* ===== V110 – CSATOLMÁNY A FUVAR ŰRLAPJÁN ===========================
 
    Eddig csak az Outlook importon át kerülhetett melléklet a fuvarhoz. Ha

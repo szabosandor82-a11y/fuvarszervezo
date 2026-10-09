@@ -477,16 +477,12 @@
   }
 
   function renderGroupBubble(group, index, vehicleId, options = {}) {
-    /* V111: a sofőr által írt megjegyzés – pirossal kiemelve, hogy azonnal
-       látszódjon. A buborékon jelenik meg, a gombsor fölött. */
-    const soforMegjegyzesek = (group.orders || [])
-      .map(order => ({ szoveg: String(order.driverNoteV111 || '').trim(),
-                       mikor: String(order.driverNoteAtV111 || '').slice(0, 16).replace('T', ' ') }))
-      .filter(item => item.szoveg);
-    const soforMegjegyzesBlokk = soforMegjegyzesek.length
-      ? `<div class="v111-driver-note"><b>Sofőr megjegyzése</b>${soforMegjegyzesek
-          .map(item => `<span>${escHtml(item.szoveg)}${item.mikor ? ` <small>${escHtml(item.mikor)}</small>` : ''}</span>`)
-          .join('')}</div>` : '';
+    /* V115: a fuvar üzenetszála. A gomb PIROSAN marad, amíg van olvasatlan
+       sofőri üzenet – elolvasás után elhalványul, új üzenetnél újra piros. */
+    const szalOsszes = (group.orders || []).reduce((sum, order) =>
+      sum + (global.orderThreadV115?.(order) || []).length, 0);
+    const szalOlvasatlan = (group.orders || []).some(order =>
+      global.threadHasUnreadV115?.(order));
     const ids = groupIds(group);
     const orderNos = [...new Set(group.orders.map(order => order.orderNo).filter(Boolean))];
     const itemCount = group.orders.reduce((sum, order) => sum + (order.items?.length || 0), 0);
@@ -522,7 +518,7 @@
         <div class="bubble-main-line order-number-line"><b>Rendelésszám:</b><span>${escHtml(orderNos.join(', ') || 'Nincs megadva')}</span></div>
         <div class="tags"><span class="tag">${group.orders.length} rendelés</span><span class="tag">${itemCount} tétel</span>${deliveryPhotoCount(group) ? `<span class="tag delivery-tag" title="A sofőr feltöltötte a szállítólevelet">Szállítólevél · ${deliveryPhotoCount(group)}</span>` : ''}${longReasons.map(reason => `<span class="tag long">${escHtml(reason)}</span>`).join('')}${pinned ? '<span class="tag pin-tag">Rögzítve</span>' : ''}${fullLoad ? '<span class="tag full-load-tag">Teljes autó</span>' : ''}${resolved ? '<span class="tag resolved-tag">✓ Elintézve</span>' : ''}${options.ungrouped && (options.samePickupCount || 0) > 1 ? '<span class="tag ungrouped-tag">Külön mozgatható</span>' : ''}</div>
         ${manualItemsOfGroup(group) ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${escHtml(manualItemsOfGroup(group))}</div>` : ''}
-        ${soforMegjegyzesBlokk}<div class="bubble-actions"><button onclick="editOrder('${escHtml(first.id)}')">Szerkesztés</button><button class="secondary" title="Visszaszállítás: a projekt lesz a felrakó, a beszállító a lerakó" onclick="returnOrder('${escHtml(first.id)}')">↩ Visszáru</button><button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button><button class="secondary v109-next-day" title="A fuvar átkerül ugyanehhez a sofőrhöz, a következő munkanapra" onclick="moveToNextWorkdayV109('${escHtml(ids)}')">→ Következő napra</button>${group.orders.some(hasOutlookSource) ? `<button onclick="openSourceMail('${escHtml((group.orders.find(hasOutlookSource) || first).id)}')">Csatolmány</button>` : ''}<button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button><button class="secondary ${deliveryPhotoCount(group) ? 'has-photos' : ''}" title="${deliveryPhotoCount(group) ? `${deliveryPhotoCount(group)} feltöltött szállítólevél-fotó` : 'Még nincs feltöltött fotó'}" onclick="openMediaGallery('${escHtml(ids)}')">📎 Mentett fotók${deliveryPhotoCount(group) ? ` (${deliveryPhotoCount(group)})` : ''}</button></div>
+        <div class="bubble-actions"><button onclick="editOrder('${escHtml(first.id)}')">Szerkesztés</button><button class="secondary" title="Visszaszállítás: a projekt lesz a felrakó, a beszállító a lerakó" onclick="returnOrder('${escHtml(first.id)}')">↩ Visszáru</button><button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button><button class="secondary v115-thread${szalOlvasatlan ? ' has-unread' : ''}" title="A fuvarhoz írt üzenetek" onclick="openThreadV115('${escHtml(first.id)}')">✉ Üzenetek${szalOsszes ? ` (${szalOsszes})` : ''}</button><button class="secondary v109-next-day" title="A fuvar átkerül ugyanehhez a sofőrhöz, a következő munkanapra" onclick="moveToNextWorkdayV109('${escHtml(ids)}')">→ Következő napra</button>${group.orders.some(hasOutlookSource) ? `<button onclick="openSourceMail('${escHtml((group.orders.find(hasOutlookSource) || first).id)}')">Csatolmány</button>` : ''}<button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button><button class="secondary ${deliveryPhotoCount(group) ? 'has-photos' : ''}" title="${deliveryPhotoCount(group) ? `${deliveryPhotoCount(group)} feltöltött szállítólevél-fotó` : 'Még nincs feltöltött fotó'}" onclick="openMediaGallery('${escHtml(ids)}')">📎 Mentett fotók${deliveryPhotoCount(group) ? ` (${deliveryPhotoCount(group)})` : ''}</button></div>
         <button class="complete-button ${complete ? 'done' : ''}" onclick="v37ToggleGroupComplete('${escHtml(ids)}')">${complete ? '✓' : '○'}</button>
         <button class="trash" onclick="v33DeleteGroup('${escHtml(ids)}')">🗑</button>
       </article>
@@ -593,7 +589,7 @@
     const map = focusMap, date = selectedDate();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
     let events = state.routePlans?.[selectedDate()]?.[vehicleId] || [];
-    const currentPlanner = global.V114Planner || global.V65Planner || global.V64Planner;
+    const currentPlanner = global.V115Planner || global.V65Planner || global.V64Planner;
     const snapshot = currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
     const isCurrent = () => focusMap === map && selectedDate() === date
       && snapshot === currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
@@ -904,7 +900,7 @@
         // útvonalterv épül újra a kézi sequence értékekből, és csak utána
         // rajzolunk. Fordítva a rajzoló üres tervet találna, és
         // újraoptimalizálná az útvonalat, felülírva a te sorrendedet.
-        const buildManual = global.V114Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
+        const buildManual = global.V115Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
         setTimeout(async () => {
           if (typeof buildManual === 'function') {
             try {
