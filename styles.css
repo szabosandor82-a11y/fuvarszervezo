@@ -1126,3 +1126,15 @@ button.mail-file{font:inherit;cursor:pointer}
 /* V115 – törlés-választó */
 #deletePickConfirm,.v115-danger{background:#d94b4b!important;color:#fff!important;border:0!important}
 #deletePickConfirm:disabled{opacity:.5;cursor:not-allowed}
+
+/* V117 – rendelésválasztó az üzenetekhez */
+.v117-pick{display:flex;flex-direction:column;gap:8px}
+.v117-pick-row{display:flex;align-items:center;gap:11px;width:100%;padding:12px 13px;
+  border:1px solid var(--border);border-radius:11px;background:#fff;text-align:left;cursor:pointer}
+.v117-pick-row:hover{background:#f6fafd}
+.v117-pick-row.has-unread{border-color:#d94b4b;background:#fdeaea}
+.v117-pick-main{min-width:0;flex-grow:1;display:flex;flex-direction:column}
+.v117-pick-main b{font-size:14px}
+.v117-pick-main small{font-size:12px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.v117-pick-badge{flex:none;font-size:12px;color:var(--muted);font-weight:600}
+.v117-pick-row.has-unread .v117-pick-badge{color:#8d2b2b}

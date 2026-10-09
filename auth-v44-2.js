@@ -141,7 +141,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V116Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V117Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -1138,6 +1138,27 @@
         // újra ellenőrzi, hogy csak tétel-, hátralék- és fotóadat módosulhasson.
         const orders = state.orders || [];
         await global.V44Online.syncOrders(orders, currentProfile);
+
+        /* V117 – AZ ÜZENET A SZINKRON UTÁN MEGY FEL
+
+           A sofőr mentése egy szűrt eljáráson megy át, ami az üzenetszálat
+           nem engedi át. Eddig az üzenetet a mentés ELŐTT küldtük fel külön,
+           de a késleltetett szinkron 900 ezredmásodperccel később FELÜLÍRTA.
+           Az üzenet tehát feljutott, majd azonnal letörlődött.
+
+           Ezért most a szinkron UTÁN küldjük fel azokat a fuvarokat, amelyek
+           üzenetet hordoznak. */
+        if (currentProfile.role !== 'admin' && global.V44Online?.updateOwnOrder) {
+          const uzenetesek = orders.filter(order => (order.threadV115 || []).length);
+          for (const order of uzenetesek) {
+            try { await global.V44Online.updateOwnOrder(order); }
+            catch (error) {
+              console.warn('[V117] a teljes fuvar feltöltése nem ment, próbáljuk a szűk utat', error);
+              try { await global.V44Online.syncOrderThread?.(order); }
+              catch (masodik) { console.warn('[V117] az üzenet feltöltése nem sikerült', order.orderNo, masodik); }
+            }
+          }
+        }
         if (currentProfile.role === 'admin') {
           try { await global.V44Online.syncMasterData(state, currentProfile); }
           catch (error) {
