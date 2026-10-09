@@ -289,6 +289,20 @@
     return dbRequest('rpc/update_own_order_payload', { method: 'POST', body: { p_order_id: String(order.id), p_payload: order } });
   }
 
+  /* V116: szűk célú út CSAK az üzenetszálra. Akkor hasznos, ha a teljes
+     fuvart író eljárás szűri a mezőket – ilyenkor az üzenet így is feljut.
+     A SUPABASE_UZENETEK.sql fájl tartalmazza a létrehozását. */
+  async function syncOrderThread(order) {
+    return dbRequest('rpc/sync_order_thread', {
+      method: 'POST',
+      body: {
+        p_order_id: String(order.id),
+        p_thread: order.threadV115 || [],
+        p_deleted: order.threadDeletedV115 || []
+      }
+    });
+  }
+
   async function syncOrders(orders, currentProfile = profile) {
     if (!currentProfile) currentProfile = await fetchProfile();
     emit('syncing', 'Fuvarok mentése…');
@@ -455,7 +469,7 @@
     setStatusListener: listener => { statusListener = listener; },
     signInWithPassword, signOut, refreshSession, ensureSession, fetchProfile, listUsers,
     fetchOrders, fetchBacklog, syncOrders, syncBacklog, loadOrdersIntoState, fetchMasterData, syncMasterData, loadMasterIntoState, masterSnapshot, requestTransfer, acceptTransfer, rejectTransfer, cancelTransfer, listTransfers,
-    createDeliveryReport, listDeliveryFiles, relinkDeliveryFiles,
+    createDeliveryReport, listDeliveryFiles, relinkDeliveryFiles, updateOwnOrder, syncOrderThread,
     startPolling, stopPolling, driverKeyFromOrder, DRIVER_VEHICLES
   };
 })(typeof window !== 'undefined' ? window : globalThis);

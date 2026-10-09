@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V115Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V116Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -1675,6 +1675,30 @@ function markThreadReadV115(order){
 window.threadHasUnreadV115=threadHasUnreadV115;
 window.markThreadReadV115=markThreadReadV115;
 
+/* V116 – AZ ÜZENET A SOFŐRTŐL IS FELJUT
+
+   A sofőr mentése egy szerveroldali eljáráson megy át (sync_own_orders),
+   ami biztonsági okból CSAK bizonyos mezőket enged át: a tételeket, a
+   hátralékot és a fotókat. Az üzenetszál új mező, ezért a szerver eldobta –
+   az adminhoz sosem ért el. Fordítva működött, mert az admin a teljes
+   fuvart írja.
+
+   Ezért az üzenet küldése és törlése után a fuvar TELJES tartalmát is
+   felküldjük az erre való eljárással. Ha az nem érhető el, a helyi mentés
+   akkor is megmarad, és a következő teljes szinkronnal próbálkozik újra. */
+async function pushOrderPayloadV116(order){
+  if(!order)return;
+  const profil=window.V44Online?.getProfile?.();
+  if(!profil||String(profil.role||'')==='admin')return;   // az admin úgyis teljes fuvart ír
+  try{ await window.V44Online?.updateOwnOrder?.(order); }
+  catch(error){
+    console.warn('[V116] a teljes fuvar feltöltése nem ment, próbáljuk a szűk utat', error);
+    try{ await window.V44Online?.syncOrderThread?.(order); }
+    catch(masodik){ console.warn('[V116] az üzenet feltöltése nem sikerült', masodik); }
+  }
+}
+window.pushOrderPayloadV116=pushOrderPayloadV116;
+
 /* A beszélgetés ablaka. Ugyanaz az admin és a sofőri felületen – a
    különbség csak annyi, hogy ki írhat bele. */
 let threadOrderIdV115 = '';
@@ -1743,6 +1767,7 @@ function sendThreadMessageV115(){
   if(!addThreadMessageV115(order,mezo.value,en.role,en.by))return;
   mezo.value='';
   save();
+  pushOrderPayloadV116(order);
   renderThreadV115();
   if(typeof render==='function')render();
 }
@@ -1758,6 +1783,7 @@ function deleteThreadMessageV115(messageId){
   order.threadDeletedV115=[...new Set([...(order.threadDeletedV115||[]),String(messageId)])];
   removeThreadMessageV115(order,messageId);
   save();
+  pushOrderPayloadV116(order);
   renderThreadV115();
   if(typeof render==='function')render();
 }
