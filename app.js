@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V123Planner?.version||window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V124Planner?.version||window.V123Planner?.version||window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -276,7 +276,7 @@ function markUserCommentRead(orderId){
 }
 window.userCommentClass=userCommentClass;window.markUserCommentRead=markUserCommentRead;
 function itemNoteSummary(o){return(o.items||[]).map((it,i)=>itemNoteValue(it)?`<p class="item-note-preview"><b>${i+1}. tétel megjegyzés:</b> ${esc(itemNoteValue(it))}</p>`:'').join('')}
-function bubbles(list){if(!list.length)return'<div class="notice">Nincs fuvar.</div>';return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}${userCommentClass(o)}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')} · ${esc(o.pickupAddress||'')}</p><p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs megadva')}</p>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('')}
+function bubbles(list){if(!list.length)return'<div class="notice">Nincs fuvar.</div>';return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}${userCommentClass(o)}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')} · ${esc(o.pickupAddress||'')}</p><p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs megadva')}</p>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${movedBubbleDateV124(o)}${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('')}
 window.renameDriver=(id,name)=>{const v=state.vehicles.find(x=>x.id===id);if(v){v.driverName=name.trim()||v.driverName;save()}};
 function initSortables(){activeVehicles().forEach(v=>{const el=$('#route-'+v.id);if(!el)return;new Sortable(el,{group:'vehicles',animation:180,handle:'.drag',onEnd:e=>{const o=state.orders.find(x=>x.id===e.item.dataset.id);if(o)o.vehicleId=e.to.id.replace('route-','');activeVehicles().forEach(x=>{$$('#route-'+x.id+' .bubble').forEach((n,i)=>{const r=state.orders.find(o=>o.id===n.dataset.id);if(r)r.sequence=i+1})});save()}})})}
 /* V61 – EGYSÉGES KERESŐS LENYÍLÓ AZ EGÉSZ OLDALON
@@ -2418,7 +2418,7 @@ function render(){applyAfterFourRule();renderRoutes();renderOrders();renderBackl
 
 function bubbles(list){
   if(!list.length)return'<div class="notice">Nincs fuvar.</div>';
-  return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}${userCommentClass(o)}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')} · ${esc(o.pickupAddress||'')}</p><p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs megadva')}</p>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button><button class="secondary" onclick="openMediaGallery('${o.id}')">📎 Mentett fotók</button><button class="failed-button" onclick="failOrderToTomorrow('${o.id}')">Nem teljesült – következő munkanapra</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('')
+  return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}${userCommentClass(o)}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')} · ${esc(o.pickupAddress||'')}</p><p><b>Lerakó:</b> ${esc(o.dropAddress||'Nincs megadva')}</p>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${movedBubbleDateV124(o)}${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button><button class="secondary" onclick="openMediaGallery('${o.id}')">📎 Mentett fotók</button><button class="failed-button" onclick="failOrderToTomorrow('${o.id}')">Nem teljesült – következő munkanapra</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('')
 }
 
 async function drawMap(id){
@@ -3269,18 +3269,32 @@ window.bindCalendarV121 = bindCalendarV121;
 
    A jelölés megjegyzi, KI és MIKOR mozgatta, és a buborék zászlósorában
    jelenik meg. Az admin saját mozgatása NEM kap jelölést: arról tudsz. */
-function markMovedByDriverV121(order, mit){
+function markMovedByDriverV121(order, mit, targetDate){
   if(!order)return;
   const profil=window.V44Online?.getProfile?.();
   if(!profil||String(profil.role||'')==='admin')return;   // az admin mozgatása nem jelölendő
+  const movedAt=new Date().toISOString();
   order.movedByDriverV121={
     by: profil.display_name||profil.driver_key||profil.email||'sofőr',
-    at: new Date().toISOString(),
-    what: mit||'fuvar'
+    at: movedAt,
+    what: mit||'fuvar',
+    targetDate: targetDate||order.scheduleDate||''
   };
-  order.localUpdatedAt=order.movedByDriverV121.at;
+  order.localUpdatedAt=movedAt;
 }
 window.markMovedByDriverV121=markMovedByDriverV121;
+
+/* V124 – az áthelyezett célfuvar buborékában mindkét felületen látszik a nap. */
+function movedBubbleDateV124(order){
+  if(!order)return '';
+  const marker=order.movedByDriverV121;
+  const linked=!!(order.movedFromOrderId||order.failedMovedFrom||marker?.targetDate||
+    (typeof state!=='undefined'&&Array.isArray(state.backlog)&&state.backlog.some(b=>String(b.targetOrderId)===String(order.id))));
+  const date=String(order.scheduleDate||marker?.targetDate||'').trim();
+  if(!linked||!date)return '';
+  return `<span class="tag moved-date-tag" title="Az áthelyezett fuvar dátuma">Áthelyezve: ${esc(date)}</span>`;
+}
+window.movedBubbleDateV124=movedBubbleDateV124;
 
 function rescheduleMovedItem(orderId, itemId, newDate) {
   const target = (newDate || '').trim(); if (!target) return;
@@ -3299,6 +3313,7 @@ function rescheduleMovedItem(orderId, itemId, newDate) {
   rec.targetOrderId = dest.id;
   rec.movedToDate = target;
   rec.rescheduledAt = new Date().toISOString();
+  if(typeof markMovedByDriverV121==='function')markMovedByDriverV121(dest,'hátralék',target);
   save();
   if (document.getElementById('itemsDialog')?.open) {
     if (state.orders.some(o => o.id === orderId)) openItems(orderId); else openItems(dest.id);
@@ -3355,9 +3370,6 @@ function setItemMoveDate(orderId,itemId,value){
   if(target===o.scheduleDate){it.moveTargetDate='';save(false);return alert('Az új dátum nem lehet az eredeti nappal azonos.')}
   const result=moveSingleItemToDate(o,it,target);
   if(result.error){it.moveTargetDate='';save(false);return alert(result.error)}
-  /* A jelölés csak akkor fut, ha elérhető – a tesztek és a régebbi
-     betöltési sorrend miatt nem támaszkodunk rá feltétlenül. */
-  if(typeof markMovedByDriverV121==='function')markMovedByDriverV121(o,'hátralék');
   save();
   if(document.getElementById('itemsDialog')?.open&&state.orders.some(x=>x.id===orderId))openItems(orderId);
   alert(`${it.name}: ${result.qty} ${it.unit||''} áthelyezve erre a napra: ${target}.`);
@@ -3376,6 +3388,7 @@ function moveSingleItemToDate(o,it,target){
   targetOrder.items.push(moved);
   state.backlog=state.backlog||[];
   state.backlog.push({id:uid(),sourceOrderId:o.id,targetOrderId:targetOrder.id,itemId:moved._id,orderNo:o.orderNo,supplier:o.pickupName,projectName:o.projectName,code:it.code,name:it.name,itemNote:itemNoteValue(it),quantity:formatQty(moveQty),unit:it.unit,movedToDate:target,movedAt:new Date().toISOString()});
+  if(typeof markMovedByDriverV121==='function')markMovedByDriverV121(targetOrder,'hátralék',target);
   if(total>0&&moveQty<total){it.qty=formatQty(total-moveQty);it.received=true;it.missingQty='';it.moveTargetDate=''}
   else{o.items=(o.items||[]).filter(x=>String(x._id)!==String(it._id))}
   o.completed=(o.items||[]).length>0&&(o.items||[]).every(x=>x.received);
@@ -3422,6 +3435,7 @@ function moveUncheckedItemsFromDialog(){
   for(const target of dates){
     let targetOrder=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===o.orderNo&&x.vehicleId===o.vehicleId&&x.projectName===o.projectName&&x.pickupName===o.pickupName&&x.movedFromOrderId===o.id);
     if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id};state.orders.push(targetOrder)}
+    if(typeof markMovedByDriverV121==='function')markMovedByDriverV121(targetOrder,'hátralék',target);
     for(const p of plan.filter(x=>x.target===target)){
       const it=p.it;
       const moved={...it,_id:uid(),qty:formatQty(p.moveQty),received:false,missingQty:'',moveTargetDate:''};
@@ -3713,7 +3727,7 @@ function masterWarnings(o){
 }
 function bubbles(list){
   if(!list.length)return'<div class="notice">Nincs fuvar.</div>';
-  return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}${userCommentClass(o)}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3>${masterWarnings(o)}<div class="master-highlight"><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')}<br>${supplierAddressSelect(o)}</div><div class="master-highlight drop-highlight"><b>Lerakó:</b> ${esc(o.projectName||'Egyedi úticél')}<br><span class="master-address-value">${esc(o.dropAddress||'Nincs megadva')}</span></div>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button><button class="secondary" onclick="openMediaGallery('${o.id}')">📎 Mentett fotók</button><button class="failed-button" onclick="failOrderToTomorrow('${o.id}')">Nem teljesült – következő munkanapra</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('');
+  return list.map((o,i)=>`<article class="bubble ${o.completed?'done':''}${userCommentClass(o)}" data-id="${o.id}"><span class="drag">☷</span><h3>${i+1}. ${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3>${masterWarnings(o)}<div class="master-highlight"><b>Felrakó:</b> ${esc(o.pickupName||'Nincs megadva')}<br>${supplierAddressSelect(o)}</div><div class="master-highlight drop-highlight"><b>Lerakó:</b> ${esc(o.projectName||'Egyedi úticél')}<br><span class="master-address-value">${esc(o.dropAddress||'Nincs megadva')}</span></div>${o.pickupNote?`<p><b>Felrakói megj.:</b> ${esc(o.pickupNote)}</p>`:''}${o.note?`<p><b>Fuvar megjegyzés:</b> ${esc(o.note)}</p>`:''}${itemNoteSummary(o)}<div class="tags"><span class="tag">${o.items?.length||0} tétel</span>${movedBubbleDateV124(o)}${o.longMaterialReason?`<span class="tag long">${esc(o.longMaterialReason)}</span>`:''}${o.requestedDeadline?`<span class="tag ${o.scheduleDate>o.requestedDeadline?'warn':''}">${o.requestedDeadline}</span>`:''}</div><div class="bubble-actions"><button onclick="editOrder('${o.id}')">Szerkesztés</button><button onclick="openItems('${o.id}')">Tételek</button><button onclick="openCamera('${o.id}')">📷 Kamera</button><button class="secondary" onclick="openMediaGallery('${o.id}')">📎 Mentett fotók</button><button class="failed-button" onclick="failOrderToTomorrow('${o.id}')">Nem teljesült – következő munkanapra</button></div><button class="complete-button ${o.completed?'done':''}" onclick="toggleComplete('${o.id}')">${o.completed?'✓':'○'}</button><button class="trash" onclick="deleteOne('${o.id}')">🗑</button></article>`).join('');
 }
 
 async function drawMap(id){

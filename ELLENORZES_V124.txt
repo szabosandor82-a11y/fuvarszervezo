@@ -1,0 +1,13 @@
+ELLENŐRZÉS – V124
+=================
+
+Automatikus elfogadási tesztek: TEST_V124.js
+Ellenőrzött esetek:
+- sofőr által áthelyezett hátralék a célfuvarban kapja meg a dátumjelölést;
+- a hátralék új dátumra ütemezése frissíti a buborék és a hátralék dátumát;
+- az admin és a user buborék is megjeleníti a mentett céldátumot;
+- meglévő V123 elfogadási tesztek továbbra is lefutnak.
+
+Eredmény: 431/431 teszt sikeres (node TEST_V124.js).
+A módosított JavaScript-fájlok node --check ellenőrzése is sikeres.
+Az index.html betöltési és verzióhivatkozásai V124-re mutatnak.

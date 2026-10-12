@@ -1,0 +1,16 @@
+FUVARSZERVEZŐ V124
+==================
+
+1. SOFŐR ÁLTAL ÁTHELYEZETT FUVAROK DÁTUMA
+-----------------------------------------
+A sofőr által másik napra tett tétel jelölése eddig a forrásfuvaron maradt.
+A módosítás most a célfuvaron menti a dátumot, és a buborékban is kiírja.
+
+A dátum az admin Fuvarok nézetében és a sofőr User menüjében is látható.
+Hátralék átütemezésekor a célbuborék és a Hátralék-bejegyzés dátuma együtt
+frissül, így újratöltés után is az új nap jelenik meg.
+
+2. VERZIÓ ÉS GYORSÍTÓTÁR
+------------------------
+Az alkalmazás V124 néven jelenik meg. A webes hivatkozások és a service
+worker gyorsítótára frissült.

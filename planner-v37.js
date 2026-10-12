@@ -480,8 +480,10 @@
     /* V121: ha a sofőr mozgatta át a fuvart vagy a hátralékot, az a
        zászlósorban látszik – nevével és napjával együtt. */
     const mozgatas = (group.orders || []).map(order => order.movedByDriverV121).filter(Boolean)[0];
-    const mozgatasJelzes = mozgatas
-      ? `<span class="v121-moved" title="${escHtml(mozgatas.by || '')} · ${escHtml(String(mozgatas.at || '').slice(0, 16).replace('T', ' '))}">Átmozgatva</span>`
+    const atmozgatottFuvar = (group.orders || []).find(order => order.movedFromOrderId || order.failedMovedFrom || order.movedByDriverV121?.targetDate);
+    const mozgatasDatum = atmozgatottFuvar?.scheduleDate || mozgatas?.targetDate || '';
+    const mozgatasJelzes = mozgatas || mozgatasDatum
+      ? `<span class="v121-moved" title="${escHtml(mozgatas?.by || '')}${mozgatas?.at ? ` · ${escHtml(String(mozgatas.at).slice(0, 16).replace('T', ' '))}` : ''}">Átmozgatva${mozgatasDatum ? ` · ${escHtml(mozgatasDatum)}` : ''}</span>`
       : '';
     /* V115: a fuvar üzenetszála. A gomb PIROSAN marad, amíg van olvasatlan
        sofőri üzenet – elolvasás után elhalványul, új üzenetnél újra piros. */

@@ -1306,3 +1306,6 @@ body.v119-camera-open{overflow:hidden}
   .v122-cal-dot{width:5px;height:5px;flex-basis:5px}
   .v122-cal-events{display:none}
 }
+
+.tag.moved-date-tag{background:#fff2d8!important;color:#7a5712!important;border:1px solid #f0dcac}
+.mobile-bubble-tags .moved-date-tag{background:#fff2d8!important;color:#7a5712!important}

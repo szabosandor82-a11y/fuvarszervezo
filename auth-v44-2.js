@@ -141,7 +141,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V123Planner?.version||global.V122Planner?.version||global.V121Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V124Planner?.version||global.V123Planner?.version||global.V122Planner?.version||global.V121Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -317,7 +317,7 @@
         ${order.pickupNote ? `<p><b>Felrakói megjegyzés:</b> ${safe(order.pickupNote)}</p>` : ''}
         ${order.note ? `<p><b>Fuvar megjegyzés:</b> ${safe(order.note)}</p>` : ''}
         ${order.recipientName || order.recipientPhone ? `<p><b>Átvevő:</b> ${safe(order.recipientName || '')}${order.recipientPhone ? ` · <a href="tel:${safe(order.recipientPhone)}">${safe(order.recipientPhone)}</a>` : ''}</p>` : ''}
-        <div class="mobile-bubble-tags"><span>${items.length} tétel</span>${order.longMaterialReason ? `<span>${safe(order.longMaterialReason)}</span>` : ''}${reportPhotos ? `<span>📎 ${reportPhotos} fájl</span>` : ''}</div>
+        <div class="mobile-bubble-tags"><span>${items.length} tétel</span>${global.movedBubbleDateV124?.(order)||''}${order.longMaterialReason ? `<span>${safe(order.longMaterialReason)}</span>` : ''}${reportPhotos ? `<span>📎 ${reportPhotos} fájl</span>` : ''}</div>
         <div class="v57-row-actions"><button type="button" class="secondary ${reportPhotos ? 'has-photos' : ''}" onclick="openMediaGallery('${safe(order.id)}')">Mentett fotók${reportPhotos ? ` (${reportPhotos})` : ''}</button></div>
       </div>
     </article>`;
