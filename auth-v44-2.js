@@ -141,7 +141,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V120Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V121Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -1083,6 +1083,34 @@
   }
   global.deleteGalleryFileV119 = deleteGalleryFileV119;
 
+
+  /* ===== V121 – A FUVARÁTADÁSOK SAJÁT MENÜPONTOT KAPTAK ==============
+
+     Eddig a Beállítások lap alján voltak, az online szinkron mellett. Ott
+     nehéz volt észrevenni, pedig sofőrök közti művelet – a Sofőr menü alatt
+     a helye. */
+  async function renderTransfersPageV121() {
+    const host = byId('transfersContent');
+    if (!host || !isAdmin()) return;
+    host.innerHTML = '<div class="notice">Betöltés…</div>';
+    try {
+      const transfers = await global.V44Online.listTransfers();
+      transferCache = transfers;
+      host.innerHTML = `<div class="panel"><div class="transfer-admin-list">${transfers.length
+        ? transfers.map(transfer => `<article class="transfer-admin-row status-${safe(transfer.status)}">
+            <div><b>${safe(transfer.order_no || transfer.order_id)}</b>
+              <small>${safe(DRIVER_LABELS[transfer.from_driver_key] || transfer.from_driver_key)} →
+                ${safe(DRIVER_LABELS[transfer.to_driver_key] || transfer.to_driver_key)}</small></div>
+            <div class="transfer-admin-meta"><span>${safe(transfer.status)}</span>
+              <small>${safe(String(transfer.created_at || '').slice(0, 16).replace('T', ' '))}</small></div>
+          </article>`).join('')
+        : '<div class="notice">Nincs fuvarátadási kérés.</div>'}</div></div>`;
+    } catch (error) {
+      host.innerHTML = `<div class="notice">A fuvarátadások nem tölthetők be: ${safe(error.message)}</div>`;
+    }
+  }
+  global.renderTransfersPageV121 = renderTransfersPageV121;
+
   global.openSourceMail = openSourceMail;
 
   async function openMediaGallery(orderIds) {
@@ -1304,7 +1332,7 @@
       const transfers = await global.V44Online.listTransfers();
       transferCache = transfers;
       host.innerHTML = `<div class="panel online-settings-card"><h3>Online szinkron</h3><small>A szállítólevél-fotók közvetlenül a rendeléshez kerülnek, és a Mentett fotók gombbal visszanézhetők.</small><div class="online-settings-actions"><button type="button" class="secondary" id="forceOnlineSync">Minden fuvar online mentése</button><button type="button" class="secondary" id="refreshOnlineAdmin">Online frissítés</button></div></div>
-      <div class="panel"><h3>Fuvarátadások</h3><div class="transfer-admin-list">${transfers.length ? transfers.map(transfer => `<article class="transfer-admin-row status-${safe(transfer.status)}"><div><b>${safe(transfer.order_no)} · ${safe(transfer.project_name || '')}</b><small>${safe(transfer.schedule_date || '')}</small></div><div><span>${safe(DRIVER_LABELS[transfer.from_driver_key] || transfer.from_driver_key)} → ${safe(DRIVER_LABELS[transfer.to_driver_key] || transfer.to_driver_key)}</span><strong>${transfer.status === 'pending' ? 'Függőben' : transfer.status === 'accepted' ? 'Elfogadva' : transfer.status === 'rejected' ? 'Elutasítva' : 'Visszavonva'}</strong><small>${new Date(transfer.created_at).toLocaleString('hu-HU')}</small></div></article>`).join('') : '<div class="notice">Még nincs fuvarátadási esemény.</div>'}</div></div>`;
+      <div class="panel v121-transfers-hidden" hidden><h3>Fuvarátadások</h3><div class="transfer-admin-list">${transfers.length ? transfers.map(transfer => `<article class="transfer-admin-row status-${safe(transfer.status)}"><div><b>${safe(transfer.order_no)} · ${safe(transfer.project_name || '')}</b><small>${safe(transfer.schedule_date || '')}</small></div><div><span>${safe(DRIVER_LABELS[transfer.from_driver_key] || transfer.from_driver_key)} → ${safe(DRIVER_LABELS[transfer.to_driver_key] || transfer.to_driver_key)}</span><strong>${transfer.status === 'pending' ? 'Függőben' : transfer.status === 'accepted' ? 'Elfogadva' : transfer.status === 'rejected' ? 'Elutasítva' : 'Visszavonva'}</strong><small>${new Date(transfer.created_at).toLocaleString('hu-HU')}</small></div></article>`).join('') : '<div class="notice">Még nincs fuvarátadási esemény.</div>'}</div></div>`;
       byId('forceOnlineSync')?.addEventListener('click', async () => {
         try { await global.V44Online.syncOrders(state.orders || [], currentProfile); await global.V44Online.syncMasterData(state, currentProfile); alert('Minden fuvar és a teljes aktuális törzsadat online mentve.'); }
         catch (error) { alert(`Szinkronhiba: ${error.message}`); }

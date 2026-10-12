@@ -1158,7 +1158,7 @@ button.mail-file{font:inherit;cursor:pointer}
   border:1px solid #c6dcf0;font-size:12.5px;color:#13507f}
 .v119-progress.hidden{display:none}
 
-/* V120 – TELJES KÉPERNYŐS KAMERA, LÁTHATÓ KILÉPÉSSEL
+/* V121 – TELJES KÉPERNYŐS KAMERA, LÁTHATÓ KILÉPÉSSEL
 
    A V119-ben a réteg középre igazította a tartalmat, ezért a gombok a kép
    alá, a látható részen kívülre kerültek – nem lehetett kilépni. Most a kép
@@ -1181,10 +1181,47 @@ button.mail-file{font:inherit;cursor:pointer}
 .v119-fullscreen #stopDeliveryCamera{background:#2a2a2a;color:#fff;border:1px solid #555}
 
 /* a bezárás jobb felül – mindig elérhető kiút */
-.v120-close{display:none}
-.v119-fullscreen .v120-close{display:flex;position:absolute;
+.v121-close{display:none}
+.v119-fullscreen .v121-close{display:flex;position:absolute;
   top:calc(12px + env(safe-area-inset-top,0px));right:14px;
   width:46px;height:46px;min-width:0;align-items:center;justify-content:center;
   border-radius:50%;background:#000a;color:#fff;border:1px solid #fff6;
   font-size:24px;line-height:1;cursor:pointer;z-index:3;box-shadow:none}
 body.v119-camera-open{overflow:hidden}
+
+/* V121 – a sofőr által átmozgatott fuvar jelölése */
+.v121-moved{display:inline-flex;align-items:center;height:32px;padding:0 11px;margin-left:4px;
+  border-radius:9px;background:#fff3dc;border:1px solid #e6cfa3;color:#7a4d06;
+  font-size:11.5px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
+
+/* V121 – havi naptár */
+.v121-cal-nav{display:flex;align-items:center;gap:8px}
+.v121-cal-nav button{height:38px;min-width:38px;padding:0 12px;border:1px solid #a9b8cf;
+  border-radius:9px;background:#fff;font-size:15px;cursor:pointer;color:var(--ink)}
+.v121-cal-nav b{min-width:150px;text-align:center;font-size:15px}
+.v121-cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.v121-cal-head{padding:7px 8px;font-size:11.5px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.5px}
+.v121-cal-cell{min-height:120px;padding:7px;border:1px solid var(--border);border-radius:10px;
+  background:#fff;cursor:pointer;display:flex;flex-direction:column;gap:4px;overflow:hidden}
+.v121-cal-cell:hover{background:#f6fafd;border-color:#a9c7e4}
+.v121-cal-empty{border:0;background:transparent;cursor:default}
+.v121-cal-weekend{background:#f4f6f8}
+.v121-cal-today{border:2px solid var(--blue);background:#eef6fd}
+.v121-cal-date{display:flex;align-items:center;font-size:13px;font-weight:700;color:var(--ink)}
+.v121-cal-date em{margin-left:auto;font-style:normal;font-size:11px;font-weight:600;
+  background:#dbeafd;color:#0c447c;border-radius:999px;padding:1px 7px}
+.v121-cal-trip{font-size:11px;line-height:1.35;padding:4px 6px;border-radius:7px;
+  background:#f4f7f9;border-left:3px solid #9cc4ea}
+.v121-cal-trip[data-driver="patrik"]{border-left-color:#4a2f6e}
+.v121-cal-trip[data-driver="martin"]{border-left-color:var(--green)}
+.v121-cal-trip b{display:block;font-size:11.5px}
+.v121-cal-trip span{display:block;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v121-cal-none{font-size:11px;color:#b6c0cc}
+@media(max-width:900px){
+  .v121-cal{grid-template-columns:1fr;gap:8px}
+  .v121-cal-head{display:none}
+  .v121-cal-cell{min-height:0}
+  .v121-cal-empty{display:none}
+  .v121-cal-trip span{white-space:normal}
+}

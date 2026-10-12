@@ -252,8 +252,8 @@
 
      A böngészős kamera megmarad tartalékként, mert asztali gépen
      webkamerával csak az működik. */
-  const nativeInput = byId('nativeCameraInputV120');
-  const nativeButton = byId('nativeCameraV120');
+  const nativeInput = byId('nativeCameraInputV121');
+  const nativeButton = byId('nativeCameraV121');
   if (nativeButton && nativeInput) {
     nativeButton.onclick = () => nativeInput.click();
     nativeInput.onchange = () => {
@@ -266,7 +266,7 @@
   /* A teljes képernyős nézetben a bezárás MINDIG látszódjon. A V119-ben a
      réteg középre igazított, ezért a gombok a kép alá, a látható részen
      kívülre kerültek – nem lehetett kilépni. */
-  const closeButton = byId('closeCameraV120');
+  const closeButton = byId('closeCameraV121');
   if (closeButton) closeButton.onclick = () => { stop(); message('Kamera leállítva.'); };
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && byId('deliveryCameraLive')?.classList.contains('v119-fullscreen')) {

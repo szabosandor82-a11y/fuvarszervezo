@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V120Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -216,7 +216,7 @@ function marioVehicle(){return activeVehicles().find(v=>norm(v.driverName).inclu
 function selectedDate(){return $('#workDate').value||today()}
 function dayOrders(vehicleId=null,date=selectedDate()){return state.orders.filter(o=>o.scheduleDate===date&&(!vehicleId||o.vehicleId===vehicleId))}
 function option(v,t,sel=''){return`<option value="${esc(v)}" ${String(v)===String(sel)?'selected':''}>${esc(t)}</option>`}
-function showPage(id){$$('.page').forEach(p=>p.classList.toggle('active',p.id===id));if(id==='dailylist'&&typeof renderDailyListV93==='function'){const picker=$('#v94Picker');if(picker)picker.value=selectedDate();if(typeof bindDayControlsV94==='function')bindDayControlsV94();setTimeout(renderDailyListV93,10);}function restoreFile(file){const r=new FileReader();r.onload=()=>{try{const incoming=JSON.parse(r.result),mode=confirm('OK = összevonás, Mégse = teljes csere')?'merge':'replace';if(mode==='replace')state=incoming;else{state.orders=[...state.orders,...(incoming.orders||[]).filter(x=>!state.orders.some(y=>y.id===x.id))];state.projects=[...state.projects,...(incoming.projects||[]).filter(x=>!state.projects.some(y=>norm(y.name)===norm(x.name)))];state.suppliers=[...state.suppliers,...(incoming.suppliers||[]).filter(x=>!state.suppliers.some(y=>norm(y.name)===norm(x.name)&&norm(y.address)===norm(x.address)))];state.recipients=[...state.recipients,...(incoming.recipients||[]).filter(x=>!state.recipients.some(y=>norm(y.name)===norm(x.name)&&norm(y.project)===norm(x.project)))]}save();alert('Adatok betöltve.')}catch(e){alert('Hibás mentési fájl.')}};r.readAsText(file)}
+function showPage(id){$$('.page').forEach(p=>p.classList.toggle('active',p.id===id));if(id==='calendar'&&typeof renderCalendarV121==='function'){bindCalendarV121();setTimeout(renderCalendarV121,10);}if(id==='transfers'&&typeof window.renderTransfersPageV121==='function')setTimeout(window.renderTransfersPageV121,10);if(id==='dailylist'&&typeof renderDailyListV93==='function'){const picker=$('#v94Picker');if(picker)picker.value=selectedDate();if(typeof bindDayControlsV94==='function')bindDayControlsV94();setTimeout(renderDailyListV93,10);}function restoreFile(file){const r=new FileReader();r.onload=()=>{try{const incoming=JSON.parse(r.result),mode=confirm('OK = összevonás, Mégse = teljes csere')?'merge':'replace';if(mode==='replace')state=incoming;else{state.orders=[...state.orders,...(incoming.orders||[]).filter(x=>!state.orders.some(y=>y.id===x.id))];state.projects=[...state.projects,...(incoming.projects||[]).filter(x=>!state.projects.some(y=>norm(y.name)===norm(x.name)))];state.suppliers=[...state.suppliers,...(incoming.suppliers||[]).filter(x=>!state.suppliers.some(y=>norm(y.name)===norm(x.name)&&norm(y.address)===norm(x.address)))];state.recipients=[...state.recipients,...(incoming.recipients||[]).filter(x=>!state.recipients.some(y=>norm(y.name)===norm(x.name)&&norm(y.project)===norm(x.project)))]}save();alert('Adatok betöltve.')}catch(e){alert('Hibás mentési fájl.')}};r.readAsText(file)}
 $('#recordStart').onclick=async()=>{try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});audioChunks=[];mediaRecorder=new MediaRecorder(stream);mediaRecorder.ondataavailable=e=>e.data.size&&audioChunks.push(e.data);mediaRecorder.onstop=()=>{audioBlob=new Blob(audioChunks,{type:mediaRecorder.mimeType||'audio/webm'});$('#audioPreview').src=URL.createObjectURL(audioBlob);$('#audioPreview').classList.remove('hidden');$('#recordStatus').textContent='Felvétel elkészült.';stream.getTracks().forEach(t=>t.stop())};mediaRecorder.start();$('#recordStart').disabled=true;$('#recordStop').disabled=false;$('#recordStatus').textContent='Felvétel folyamatban…'}catch(e){alert(e.message)}};
 $('#recordStop').onclick=()=>{if(mediaRecorder&&mediaRecorder.state!=='inactive')mediaRecorder.stop();$('#recordStart').disabled=false;$('#recordStop').disabled=true};
 $$('.nav').forEach(n=>n.classList.toggle('active',n.dataset.page===id));scrollTo(0,0);render()}
@@ -3096,6 +3096,106 @@ function backlogRecordForItem(orderId, itemId) {
 window.backlogRecordForItem = backlogRecordForItem;
 
 /* Áthelyezett tétel átütemezése másik napra. */
+/* ===== V121 – HAVI NAPTÁR ===========================================
+
+   Egy képernyőn a teljes hónap, hogy a későbbre ütemezett szállítások is
+   láthatók legyenek. Minden napon a fuvarok egy-egy sora: rendelésszám,
+   felrakó, lerakó.
+
+   A napra kattintva a Fuvarok lap nyílik meg azzal a nappal. */
+let calMonthV121 = '';
+
+function calMonthStartV121(){
+  const alap = calMonthV121 || (typeof selectedDate === 'function' ? selectedDate() : '') || new Date().toISOString().slice(0,10);
+  return alap.slice(0,7) + '-01';
+}
+
+function renderCalendarV121(){
+  const grid = $('#calGrid'); if (!grid) return;
+  const elso = new Date(calMonthStartV121() + 'T12:00:00');
+  const ev = elso.getFullYear(), ho = elso.getMonth();
+  const cim = $('#calTitle');
+  if (cim) cim.textContent = elso.toLocaleDateString('hu-HU', { year: 'numeric', month: 'long' });
+
+  /* A hét hétfővel kezdődik, ahogy itthon szokás. */
+  const elsoNap = (elso.getDay() + 6) % 7;
+  const napokSzama = new Date(ev, ho + 1, 0).getDate();
+  const ma = typeof today === 'function' ? today() : new Date().toISOString().slice(0,10);
+
+  const fejlec = ['hétfő','kedd','szerda','csütörtök','péntek','szombat','vasárnap']
+    .map(nev => `<div class="v121-cal-head">${nev}</div>`).join('');
+
+  const cellak = [];
+  for (let i = 0; i < elsoNap; i++) cellak.push('<div class="v121-cal-cell v121-cal-empty"></div>');
+
+  for (let nap = 1; nap <= napokSzama; nap++) {
+    const datum = `${ev}-${String(ho + 1).padStart(2, '0')}-${String(nap).padStart(2, '0')}`;
+    const hetvege = [0, 6].includes(new Date(datum + 'T12:00:00').getDay());
+    const fuvarok = (state.orders || [])
+      .filter(order => order.scheduleDate === datum)
+      .sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
+
+    const sorok = fuvarok.map(order => {
+      const sofor = (state.vehicles || []).find(v => v.id === order.vehicleId);
+      const kulcs = typeof v24DriverKey === 'function' ? v24DriverKey(sofor || {}) : '';
+      return `<div class="v121-cal-trip" data-driver="${esc(kulcs)}" title="${esc(sofor?.driverName || '')}">
+        <b>${esc(order.orderNo || '—')}</b>
+        <span>${esc(order.pickupName || '')} → ${esc(order.projectName || order.dropAddress || '')}</span>
+      </div>`;
+    }).join('');
+
+    cellak.push(`<div class="v121-cal-cell${hetvege ? ' v121-cal-weekend' : ''}${datum === ma ? ' v121-cal-today' : ''}"
+      onclick="openCalendarDayV121('${datum}')" role="button" tabindex="0">
+      <div class="v121-cal-date">${nap}${fuvarok.length ? `<em>${fuvarok.length}</em>` : ''}</div>
+      ${sorok || '<div class="v121-cal-none">—</div>'}</div>`);
+  }
+  grid.innerHTML = fejlec + cellak.join('');
+}
+
+function stepCalendarV121(irany){
+  const alap = new Date(calMonthStartV121() + 'T12:00:00');
+  alap.setMonth(alap.getMonth() + irany);
+  calMonthV121 = alap.toISOString().slice(0, 10);
+  renderCalendarV121();
+}
+
+function openCalendarDayV121(datum){
+  if ($('#workDate')) $('#workDate').value = datum;
+  if (typeof render === 'function') render();
+  if (typeof showPage === 'function') showPage('planner');
+}
+
+function bindCalendarV121(){
+  if ($('#calPrev')) $('#calPrev').onclick = () => stepCalendarV121(-1);
+  if ($('#calNext')) $('#calNext').onclick = () => stepCalendarV121(1);
+  if ($('#calToday')) $('#calToday').onclick = () => { calMonthV121 = ''; renderCalendarV121(); };
+}
+
+window.renderCalendarV121 = renderCalendarV121;
+window.openCalendarDayV121 = openCalendarDayV121;
+window.bindCalendarV121 = bindCalendarV121;
+
+/* ===== V121 – AMIT A SOFŐR MOZGATOTT, AZ LÁTSZIK ===================
+
+   Ha a sofőr tesz át egy fuvart vagy egy hátralékos tételt másik napra, az
+   adminnak tudnia kell róla – különben csak annyit lát, hogy a fuvar máshol
+   van, és nem érti, miért.
+
+   A jelölés megjegyzi, KI és MIKOR mozgatta, és a buborék zászlósorában
+   jelenik meg. Az admin saját mozgatása NEM kap jelölést: arról tudsz. */
+function markMovedByDriverV121(order, mit){
+  if(!order)return;
+  const profil=window.V44Online?.getProfile?.();
+  if(!profil||String(profil.role||'')==='admin')return;   // az admin mozgatása nem jelölendő
+  order.movedByDriverV121={
+    by: profil.display_name||profil.driver_key||profil.email||'sofőr',
+    at: new Date().toISOString(),
+    what: mit||'fuvar'
+  };
+  order.localUpdatedAt=order.movedByDriverV121.at;
+}
+window.markMovedByDriverV121=markMovedByDriverV121;
+
 function rescheduleMovedItem(orderId, itemId, newDate) {
   const target = (newDate || '').trim(); if (!target) return;
   const rec = backlogRecordForItem(orderId, itemId); if (!rec) return;
@@ -3169,6 +3269,9 @@ function setItemMoveDate(orderId,itemId,value){
   if(target===o.scheduleDate){it.moveTargetDate='';save(false);return alert('Az új dátum nem lehet az eredeti nappal azonos.')}
   const result=moveSingleItemToDate(o,it,target);
   if(result.error){it.moveTargetDate='';save(false);return alert(result.error)}
+  /* A jelölés csak akkor fut, ha elérhető – a tesztek és a régebbi
+     betöltési sorrend miatt nem támaszkodunk rá feltétlenül. */
+  if(typeof markMovedByDriverV121==='function')markMovedByDriverV121(o,'hátralék');
   save();
   if(document.getElementById('itemsDialog')?.open&&state.orders.some(x=>x.id===orderId))openItems(orderId);
   alert(`${it.name}: ${result.qty} ${it.unit||''} áthelyezve erre a napra: ${target}.`);

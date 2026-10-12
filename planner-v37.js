@@ -477,6 +477,12 @@
   }
 
   function renderGroupBubble(group, index, vehicleId, options = {}) {
+    /* V121: ha a sofőr mozgatta át a fuvart vagy a hátralékot, az a
+       zászlósorban látszik – nevével és napjával együtt. */
+    const mozgatas = (group.orders || []).map(order => order.movedByDriverV121).filter(Boolean)[0];
+    const mozgatasJelzes = mozgatas
+      ? `<span class="v121-moved" title="${escHtml(mozgatas.by || '')} · ${escHtml(String(mozgatas.at || '').slice(0, 16).replace('T', ' '))}">Átmozgatva</span>`
+      : '';
     /* V115: a fuvar üzenetszála. A gomb PIROSAN marad, amíg van olvasatlan
        sofőri üzenet – elolvasás után elhalványul, új üzenetnél újra piros. */
     const szalOsszes = global.groupThreadCountV117?.(group.orders) || 0;
@@ -507,7 +513,7 @@
         <div class="bubble-control-row">
           <button type="button" class="pin-button ${pinned ? 'active' : ''}" onclick="event.stopPropagation();v37TogglePin('${escHtml(ids)}','${escHtml(vehicleId)}')" title="${pinned ? 'Rögzítés feloldása' : 'Pozíció rögzítése'}">⚑</button>
           <button type="button" class="full-load-button ${fullLoad ? 'active' : ''}" onclick="event.stopPropagation();v33ToggleFullLoad('${escHtml(ids)}')" title="Teljes autós rakomány">🚚</button>
-          ${regroupButton}
+          ${regroupButton}${mozgatasJelzes}
         </div>
         <h3>${escHtml(displayNumber)}. ${escHtml(group.pickupName)}</h3>
         ${warnings}
@@ -587,7 +593,7 @@
     const map = focusMap, date = selectedDate();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
     let events = state.routePlans?.[selectedDate()]?.[vehicleId] || [];
-    const currentPlanner = global.V120Planner || global.V65Planner || global.V64Planner;
+    const currentPlanner = global.V121Planner || global.V65Planner || global.V64Planner;
     const snapshot = currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
     const isCurrent = () => focusMap === map && selectedDate() === date
       && snapshot === currentPlanner?.mapRouteSnapshotV69?.(vehicleId, date);
@@ -898,7 +904,7 @@
         // útvonalterv épül újra a kézi sequence értékekből, és csak utána
         // rajzolunk. Fordítva a rajzoló üres tervet találna, és
         // újraoptimalizálná az útvonalat, felülírva a te sorrendedet.
-        const buildManual = global.V120Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
+        const buildManual = global.V121Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
         setTimeout(async () => {
           if (typeof buildManual === 'function') {
             try {
