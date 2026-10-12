@@ -75,7 +75,19 @@
     status.textContent = text;
     status.classList.toggle('hidden', !text);
   }
+  /* V119: a teljes képernyős állapot visszabontása. */
+  function exitFullscreenV119() {
+    const live = byId('deliveryCameraLive');
+    live?.classList.remove('v119-fullscreen');
+    document.body.classList.remove('v119-camera-open');
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitFullscreenElement && document.webkitExitFullscreen) document.webkitExitFullscreen();
+    } catch (error) { /* ha nem volt teljes képernyő, nincs mit bontani */ }
+  }
+
   function stop() {
+    exitFullscreenV119();
     generation++;
     if (stream) stream.getTracks().forEach(track => track.stop());
     stream = null;
@@ -154,6 +166,24 @@
       stream = acquired;
       video.srcObject = acquired;
       live.classList.remove('hidden');
+
+      /* V119 – TELJES KÉPERNYŐS KAMERA
+
+         A kamera eddig a párbeszédablak kis dobozában nyílt. Két baj volt
+         vele: alig látszott, mit fényképezel, és a telefon a kis nézethez
+         igazodva nem mindig a legjobb felbontást adta.
+
+         Mostantól a kamera a teljes képernyőt elfoglalja. Ha a böngésző nem
+         engedi (régebbi iPhone), a kép akkor is a teljes ablakra feszül –
+         ott egy saját, teljes képernyős réteget használunk. */
+      live.classList.add('v119-fullscreen');
+      document.body.classList.add('v119-camera-open');
+      try {
+        if (live.requestFullscreen) await live.requestFullscreen({ navigationUI: 'hide' });
+        else if (live.webkitRequestFullscreen) live.webkitRequestFullscreen();
+      } catch (error) {
+        console.warn('[V119] a teljes képernyő nem engedélyezett, a saját réteg marad', error);
+      }
       await video.play();
       if (request !== generation) return;
       ready();

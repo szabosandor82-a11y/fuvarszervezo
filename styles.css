@@ -1138,3 +1138,30 @@ button.mail-file{font:inherit;cursor:pointer}
 .v117-pick-main small{font-size:12px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
 .v117-pick-badge{flex:none;font-size:12px;color:var(--muted);font-weight:600}
 .v117-pick-row.has-unread .v117-pick-badge{color:#8d2b2b}
+
+/* V119 – kuka a mentett fotóknál */
+.v119-del{margin-left:8px;width:26px;height:26px;border:1px solid #e3b6b6;border-radius:7px;
+  background:#fdeaea;color:#8d2b2b;font-size:13px;line-height:1;cursor:pointer;vertical-align:middle}
+.v119-del:hover{background:#f8d7d7}
+
+/* V119 – archiválás a beállításokban */
+.v119-archive h3{margin:0 0 4px;font-size:16px}
+.v119-summary{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+.v119-row{display:flex;align-items:baseline;gap:10px;font-size:13px;padding:7px 10px;
+  border:1px solid var(--border);border-radius:9px;background:#fff}
+.v119-row span{color:var(--muted)}
+.v119-row b{margin-left:auto;font-size:13px}
+.v119-buttons{display:flex;gap:10px;flex-wrap:wrap}
+.v119-buttons button{height:44px;padding:0 16px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer}
+.v119-buttons button:disabled{opacity:.5;cursor:not-allowed}
+.v119-progress{margin-top:11px;padding:10px 12px;border-radius:9px;background:#eef5fa;
+  border:1px solid #c6dcf0;font-size:12.5px;color:#13507f}
+.v119-progress.hidden{display:none}
+
+/* V119 – teljes képernyős kamera */
+.v119-fullscreen{position:fixed!important;inset:0!important;z-index:9999!important;
+  margin:0!important;padding:0!important;border-radius:0!important;background:#000!important;
+  display:flex!important;flex-direction:column;align-items:center;justify-content:center}
+.v119-fullscreen video{width:100%!important;height:100%!important;max-height:none!important;
+  object-fit:contain;background:#000}
+body.v119-camera-open{overflow:hidden}

@@ -401,6 +401,71 @@
     return { moved: rows.length };
   }
 
+  /* ===== V119 – A FÁJL TÖRLÉSE A TÁROLÓBÓL IS ========================
+
+     Eddig csak a listából lehetett eltüntetni egy képet, a fájl viszont
+     ottmaradt a tárhelyen. Archiválás után ez fölöslegesen foglal helyet.
+
+     A törlés KÉT helyen történik: a tárolóból maga a fájl, az adatbázisból
+     a hozzá tartozó sor. Ha csak az egyik sikerülne, árva fájl vagy törött
+     hivatkozás maradna, ezért a sorrend: előbb a fájl, utána a sor – így ha
+     a tárolóból nem sikerül, a sor is marad, és újra próbálható. */
+  /* ===== V119 – A KÉP TÖRLÉSE A TÁRHELYRŐL IS ========================
+
+     Eddig nem volt mód törölni: a feltöltött szállítólevél a tárolóban
+     maradt, akkor is, ha már nem kellett. Archiválás után ez fölösleges
+     helyfoglalás.
+
+     A törlés KÉT helyről szed le: magát a fájlt a tárolóból, és a hozzá
+     tartozó sort az adatbázisból. Ha csak az egyiket tennénk, vagy árva
+     fájl maradna a tárhelyen, vagy törött hivatkozás a listában. */
+  async function deleteDeliveryFile(fileRow) {
+    const azonosito = fileRow?.id, ut = fileRow?.storage_path;
+    if (!azonosito || !ut) throw new Error('Hiányzó fájladat a törléshez.');
+
+    // 1. a fájl a tárolóból
+    try {
+      await rawRequest(`${baseUrl()}/storage/v1/object/delivery-docs/${pathEncode(ut)}`, { method: 'DELETE' });
+    } catch (error) {
+      /* Ha a fájl már nincs ott, a sort akkor is takarítsuk el. */
+      if (!/not.?found|404/i.test(String(error?.message || ''))) throw error;
+      console.warn('[V119] a fájl már nem volt a tárolóban', ut);
+    }
+
+    // 2. a nyilvántartó sor
+    await dbRequest(`delivery_report_files?${qs({ id: `eq.${azonosito}` })}`, {
+      method: 'DELETE', headers: { Prefer: 'return=minimal' }
+    });
+    return { deleted: true, path: ut, size: +fileRow.file_size || 0 };
+  }
+
+  /* Tömeges törléshez: egy fuvar vagy egy lista összes fájlja. Adagokban
+     halad, hogy egy megszakadás ne vigyen mindent. */
+  async function deleteDeliveryFiles(fileRows, onProgress) {
+    const sorok = (fileRows || []).filter(row => row?.id && row?.storage_path);
+    let kesz = 0, felszabadult = 0;
+    const hibas = [];
+    for (const sor of sorok) {
+      try {
+        const eredmeny = await deleteDeliveryFile(sor);
+        kesz++; felszabadult += eredmeny.size;
+      } catch (error) {
+        hibas.push({ file: sor.file_name || sor.storage_path, message: error?.message || String(error) });
+      }
+      onProgress?.({ kesz, osszes: sorok.length, felszabadult, hibas: hibas.length });
+    }
+    return { kesz, osszes: sorok.length, felszabadult, hibas };
+  }
+
+  /* Minden feltöltött fájl, fuvarra bontva – az archiváláshoz és a
+     tárhely-összesítéshez. */
+  async function listAllDeliveryFiles() {
+    return dbRequest(`delivery_report_files?${qs({
+      select: 'id,report_id,order_id,storage_path,file_name,mime_type,file_size,created_at',
+      order: 'created_at.asc'
+    })}`);
+  }
+
   async function listDeliveryFiles(orderId) {
     const rows = await dbRequest(`delivery_report_files?${qs({ select: 'id,report_id,order_id,storage_path,file_name,mime_type,file_size,created_at', order_id: `eq.${String(orderId)}`, order: 'created_at.desc' })}`);
     const result = [];
@@ -473,7 +538,8 @@
     setStatusListener: listener => { statusListener = listener; },
     signInWithPassword, signOut, refreshSession, ensureSession, fetchProfile, listUsers,
     fetchOrders, fetchBacklog, syncOrders, syncBacklog, loadOrdersIntoState, fetchMasterData, syncMasterData, loadMasterIntoState, masterSnapshot, requestTransfer, acceptTransfer, rejectTransfer, cancelTransfer, listTransfers,
-    createDeliveryReport, listDeliveryFiles, relinkDeliveryFiles, updateOwnOrder, syncOrderThread,
+    createDeliveryReport, listDeliveryFiles, relinkDeliveryFiles,
+    deleteDeliveryFile, deleteDeliveryFiles, listAllDeliveryFiles, updateOwnOrder, syncOrderThread,
     startPolling, stopPolling, driverKeyFromOrder, DRIVER_VEHICLES
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -141,7 +141,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V118Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V119Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -1064,6 +1064,25 @@
   global.toggleOrderDoneV111 = toggleOrderDoneV111;
   global.openDriverNoteV111 = openDriverNoteV111;
 
+
+  /* V119 – egy kép törlése a galériából ÉS a tárhelyről. */
+  async function deleteGalleryFileV119(fileId) {
+    if (!isAdmin()) return alert('Törölni csak az admin tud.');
+    const file = (global.__galleryFilesV119 || []).find(item => String(item.id) === String(fileId));
+    if (!file) return;
+    if (!confirm(`Véglegesen törlöd ezt a képet?\n\n${file.file_name || ''}\n\nA fájl a tárhelyről is törlődik, visszaállítani nem lehet.`)) return;
+    try {
+      await global.V44Online.deleteDeliveryFile(file);
+      global.__galleryFilesV119 = (global.__galleryFilesV119 || []).filter(item => String(item.id) !== String(fileId));
+      /* A fuvar JELÖLÉSE megmarad: a Mentett fotók gomb továbbra is mutatja,
+         hogy volt feltöltve szállítólevél – csak a kép nem nyílik meg. */
+      await openMediaGallery(String(file.order_id || ''));
+    } catch (error) {
+      alert(`A törlés nem sikerült: ${error.message}`);
+    }
+  }
+  global.deleteGalleryFileV119 = deleteGalleryFileV119;
+
   global.openSourceMail = openSourceMail;
 
   async function openMediaGallery(orderIds) {
@@ -1123,7 +1142,11 @@
         const forras = String(file.created_at || file.fuvarNap || '').slice(0, 10);
         return forras ? forras.replace(/-/g, '. ') + '.' : '';
       };
-      if (host) host.innerHTML = files.length ? files.map(file => file.mime_type?.startsWith('audio/') ? `<article><audio controls src="${safe(file.url)}"></audio><small>${safe(file.orderNo)} · ${safe(napja(file))} · ${safe(file.file_name || 'Hangjegyzet')}</small></article>` : `<article><a href="${safe(file.url)}" target="_blank" rel="noopener"><img src="${safe(file.url)}" alt="Szállítólevél"></a><small><b>${safe(napja(file))}</b> · ${safe(file.orderNo)} · ${safe(file.file_name || 'Fotó')}</small></article>`).join('') : '<div class="mobile-empty">Ehhez a fuvarhoz még nincs elmentett fotó.</div>';
+      /* V119: minden kép mellé kuka. A törlés a TÁROLÓBÓL is levesz, nem
+         csak a listából – archiválás után ne foglaljon helyet. Csak admin
+         törölhet. */
+      global.__galleryFilesV119 = files;
+      if (host) host.innerHTML = files.length ? files.map(file => file.mime_type?.startsWith('audio/') ? `<article><audio controls src="${safe(file.url)}"></audio><small>${safe(file.orderNo)} · ${safe(napja(file))} · ${safe(file.file_name || 'Hangjegyzet')}</small></article>` : `<article><a href="${safe(file.url)}" target="_blank" rel="noopener"><img src="${safe(file.url)}" alt="Szállítólevél"></a><small><b>${safe(napja(file))}</b> · ${safe(file.orderNo)} · ${safe(file.file_name || 'Fotó')}${isAdmin() ? `<button type="button" class="v119-del" title="Törlés a tárhelyről is" onclick="deleteGalleryFileV119('${safe(file.id)}')">🗑</button>` : ''}</small></article>`).join('') : '<div class="mobile-empty">Ehhez a fuvarhoz még nincs elmentett fotó.</div>';
     } catch (error) { if (host) host.innerHTML = `<div class="mobile-empty">Betöltési hiba: ${safe(error.message)}</div>`; }
   }
   global.openMediaGallery = openMediaGallery;

@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V118Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V119Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -220,7 +220,7 @@ function showPage(id){$$('.page').forEach(p=>p.classList.toggle('active',p.id===
 $('#recordStart').onclick=async()=>{try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});audioChunks=[];mediaRecorder=new MediaRecorder(stream);mediaRecorder.ondataavailable=e=>e.data.size&&audioChunks.push(e.data);mediaRecorder.onstop=()=>{audioBlob=new Blob(audioChunks,{type:mediaRecorder.mimeType||'audio/webm'});$('#audioPreview').src=URL.createObjectURL(audioBlob);$('#audioPreview').classList.remove('hidden');$('#recordStatus').textContent='Felvétel elkészült.';stream.getTracks().forEach(t=>t.stop())};mediaRecorder.start();$('#recordStart').disabled=true;$('#recordStop').disabled=false;$('#recordStatus').textContent='Felvétel folyamatban…'}catch(e){alert(e.message)}};
 $('#recordStop').onclick=()=>{if(mediaRecorder&&mediaRecorder.state!=='inactive')mediaRecorder.stop();$('#recordStart').disabled=false;$('#recordStop').disabled=true};
 $$('.nav').forEach(n=>n.classList.toggle('active',n.dataset.page===id));scrollTo(0,0);render()}
-function render(){applyAfterFourRule();renderRoutes();renderOrders();renderBacklog();renderMasters();renderVehicles();renderHomePointsV108();renderDriver();fillSelectors();$('#baseAddress').value=state.settings.baseAddress}
+function render(){applyAfterFourRule();renderRoutes();renderOrders();renderBacklog();renderMasters();renderVehicles();renderHomePointsV108();renderArchiveSummaryV119();renderDriver();fillSelectors();$('#baseAddress').value=state.settings.baseAddress}
 function longReason(name=''){const n=norm(name);let m=n.match(/(?:^|[^0-9])([456])\s*(?:m|meter)(?:es|eres)?\b/);if(m)return`${m[1]} méteres szálanyag`;m=n.match(/\b(4000|5000|6000)\s*mm\b/);if(m&&/(szal|cso|acel|rud|profil)/.test(n))return`${+m[1]/1000} méteres szálanyag`;return''}
 function canCarryLong(v){return/(plato|kcr|kamion)/.test(norm(v.type))}
 function centralSupplier(name){const group=state.suppliers.filter(s=>norm(s.name)===norm(name));return group.find(s=>s.isCentral)||group[0]||null}
@@ -1689,6 +1689,159 @@ function markThreadReadV115(order){
 window.threadHasUnreadV115=threadHasUnreadV115;
 window.markThreadReadV115=markThreadReadV115;
 
+/* ===== V119 – ARCHIVÁLÁS ÉS TÁRHELY-TAKARÍTÁS =======================
+
+   Két külön gomb, szándékosan. Ha egy gomb mentene ÉS törölne, egyetlen
+   megszakadt letöltés véglegesen elvinné a szállítóleveleket. Így előbb
+   megkapod a zip-et, megnézed, és csak utána törölsz.
+
+   Az archiválás alapból csak azt viszi, ami még nincs archiválva – napi
+   használatnál ez a természetes. A törlés pedig CSAK azokat a fájlokat
+   veszi le, amik bizonyítottan bekerültek egy korábbi zip-be.
+
+   A mai és tegnapi fuvarok fájljaihoz egyik művelet sem nyúl: az élő
+   munkához nem érünk hozzá. */
+const ARCHIVE_KEY_V119 = 'archivedFilesV119';
+
+function archivedMapV119(){
+  try { return JSON.parse(localStorage.getItem(ARCHIVE_KEY_V119) || '{}') || {}; }
+  catch(error){ return {}; }
+}
+function markArchivedV119(files){
+  const terkep = archivedMapV119();
+  const mikor = new Date().toISOString();
+  for (const file of files) terkep[String(file.id)] = mikor;
+  try { localStorage.setItem(ARCHIVE_KEY_V119, JSON.stringify(terkep)); }
+  catch(error){ console.warn('[V119] az archiválás jelölése', error); }
+  return mikor;
+}
+
+/* A mai és tegnapi nap kimarad – azokon még dolgozunk. */
+function archivableV119(file){
+  const nap = String(file.created_at || '').slice(0, 10);
+  if (!nap) return false;
+  const ma = typeof today === 'function' ? today() : new Date().toISOString().slice(0, 10);
+  const tegnap = new Date(ma + 'T12:00:00'); tegnap.setDate(tegnap.getDate() - 1);
+  return nap < tegnap.toISOString().slice(0, 10);
+}
+
+function humanSizeV119(bytes){
+  const mb = (+bytes || 0) / (1024 * 1024);
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round((+bytes || 0) / 1024))} kB`;
+}
+
+async function renderArchiveSummaryV119(){
+  const host = $('#v119Summary'); if (!host) return;
+  if (!window.V44Online?.listAllDeliveryFiles) { host.textContent = 'Nincs online kapcsolat.'; return; }
+  try {
+    const mind = (await window.V44Online.listAllDeliveryFiles()) || [];
+    const terkep = archivedMapV119();
+    const archivalhato = mind.filter(f => archivableV119(f) && !terkep[String(f.id)]);
+    const torolheto = mind.filter(f => terkep[String(f.id)]);
+    const meret = lista => lista.reduce((sum, f) => sum + (+f.file_size || 0), 0);
+    host.innerHTML = `
+      <div class="v119-row"><span>Összes szállítólevél</span><b>${mind.length} fájl · ${humanSizeV119(meret(mind))}</b></div>
+      <div class="v119-row"><span>Archiválásra vár</span><b>${archivalhato.length} fájl · ${humanSizeV119(meret(archivalhato))}</b></div>
+      <div class="v119-row"><span>Archiválva, törölhető</span><b>${torolheto.length} fájl · ${humanSizeV119(meret(torolheto))}</b></div>`;
+    const archGomb = $('#v119Archive'), purgeGomb = $('#v119Purge');
+    if (archGomb) { archGomb.disabled = !archivalhato.length; archGomb.textContent = archivalhato.length ? `Archiválás (${archivalhato.length})` : 'Nincs mit archiválni'; }
+    if (purgeGomb) { purgeGomb.disabled = !torolheto.length; purgeGomb.textContent = torolheto.length ? `Archiváltak törlése (${torolheto.length})` : 'Nincs archivált fájl'; }
+  } catch (error) {
+    host.textContent = `Az összesítés nem tölthető be: ${error.message}`;
+  }
+}
+
+async function runArchiveV119(){
+  const host = $('#v119Progress'); if (!host) return;
+  if (typeof JSZip === 'undefined') return alert('A zip-készítő nem töltődött be. Frissítsd az oldalt internetkapcsolattal.');
+  host.classList.remove('hidden');
+  host.textContent = 'Fájlok összegyűjtése…';
+  try {
+    const mind = (await window.V44Online.listAllDeliveryFiles()) || [];
+    const terkep = archivedMapV119();
+    const lista = mind.filter(f => archivableV119(f) && !terkep[String(f.id)]);
+    if (!lista.length) { host.textContent = 'Nincs archiválandó fájl.'; return; }
+
+    const zip = new JSZip();
+    const sorok = ['rendelés;fájl;feltöltve;méret'];
+    let kesz = 0, sikertelen = 0;
+    for (const file of lista) {
+      try {
+        const [row] = await window.V44Online.listDeliveryFiles(String(file.order_id));
+        const url = (await window.V44Online.listDeliveryFiles(String(file.order_id)))
+          .find(x => String(x.id) === String(file.id))?.url;
+        if (!url) throw new Error('nincs letöltési hivatkozás');
+        const valasz = await fetch(url);
+        if (!valasz.ok) throw new Error('letöltési hiba');
+        const adat = await valasz.arrayBuffer();
+        const fuvar = (state.orders || []).find(o => String(o.id) === String(file.order_id));
+        const mappa = (fuvar?.orderNo || file.order_id || 'egyeb').replace(/[^\w.-]+/g, '_');
+        const nev = `${String(file.created_at || '').slice(0, 10)}_${(file.file_name || 'fajl').replace(/[^\w.-]+/g, '_')}`;
+        zip.folder(mappa).file(nev, adat);
+        sorok.push(`${fuvar?.orderNo || ''};${file.file_name || ''};${String(file.created_at || '').slice(0, 16)};${file.file_size || 0}`);
+        file.__archived = true;
+        kesz++;
+      } catch (error) {
+        sikertelen++;
+        console.warn('[V119] a fájl nem került a zip-be', file.file_name, error);
+      }
+      host.textContent = `Archiválás: ${kesz + sikertelen} / ${lista.length}` + (sikertelen ? ` · ${sikertelen} sikertelen` : '');
+    }
+    if (!kesz) { host.textContent = 'Egyetlen fájlt sem sikerült letölteni. A törlés nem indul el.'; return; }
+
+    zip.file('tartalom.csv', sorok.join('\n'));
+    host.textContent = 'Zip összeállítása…';
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const nap = (typeof today === 'function' ? today() : new Date().toISOString().slice(0, 10));
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `szallitolevelek_${nap}.zip`;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+
+    /* CSAK azt jelöljük archiváltnak, ami tényleg bekerült a zip-be. */
+    markArchivedV119(lista.filter(f => f.__archived));
+    host.textContent = `Kész: ${kesz} fájl a zip-ben${sikertelen ? `, ${sikertelen} kimaradt` : ''}. Nézd meg a letöltött fájlt, mielőtt törölsz.`;
+    renderArchiveSummaryV119();
+  } catch (error) {
+    host.textContent = `Az archiválás megszakadt: ${error.message}`;
+  }
+}
+
+async function runPurgeV119(){
+  const host = $('#v119Progress'); if (!host) return;
+  try {
+    const mind = (await window.V44Online.listAllDeliveryFiles()) || [];
+    const terkep = archivedMapV119();
+    const lista = mind.filter(f => terkep[String(f.id)]);
+    if (!lista.length) return alert('Nincs archivált fájl, amit törölni lehetne.');
+
+    const meret = lista.reduce((sum, f) => sum + (+f.file_size || 0), 0);
+    const valasz = prompt(`${lista.length} archivált fájl törlése a tárhelyről (${humanSizeV119(meret)}).\n\n` +
+      'Ez végleges. Megerősítésül írd be a fájlok számát:');
+    if (String(valasz || '').trim() !== String(lista.length)) return alert('A törlés nem indult el.');
+
+    host.classList.remove('hidden');
+    const eredmeny = await window.V44Online.deleteDeliveryFiles(lista, allapot => {
+      host.textContent = `Törlés: ${allapot.kesz} / ${allapot.osszes} · felszabadítva ${humanSizeV119(allapot.felszabadult)}`;
+    });
+    /* A sikeresen töröltek kikerülnek a nyilvántartásból is. */
+    const maradt = archivedMapV119();
+    for (const file of lista) if (!eredmeny.hibas.some(h => h.file === (file.file_name || file.storage_path))) delete maradt[String(file.id)];
+    localStorage.setItem(ARCHIVE_KEY_V119, JSON.stringify(maradt));
+
+    host.textContent = `Kész: ${eredmeny.kesz} fájl törölve, ${humanSizeV119(eredmeny.felszabadult)} szabadult fel` +
+      (eredmeny.hibas.length ? `, ${eredmeny.hibas.length} sikertelen` : '') + '.';
+    renderArchiveSummaryV119();
+  } catch (error) {
+    host.textContent = `A törlés megszakadt: ${error.message}`;
+  }
+}
+
+window.renderArchiveSummaryV119 = renderArchiveSummaryV119;
+window.runArchiveV119 = runArchiveV119;
+window.runPurgeV119 = runPurgeV119;
+
 /* ===== V117 – AZ ÜZENET A RENDELÉSHEZ TARTOZIK, NEM A BUBORÉKHOZ ====
 
    Egy buborékban több rendelés is lehet ugyanattól a felrakótól, ugyanarra
@@ -2158,6 +2311,8 @@ $('#prevDay').onclick=()=>{$('#workDate').value=shiftWorkday(selectedDate(),-1);
 $('#importBtn').onclick=()=>$('#importDialog').showModal();$('#excelInput').onchange=e=>readExcel(e.target.files[0]).catch(err=>alert(err.message));$('#startReviewBtn').onclick=startReview;$('#reviewForm').onsubmit=e=>{e.preventDefault();saveReview()};$('#reviewSkipBtn').onclick=saveReview;
 $('#quickAddBtn').onclick=()=>openOrder({scheduleDate:selectedDate(),items:[]});$('#addOrderBtn').onclick=()=>openOrder({scheduleDate:selectedDate(),items:[]});$('#balanceBtn').onclick=()=>balance();$('#optimizeBtn').onclick=()=>optimizeAll();$('#exportBtn').onclick=exportMenu;$('#deleteAllBtn').onclick=deleteAll;
 $('#orderSearch').oninput=renderOrders;$('#globalSearch').oninput=handleGlobalSearch;$('#clearGlobalSearch').onclick=resetToStartPage;$('#globalSearch').onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();resetToStartPage()}};$('#orderVehicleFilter').onchange=renderOrders;if($('#v108Save'))$('#v108Save').onclick=saveHomePointsV108;
+if($('#v119Archive'))$('#v119Archive').onclick=runArchiveV119;
+if($('#v119Purge'))$('#v119Purge').onclick=runPurgeV119;
 $('#addVehicleBtn').onclick=()=>editVehicle();$('#saveBaseBtn').onclick=()=>{state.settings.baseAddress=$('#baseAddress').value;save()};$('#driverVehicleSelect').onchange=renderDriver;$('#driverDate').onchange=renderDriver;
 $('#backlogSearch').oninput=()=>{$('#clearBacklogSearch').classList.toggle('hidden',!$('#backlogSearch').value);renderBacklog()};$('#clearBacklogSearch').onclick=()=>{$('#backlogSearch').value='';$('#clearBacklogSearch').classList.add('hidden');renderBacklog()};$('#addMasterBtn').onclick=()=>openMaster();$('#masterSearch').oninput=renderMasters;$('#backupBtn').onclick=backup;$('#restoreInput').onchange=e=>e.target.files[0]&&restoreFile(e.target.files[0]);
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;$('#installBtn').classList.remove('hidden')});$('#installBtn').onclick=async()=>{deferredPrompt?.prompt();deferredPrompt=null};

@@ -1,0 +1,2262 @@
+/* Fuvarszervező V44 – Outlook import modul
+   Outlook (.msg) + PDF rendelésimport.
+
+   - Két külön tömeges import: Dobozos és Martin / Platós.
+   - A levél tárgya/törzse és minden PDF melléklet együtt kerül elemzésre.
+   - A rendelésazonosító mindig a perjel utáni rész (pl. 2026-SR0/004911 -> 004911).
+   - A felrakó és projekt címét elsősorban a törzsadat adja; a PDF vevői címe nem írja felül a projektcímet.
+   - Az import teljesen helyben, a böngészőben történik.
+*/
+(function (global) {
+  'use strict';
+
+  const VERSION = '44';
+  const PDF_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const LEGAL_WORDS = new Set(['kft', 'zrt', 'bt', 'nyrt', 'trade', 'hungary', 'magyarorszag', 'es', 'the', 'partner']);
+  const PROJECT_NOISE = new Set(['budapest', 'garancia', 'terv', 'projekt', 'utem', 'epulet', 'tarsashaz', 'hotel', 'pr']);
+  let pending = [];
+  let processing = false;
+
+  const nrm = value => {
+    if (typeof norm === 'function') return norm(value || '');
+    return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[_.,;:()[\]{}\/\\-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  };
+  const htmlEsc = value => typeof esc === 'function'
+    ? esc(value ?? '')
+    : String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const id = () => typeof uid === 'function' ? uid() : `v43-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const localISO = date => { const d = new Date(date); const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; };
+  const shiftWorkdayISO = (value, direction = 1) => {
+    const d = value instanceof Date ? new Date(value) : new Date(`${value}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return '';
+    const step = direction < 0 ? -1 : 1;
+    do { d.setDate(d.getDate() + step); } while (d.getDay() === 0 || d.getDay() === 6);
+    return localISO(d);
+  };
+  const normalizeWorkdayISO = value => {
+    const d = value instanceof Date ? new Date(value) : new Date(`${value}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return '';
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+    return localISO(d);
+  };
+  const tomorrowISO = () => shiftWorkdayISO(localISO(new Date()), 1);
+  const selectedImportDate = () => normalizeWorkdayISO((typeof document !== 'undefined' ? document.getElementById('v38ImportDate')?.value : '') || tomorrowISO()) || tomorrowISO();
+  const cleanText = value => String(value || '').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/\r/g, '').replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
+  const unique = values => [...new Set(values.filter(Boolean))];
+  const significantTokens = (value, noise = LEGAL_WORDS) => nrm(value).split(' ').filter(token => token.length >= 3 && !noise.has(token) && !/^\d+$/.test(token));
+
+
+  const CENTRAL_WAREHOUSE = { name: 'Szigetszentmiklósi Központi Raktár', address: '2310 Szigetszentmiklós, Kereskedő utca 2.' };
+  const ADDRESS_RE = /\b(\d{4})\s+([A-ZÁÉÍÓÖŐÚÜŰa-záéíóöőúüű][^\n;]{2,90}?\b(?:utca|út|u\.|köz|tér|körút|sor|park|rakpart|útja)\s*\d+[A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű0-9.\/-]*)/i;
+
+  function linesOf(...sources) {
+    return cleanText(sources.filter(Boolean).join('\n')).split('\n').map(line => line.trim()).filter(Boolean);
+  }
+
+  function cleanAddress(value = '') {
+    return String(value).replace(/^(?:sz[eé]khely\s*;?\s*telephely|telephely|felv[eé]tel(?:i)?\s*c[ií]me)\s*:\s*/i, '').replace(/\s+/g, ' ').trim().replace(/\s+Magyarorsz[aá]g$/i, '');
+  }
+
+  function addressFromText(value = '') {
+    const cleaned = cleanAddress(value);
+    const match = cleaned.match(ADDRESS_RE);
+    return match ? `${match[1]} ${match[2]}`.replace(/\s+/g, ' ').trim() : '';
+  }
+
+  function extractOrderRefsDetailed(...sources) {
+    const text = sources.filter(Boolean).join('\n');
+    const refs = [];
+    // V63: a BR0 (belső rendelés) eddig kimaradt, ezért az ilyen bizonylatokról
+    // a program semmit nem ismert fel – sem a rendelésszámot, sem a tételeket.
+    for (const match of text.matchAll(/\b(20\d{2})\s*-\s*(SR0|BR0|KRPR|NRPR|PRPR)\s*\/\s*([0-9]{4,12})\b/gi)) {
+      const ref = { year: match[1], type: match[2].toUpperCase(), no: match[3], full: `${match[1]}-${match[2].toUpperCase()}/${match[3]}`, index: match.index ?? -1 };
+      if (!refs.some(existing => existing.full === ref.full)) refs.push(ref);
+    }
+    /* V71: a raktárközi bizonylat tételblokkjai fölött ott a FORRÁS rendelés
+       ("Rendelés: 2026-BR0/000921"). Ezek nem külön fuvarok, csak hivatkozások.
+       Korábban rendelésszámként kerültek be, ezért ugyanaz a bizonylat két-három
+       sorként jelent meg, és három szám került a rendelésszám mezőbe.
+
+       A bizonylat SAJÁT száma a fejlécben áll. Ezért a fejlécben talált típust
+       tekintjük mérvadónak, és csak az azonos típusú hivatkozásokat tartjuk meg. */
+    const headerType = headerOrderTypeV71(text, refs);
+    if (headerType) {
+      const own = refs.filter(ref => String(ref.type).toUpperCase() === headerType);
+      if (own.length) return own;
+    }
+    return refs;
+  }
+
+  /* A bizonylat saját típusa: a fejlécben (az első tételsor előtt) álló
+     hivatkozás típusa. Ha ott nincs, a legelső találaté. */
+  function headerOrderTypeV71(text, refs) {
+    if (!refs || !refs.length) return '';
+    const raw = String(text || '');
+    const firstItem = raw.search(/^\s*(?:\d+\s*\.|Rendel[eé]s\s*:)/m);
+    const head = firstItem > 0 ? raw.slice(0, firstItem) : raw.slice(0, 1500);
+    const inHead = head.match(/\b20\d{2}\s*-\s*(SR0|BR0|KRPR|NRPR|PRPR)\s*\/\s*[0-9]{4,12}\b/i);
+    if (inHead) return inHead[1].toUpperCase();
+    return String(refs[0].type || '').toUpperCase();
+  }
+
+  function extractOrderRefs(...sources) {
+    return extractOrderRefsDetailed(...sources).map(({ index, ...ref }) => ref);
+  }
+
+  function orderNumbersOf(value) {
+    if (!value) return [];
+    if (Array.isArray(value.sourceOrderNos)) return unique(value.sourceOrderNos.map(String));
+    if (Array.isArray(value.orderNos)) return unique(value.orderNos.map(String));
+    return unique(String(value.orderNo || value).split(/[,;\s]+/).map(part => part.replace(/\D/g, '')).filter(part => part.length >= 4));
+  }
+
+  function isReturnText(...sources) {
+    const text = nrm(sources.filter(Boolean).join(' '));
+    return /visszaru|vissza aru|visszavinni|vissza vinni|vissza tudjuk vinni|visszaszallitas/.test(text);
+  }
+
+  function findMasterProject(text = '') {
+    return bestProject(text, text);
+  }
+
+  function findWarehouse(text = '') {
+    const normalized = nrm(text);
+    if (/uj kozponti raktar|kozponti raktar|szigetszentmiklos|\bkrpr\b/.test(normalized)) return { id: '', ...CENTRAL_WAREHOUSE, reason: 'központi raktár szabály' };
+    const projects = typeof state !== 'undefined' ? state.projects || [] : [];
+    /* V108: az INAKTÍV sorokra nem illesztünk. A törzsadatban 20 olyan sor
+       van, ahol a cégnév helyett cím áll (elcsúszott export). Ezeket nem
+       töröltük, mert régi fuvar hivatkozhat rájuk, de felrakóként soha nem
+       szabad kiválasztani őket – import közben ilyen "1158 Budapest,
+       Késmárk u." nevű felrakó keletkezett. */
+    const suppliers = (typeof state !== 'undefined' ? state.suppliers || [] : [])
+      .filter(item => item && item.active !== false);
+    const all = [...projects.map(item => ({ ...item, _kind: 'project' })), ...suppliers.map(item => ({ ...item, _kind: 'supplier' }))];
+    const ranked = all.map(item => ({ item, score: significantTokens(item.name).reduce((score, token) => score + (normalized.includes(token) ? 8 : 0), 0) + (normalized.includes(nrm(item.name)) ? 30 : 0) })).sort((a, b) => b.score - a.score);
+    if (!ranked.length || ranked[0].score < 8) return null;
+    return { id: ranked[0].item.id || '', name: ranked[0].item.name || '', address: ranked[0].item.address || '', kind: ranked[0].item._kind, reason: `raktártörzs-egyezés (${ranked[0].score})` };
+  }
+
+  function extractExplicitPickup(...sources) {
+    const lines = linesOf(...sources);
+    const start = lines.findIndex(line => /felv[eé]tel(?:i)?\s*c[ií]me/i.test(line));
+    if (start < 0) return null;
+    const window = lines.slice(start + 1, start + 9);
+    const company = window.find(line => /\b(?:kft\.?|zrt\.?|bt\.?|nyrt\.?)\b/i.test(line) && !/stand\s*98/i.test(line)) || '';
+    const rawAddress = window.find(line => addressFromText(line)) || '';
+    const address = addressFromText(rawAddress);
+    const contactLine = window.find(line => /\+?36|\b(?:20|30|70)\s*\d{3}/.test(line)) || '';
+    const phone = (contactLine.match(/(?:\+?36\s*)?(?:20|30|70)[\s\/-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}/) || [])[0] || '';
+    const email = (sources.filter(Boolean).join(' ').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i) || [])[0] || '';
+    if (!company && !address) return null;
+    return { name: company.replace(/\s+/g, ' ').trim(), address, phone, email, pickupNote: [contactLine, phone].filter(Boolean)[0] || '', reason: 'levél/PDF külön Felvétel címe mező', autoMaster: false, detectedFromDocument: true };
+  }
+
+  function extractRequestedDate(text = '') {
+    const all = [...String(text || '').matchAll(/\b(\d{2})[.\/-](\d{2})[.\/-](\d{2,4})\b/g)];
+    if (!all.length) return '';
+    const match = /\bk[eé]rt\b/i.test(text) ? all.at(-1) : all[0];
+    const yy = match[1], mm = match[2], dd = match[3];
+    if (dd.length === 2) return `20${yy}-${mm}-${dd}`;
+    return `${dd}-${mm}-${yy}`;
+  }
+
+/* V60 – A LEVÉL SZÖVEGÉNEK ÉRTELMEZÉSE
+
+   Gyakori, hogy a bizonylat több tételt tartalmaz, de a levélben az áll, hogy
+   csak egy részüket kell felvenni – például "Írd ki kérlek részünkre a
+   rendelésben szereplő gipszet", vagy "csak a hátralékot hozd".
+
+   Ez a rész a levéltörzsből kiolvassa, hogy szűkíteni kell-e a tételeket, és
+   ha igen, mire. Óvatosan jár el: csak akkor szűkít, ha egyértelmű jelet
+   talál ÉS a szűkítés után marad tétel. Ha bizonytalan, mindent behoz, és
+   megjegyzésben jelzi, hogy nézd át.
+*/
+  const BODY_SCOPE_HINTS = [
+    /\bcsak\s+(?:a|az)\s+/i,
+    /\bkiz[aá]r[oó]lag\b/i,
+    /\br[eé]sz[uü]nkre\s+a\b/i,
+    /\b[ií]rd\s+ki\b/i,
+    /\bhozd?\s+(?:el\s+)?(?:csak\s+)?(?:a|az)\b/i,
+    /\bvedd?\s+fel\b/i,
+    /\bcsak\s+ennyit\b/i
+  ];
+  const BODY_BACKLOG_HINTS = [/h[aá]tral[eé]k/i, /marad[eé]k/i, /ami\s+nem\s+j[oö]tt/i, /kor[aá]bbi\s+rendel[eé]s/i];
+  // A levél udvariassági és aláírás-részét nem elemezzük.
+  const BODY_STOP_RE = /^\s*(k[oö]sz|üdv|udv|tisztelettel|l[eé]vai|szab[oó]|kérj[uü]k, hogy|a sz[aá]ml|projekt asszisztens|\+36|http|mailto)/i;
+
+  function meaningfulBodyText(body = '') {
+    const out = [];
+    for (const raw of String(body || '').split(/\r?\n/)) {
+      const line = joinThousandsV71(raw.replace(/\s+/g, ' ').trim());
+      if (!line) continue;
+      if (BODY_STOP_RE.test(line)) break;
+      out.push(line);
+    }
+    return out.join(' ');
+  }
+
+  /* A levélben említett tételekre illesztés: a bizonylat tételnevének
+     érdemi szavai közül legalább egy szerepeljen a levélben. Rövid vagy
+     általános szavakat (pl. "cső") nem fogadunk el önmagában, hogy ne
+     szűkítsünk véletlenül. */
+  // Az önmagukban semmitmondó szavak nem elegendők az illesztéshez, mert
+  // szinte minden tételben szerepelnek.
+  const GENERIC_ITEM_WORDS = new Set(['cso', 'rud', 'lap', 'szal', 'anyag', 'elem', 'db',
+    'mm', 'cm', 'kg', 'szet', 'tipus', 'meret', 'fekete', 'feher', 'kicsi', 'nagy']);
+
+  function bodyMentionsItem(bodyNorm, item) {
+    const name = nrm(item.name || '');
+    if (!name) return false;
+    if (name.length >= 4 && bodyNorm.includes(name)) return true;
+    const tokens = name.split(' ')
+      .filter(token => token.length >= 3 && !GENERIC_ITEM_WORDS.has(token) && !/^\d+$/.test(token));
+    if (!tokens.length) return false;
+    return tokens.some(token => {
+      if (bodyNorm.includes(token)) return true;
+      // magyar toldalékok miatt a szótő is elég: "gipszet" -> "gipsz"
+      const stem = token.length > 4 ? token.slice(0, -1) : token;
+      return stem.length >= 4 && bodyNorm.includes(stem);
+    });
+  }
+
+  /* V79 – A LEVÉL MEGNEVEZHETI A TELEPHELYET
+
+     Előfordul, hogy a bizonylaton az egyik telephely szerepel, a kísérő
+     levélben viszont a másik: "holnap felvesszük nálatok a Hengermalomban".
+     Ilyenkor a levél a frissebb és pontosabb információ – az írja le, hova
+     megy ténylegesen az autó.
+
+     Csak UGYANANNAK a cégnek a telephelyei közül válthatunk, és csak akkor,
+     ha a levélben szereplő utcanév egyértelműen egy másik telephelyre mutat.
+     A váltást jelezzük, hogy az előnézetben látható és felülbírálható legyen. */
+  function applyBodyPickupSiteV79(pickup, body, subject) {
+    if (!pickup?.name || typeof state === 'undefined') return null;
+    const text = nrm(`${body || ''} ${subject || ''}`);
+    if (!text) return null;
+    const sites = (state.suppliers || []).filter(item =>
+      item.active !== false && nrm(item.name) === nrm(pickup.name) && item.address);
+    if (sites.length < 2) return null;
+
+    // helynevek és általános szavak, amik nem azonosítanak telephelyet
+    const NOISE = new Set(['budapest','budapesti','kerulet','ker','utca','ut','uti','ter','koz',
+      'korut','krt','hrsz','magyarorszag','epulet','emelet','dulo','fasor','sor','park','telep']);
+    const streetOf = site => nrm(site.address).split(' ')
+      .find(token => token.length >= 5 && !/^\d+$/.test(token) && !NOISE.has(token)) || '';
+    const current = streetOf(pickup);
+    let found = null;
+    for (const site of sites) {
+      const street = streetOf(site);
+      if (!street || street === current) continue;
+      // szohatar-vizsgalat regex nelkul: a szo eleje vagy szokoz elozze meg
+      const at = text.indexOf(street);
+      const boundary = at === 0 || (at > 0 && text[at - 1] === " ");
+      if (at >= 0 && boundary) { found = site; break; }
+    }
+    if (!found) return null;
+    return { site: found, note: `A levél a(z) ${found.address} telephelyet nevezi meg` };
+  }
+
+  function applyBodyScopeV60(items, body, subject) {
+    const result = { items, note: '', narrowed: false, backlogOnly: false };
+    if (!items || items.length < 2) return result;      // egytételes bizonylatot nincs mit szűkíteni
+    const text = meaningfulBodyText(body);
+    if (!text) return result;
+    const hasHint = BODY_SCOPE_HINTS.some(re => re.test(text));
+    const backlog = BODY_BACKLOG_HINTS.some(re => re.test(text)) || BODY_BACKLOG_HINTS.some(re => re.test(subject || ''));
+    if (!hasHint && !backlog) return result;
+
+    const bodyNorm = nrm(text);
+    const matched = items.filter(item => bodyMentionsItem(bodyNorm, item));
+    if (backlog && !matched.length) {
+      result.note = 'A levél hátralékra utal, de nem nevez meg tételt – minden tétel behozva, ellenőrizd.';
+      return result;
+    }
+    if (!matched.length || matched.length === items.length) {
+      if (hasHint) result.note = 'A levél szűkítésre utal, de nem sikerült tételt azonosítani – minden tétel behozva, ellenőrizd.';
+      return result;
+    }
+    result.items = matched;
+    result.narrowed = true;
+    result.backlogOnly = backlog;
+    result.note = `A levél alapján csak ${matched.length} tétel került be a bizonylat ${items.length} tétele közül: `
+      + matched.map(item => item.name).join(', ') + '.';
+    return result;
+  }
+
+  function parseBodyItems(text = '') {
+    const items = [];
+    for (const raw of linesOf(text)) {
+      const line = joinThousandsV71(raw.replace(/\s+/g, ' ').trim());
+      let match = line.match(/^([A-Z0-9._\/-]{3,})\s*[-–]\s*(.+?)\s*[-–]\s*(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+      if (!match) match = line.match(/^([A-Z0-9._\/-]{3,})\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\s*(?:[oö]sszesen)?$/i);
+      if (!match) continue;
+      const [, code, name, qty, unit] = match;
+      const materialSearch = nrm(`${name} ${qty} ${unit}`);
+      items.push({ code, name: name.trim(), qty: normalizeQtyV71(qty), unit, itemNote: '', longMaterial: /cso|fureszaru|deszka|szal|tekercs/.test(materialSearch), received: false });
+    }
+    return items;
+  }
+
+  /*
+    Hasábos raktárközi bizonylat szétvágása.
+
+    A Forrás és a Cél raktár egymás mellett, két oszlopban áll. A soronkénti
+    olvasás összekeveri őket: a KRPR-nél a forrás nyerte a lerakó helyét, a
+    PRPR-nél a két vég felcserélődött. Ezért a vágás a "Cél raktár" felirat
+    vízszintes pozíciója mentén történik.
+
+    Elsődlegesen a PDF elemeinek x koordinátáját használjuk (pdf.rows), mert
+    az pontos. Ha az nem áll rendelkezésre (pl. szövegből dolgozunk), a
+    szóközökkel kiszedett elrendezésre esünk vissza.
+  */
+  function isCentralWarehouseName(name = '') {
+    const value = nrm(name);
+    if (!value) return false;
+    return /kozponti\s*raktar|uj\s*kozponti|stand\s*98/.test(value);
+  }
+
+  const TRANSFER_STOP_RE = /^\s*(d[aá]tum|k[oó]d|megnevez[eé]s|[oö]sszesen|copyright|alapbizonylat)/i;
+
+  function transferColumnsFromRows(rows = []) {
+    let cut = null;
+    for (const row of rows) {
+      for (const part of row.parts || []) {
+        if (/c[eé]l\s*rakt[aá]r/i.test(part.str)) { cut = part.x - 2; break; }
+      }
+      if (cut !== null) break;
+    }
+    if (cut === null) return null;
+    const left = [], right = [];
+    let started = false;
+    for (const row of rows) {
+      const joined = (row.parts || []).map(part => part.str).join(' ');
+      if (!started) {
+        if (!/c[eé]l\s*rakt[aá]r|forr[aá]s\s*rakt[aá]r/i.test(joined)) continue;
+        started = true;
+      } else if (TRANSFER_STOP_RE.test(joined)) break;
+      const l = [], r = [];
+      for (const part of row.parts || []) (part.x >= cut ? r : l).push(part.str);
+      if (l.length) left.push(l.join(' '));
+      if (r.length) right.push(r.join(' '));
+    }
+    return {
+      source: left.join('\n').replace(/forr[aá]s\s*rakt[aá]r\s*:?/gi, ' '),
+      target: right.join('\n').replace(/c[eé]l\s*rakt[aá]r\s*:?/gi, ' ')
+    };
+  }
+
+  function transferColumnsFromText(text = '') {
+    const raw = String(text || '').split(/\r?\n/);
+    let headerIndex = -1, cut = -1;
+    for (let i = 0; i < raw.length; i++) {
+      const match = raw[i].match(/c[eé]l\s*rakt[aá]r/i);
+      if (match) { headerIndex = i; cut = match.index; break; }
+    }
+    if (headerIndex < 0 || cut <= 0) return null;
+    const left = [], right = [];
+    for (let i = headerIndex; i < raw.length; i++) {
+      if (i > headerIndex && TRANSFER_STOP_RE.test(raw[i])) break;
+      left.push(raw[i].slice(0, cut));
+      right.push(raw[i].slice(cut));
+    }
+    return {
+      source: left.join('\n').replace(/forr[aá]s\s*rakt[aá]r\s*:?/gi, ' '),
+      target: right.join('\n').replace(/c[eé]l\s*rakt[aá]r\s*:?/gi, ' ')
+    };
+  }
+
+  function transferColumns(text = '', rows = []) {
+    return transferColumnsFromRows(rows) || transferColumnsFromText(text);
+  }
+
+  // Egy hasáb szövegéből kizárólag az abban a hasábban említett projektet
+  // vagy raktárat fogadjuk el. Nem esünk vissza a teljes dokumentumra,
+  // mert épp az okozta a forrás és cél összekeverését.
+  // A SERPA a cél raktárat sorszámmal írja ("Moxy_Bérlemény_2026098"), a
+  // törzsadatban viszont többes szám és Budapest_ előtag áll. A záró
+  // azonosítót levágjuk, és a többes számú alakot is egyeztetjük.
+  function transferNameKeys(value = '') {
+    const base = nrm(value)
+      .replace(/\b\d{5,}\b/g, ' ')
+      .replace(/\bpr\s*\d{4}\b/g, ' ')
+      .replace(/\bbudapest\b/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+    const singular = base.replace(/(\w+?)(ek|ok|ak|k)\b/g, '$1');
+    return [...new Set([base, singular].filter(Boolean))];
+  }
+
+  /* V71 – ELGÉPELÉS-TŰRŐ SZÓEGYEZÉS
+
+     A bizonylaton előfordul elírás: "Budapest_Waterfont City_V.ütem" a
+     "Budapest_Waterfront_City_V.ütem" helyett. A pontos egyezés ilyenkor nem
+     talál, viszont a rövid, gyakori szavak ("city", "ütem") más projektre is
+     illenek – így a City pearl nyert a Waterfront helyett.
+
+     Ezért a hosszú, jellemző szavaknál egyetlen karakternyi eltérést
+     megengedünk (betoldás, hiány vagy csere). A rövid szavakra nem, mert ott
+     egy karakter már más szót jelenthet. */
+  function closeEnoughV71(a, b) {
+    if (a === b) return true;
+    if (Math.min(a.length, b.length) < 6) return false;
+    if (Math.abs(a.length - b.length) > 1) return false;
+    let i = 0, j = 0, diff = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) { i++; j++; continue; }
+      if (++diff > 1) return false;
+      if (a.length > b.length) i++;
+      else if (b.length > a.length) j++;
+      else { i++; j++; }
+    }
+    return diff + (a.length - i) + (b.length - j) <= 1;
+  }
+
+  function tokenInColumnV71(token, column) {
+    const stem = token.replace(/(ek|ok|ak|k)$/, '');
+    if (column.includes(stem)) return true;
+    // szavanként hasonlítunk, hogy az elgépelt alak is illeszkedjen
+    return column.split(' ').some(word => closeEnoughV71(word, token) || closeEnoughV71(word, stem));
+  }
+
+  function transferNameMatch(columnText, projectName) {
+    const columnKeys = transferNameKeys(columnText);
+    const nameKeys = transferNameKeys(projectName);
+    let best = 0;
+    for (const name of nameKeys) {
+      if (!name) continue;
+      for (const column of columnKeys) {
+        if (column.includes(name)) best = Math.max(best, name.length * 3);
+        const tokens = name.split(' ').filter(token => token.length >= 4);
+        if (!tokens.length) continue;
+        if (tokens.every(token => column.includes(token.replace(/(ek|ok|ak|k)$/, '')))) {
+          best = Math.max(best, tokens.join('').length * 2);
+          continue;
+        }
+        // elgépelés-tűrő: minden szónak illeszkednie kell, és legalább egy
+        // hosszú, jellemző szónak is (6+ karakter), hogy a "city"/"ütem"
+        // önmagában ne döntsön
+        if (tokens.every(token => tokenInColumnV71(token, column))
+            && tokens.some(token => token.length >= 6)) {
+          best = Math.max(best, tokens.join('').length);
+        }
+      }
+    }
+    return best;
+  }
+
+  function warehouseFromColumn(columnText = '') {
+    if (!columnText.trim()) return null;
+    const projects = typeof state !== 'undefined' ? state.projects || [] : [];
+    // Előbb a pontozott projektnév-egyeztetés fut, mert a findWarehouse laza
+    // illesztése korábban a Moxy bérleményt Moxy Hotelnek olvasta.
+    const scored = projects
+      .map(project => ({ project, score: transferNameMatch(columnText, project.name) }))
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score
+        || Number(Boolean(b.project.address)) - Number(Boolean(a.project.address))
+        || nrm(a.project.name).length - nrm(b.project.name).length);
+    if (scored.length) {
+      const top = scored[0].score;
+      const tied = scored.filter(item => item.score === top);
+      const winner = tied.find(item => String(item.project.address || '').trim()) || tied[0];
+      return { id: winner.project.id || '', name: winner.project.name, address: winner.project.address || '', kind: 'project' };
+    }
+    const direct = findWarehouse(columnText);
+    if (direct) return direct;
+    const columnNorm = nrm(columnText);
+    const hits = projects
+      .filter(project => project.name && columnNorm.includes(nrm(project.name)))
+      .sort((a, b) => nrm(b.name).length - nrm(a.name).length);
+    if (hits.length) {
+      const winner = hits.find(item => String(item.address || '').trim()) || hits[0];
+      return { id: winner.id || '', name: winner.name, address: winner.address || '', kind: 'project' };
+    }
+    const loose = bestProject(columnText, columnText);
+    return loose?.id ? { id: loose.id, name: loose.name, address: loose.address || '', kind: 'project' } : null;
+  }
+
+  function extractTransferWarehouses(text = '', rows = []) {
+    const columns = transferColumns(text, rows);
+    if (columns) {
+      const source = warehouseFromColumn(columns.source);
+      const target = warehouseFromColumn(columns.target);
+      if (source || target) {
+        return { source, target: target && source && target.id && target.id === source.id ? null : target, columns };
+      }
+    }
+    // Tartalék: a régi, soralapú olvasás.
+    const lines = linesOf(text);
+    let sourceText = '', targetText = '';
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const sourceSame = line.match(/forr[aá]s\s*rakt[aá]r\s*:\s*(.+)$/i);
+      const targetSame = line.match(/c[eé]l\s*rakt[aá]r\s*:\s*(.+)$/i);
+      if (sourceSame && !/c[eé]l\s*rakt[aá]r/i.test(sourceSame[1])) sourceText = sourceSame[1];
+      if (targetSame) targetText = targetSame[1];
+      if (/^forr[aá]s\s*rakt[aá]r\s*:?$/i.test(line)) sourceText = lines[i + 1] || '';
+      if (/^c[eé]l\s*rakt[aá]r\s*:?$/i.test(line)) targetText = lines[i + 1] || '';
+    }
+    return { source: findWarehouse(sourceText) || null, target: findWarehouse(targetText) || null, columns: null };
+  }
+
+  function duplicateOrderNumbers(numbers = []) {
+    const existing = new Set((typeof state !== 'undefined' ? state.orders || [] : []).flatMap(orderNumbersOf));
+    return numbers.filter(number => existing.has(String(number)));
+  }
+
+  /* V77 – A CSERE CSAK AZONOS NAPON ÉRVÉNYES
+
+     Eddig a program MINDEN nap fuvarjai között keresett azonos rendelésszámot,
+     és a találatot törölte. Ha ugyanaz a rendelésszám szerepelt egy korábbi
+     napon is – például hátralékként vagy újraküldött bizonylatként –, akkor a
+     másnapi import TÖRÖLTE a tegnapi fuvart, és úgy tűnt, mintha átmozgatta
+     volna a következő napra. A hátraléka is elveszett vele.
+
+     Egy rendelésszám ugyanazon a napon egy fuvar; két különböző napon két
+     külön szállítás. Ezért a csere csak az adott napon belül keres. */
+  /* V91 – EGY RENDELÉS, TÖBB FELRAKÓ
+
+     Egy rendelésszámhoz több felrakó is tartozhat: ugyanazt az anyagot két-
+     három helyről szedjük össze. Eddig a csere CSAK a rendelésszámot nézte,
+     ezért az újraimportálás FELÜLÍRTA a korábbit – a második és harmadik
+     felrakó soha nem került be.
+
+     Mostantól a felrakó is a kulcs része. Ugyanaz a rendelésszám UGYANARRÓL
+     a felrakóról = frissítés; MÁSIK felrakóról = új fuvar, a régi mellé.
+
+     A buborékban végzett kézi szerkesztés változatlanul csak módosít – az
+     nem megy át az importon. */
+  function pickupIdentityKey(name, address) {
+    const joinHouse = value => String(value || '')
+      .replace(/(\d+)\s*[\/-]?\s*([a-z])(?![a-z0-9])/g, '$1$2');
+    return `${nrm(name || '')}|${joinHouse(nrm(address || ''))}`;
+  }
+
+  function matchingOutlookOrders(numbers = [], orderType = 'SR0', isReturn = false, scheduleDate = '', pickupKey = '') {
+    const wanted = new Set(numbers.map(String));
+    const day = String(scheduleDate || '');
+    return (typeof state !== 'undefined' ? state.orders || [] : []).filter(order => {
+      if (!order.outlookImport) return false;
+      if (day && String(order.scheduleDate || '') !== day) return false;
+      const sameType = (isReturn || orderType === 'VISSZARU') ? !!order.isReturn : !order.isReturn && String(order.orderType || 'SR0') === String(orderType || 'SR0');
+      if (!sameType) return false;
+      if (!orderNumbersOf(order).some(number => wanted.has(String(number)))) return false;
+      // a felrakó is számít: más felrakó = külön fuvar, nem csere
+      if (pickupKey && pickupIdentityKey(order.pickupName, order.pickupAddress) !== pickupKey) return false;
+      return true;
+    });
+  }
+
+  function extractOrderNo(...sources) {
+    const refs = extractOrderRefs(...sources);
+    if (refs.length) return refs[0].no;
+    const text = sources.filter(Boolean).join('\n');
+    const tokens = [...text.matchAll(/(?:^|[_\s.-])([0-9]{5,8})(?=$|[_\s.-])/g)].map(match => match[1]);
+    if (!tokens.length) return '';
+    const nonDate = tokens.filter(token => !/^(?:20)?\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])$/.test(token));
+    return (nonDate.length ? nonDate : tokens).at(-1) || '';
+  }
+
+  function inferProjectHint(...sources) {
+    const text = sources.filter(Boolean).join(' ');
+    const fileMatch = text.match(/megrendel[eé]s[_\s-]+(.+?)(?:[_\s-]+\d{6}[_\s-]+\d{5,8}|\.pdf|\.msg|$)/i);
+    if (fileMatch) return fileMatch[1].replace(/[_-]+/g, ' ').trim();
+    const projectMatchText = text.match(/projekt\s*n[eé]v\s*[:\-]\s*([A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű0-9_.\/-]{2,80})/i);
+    return projectMatchText ? projectMatchText[1].replace(/[_-]+/g, ' ').trim() : '';
+  }
+
+  function supplierSpecial(text) {
+    const normalized = nrm(text);
+    if (normalized.includes('szatmari') && normalized.includes('kesmark')) {
+      return { name: 'Szatmári Kft. – Késmárk', address: '1158 Budapest, Késmárk utca 9.', reason: 'levél/PDF: Szatmári + Késmárk' };
+    }
+    if (normalized.includes('fogarasi') && normalized.includes('hunyadi')) {
+      return { name: 'Fogarasi – Hunyadi úti üzlet', address: '1116 Budapest, Hunyadi János út 15.', reason: 'levél/PDF: Fogarasi + Hunyadi' };
+    }
+    if (normalized.includes('larex')) return { name: 'Larex Trade Kft', address: '1108 Budapest, Maglódi utca 123', reason: 'PDF: Larex' };
+    if (normalized.includes('szerelvenybolt') || (normalized.includes('ulloi') && normalized.includes('807'))) return { name: 'Szerelvénybolt Kft.', address: '1182 Budapest, Üllői út 807/B', reason: 'javított Szerelvénybolt törzsadat' };
+    return null;
+  }
+
+  function supplierScore(supplier, sourceNorm) {
+    const name = nrm(supplier?.name || '');
+    if (!name || /stand\s*98/.test(name)) return -100;
+    const nameTokens = significantTokens(supplier.name);
+    /* V61: a helynevek nem érnek pontot.
+       A telephelyek neve a törzsadatban "Budapest 10. ker." alakú, a
+       "budapest" és a "ker" viszont szinte minden bizonylaton szerepel.
+       Emiatt egy rossz telephely ingyen pontokat kapott, és a Lambdánál az
+       Akna utca nyert a Hengermalom helyett. Ezeket a szavakat kiszűrjük. */
+    const PLACE_NOISE = new Set(['budapest', 'utca', 'ut', 'ter', 'koz', 'kapu', 'ker', 'kerulet',
+      'telephely', 'magyarorszag', 'hrsz', 'ipari', 'park', 'raktar']);
+    const addressTokens = significantTokens(supplier.address, PLACE_NOISE);
+    const siteTokens = significantTokens(supplier.site || supplier.pickupNote || '', PLACE_NOISE);
+    let score = 0;
+    if (name && sourceNorm.includes(name)) score += 30;
+    for (const token of nameTokens) if (sourceNorm.includes(token)) score += token.length >= 6 ? 8 : 5;
+    for (const token of siteTokens) if (sourceNorm.includes(token)) score += 6;
+    for (const token of addressTokens) if (sourceNorm.includes(token)) score += token.length >= 6 ? 4 : 2;
+    if (nameTokens.length && nameTokens.every(token => sourceNorm.includes(token))) score += 10;
+    /* Ha a bizonylaton ott a telephely UTCANEVE, az dönt: az a cím szerepel a
+       papíron, nem egy másik telephelyé.
+
+       V64: SZÓHATÁRRAL illesztünk. Korábban szórészletként kereste, ezért a
+       "Fizetési határidő" feliratban lévő "hatar" a Határ úti telephelyre
+       illett, és a Gienger a Dűlő utca helyett a Határ utat kapta. */
+    const street = significantTokens(supplier.address, PLACE_NOISE)
+      .find(token => token.length >= 5 && !/^\d+$/.test(token));
+    if (street && new RegExp(`\\b${street}\\b`).test(sourceNorm)) score += 25;
+
+    /* Az irányítószám önmagában is erős jel, és nem téveszthető össze
+       szövegrészlettel. */
+    const zip = String(supplier.address || '').match(/\b(\d{4})\b/);
+    if (zip && new RegExp(`\\b${zip[1]}\\b`).test(sourceNorm)) score += 20;
+    return score;
+  }
+
+  function bestSupplier(sourceText) {
+    const suppliers = typeof state !== 'undefined' ? state.suppliers || [] : [];
+    const explicit = extractExplicitPickup(sourceText);
+    if (explicit?.name && explicit?.address) {
+      /* V79 – A BIZONYLATRÓL CSAK A CÉGNÉV SZÁMÍT, A CÍM A TÖRZSADATBÓL JÖN
+
+         Eddig a papíron álló cím döntött, ezért a Lambda az Akna utcát kapta,
+         ha a bizonylatra azt nyomtatták – holott az anyagot a Hengermalomban
+         adják ki. A cím a ti nyilvántartásotokban van karbantartva, nem a
+         beszállító bizonylatán.
+
+         Ezért: a cégnevet a papírról olvassuk, a telephelyet a törzsadat
+         KÖZPONTI jelölése adja. Ettől a levél szövege (V79) és a kézi
+         átírás továbbra is eltérhet. Ha a cégnek nincs megjelölt központja,
+         marad a régi, címre épülő keresés. */
+      const sameName = suppliers.filter(item => nrm(item.name) === nrm(explicit.name));
+      const master = sameName.find(item => item.isCentral)
+        || suppliers.find(item => nrm(item.name) === nrm(explicit.name) && nrm(item.address) === nrm(explicit.address))
+        || suppliers.find(item => nrm(item.address) === nrm(explicit.address))
+        || sameName[0]
+        || null;
+      if (master) return { id: master.id || '', name: master.name || explicit.name, address: master.address || '', pickupNote: master.pickupNote || master.note || explicit.pickupNote || '', phone: master.phone || explicit.phone || '', email: master.email || explicit.email || '', reason: 'levél/PDF felrakó biztos törzsadat-egyezéssel', autoMaster: false };
+      return { id: '', name: '', address: '', pickupNote: '', detectedName: explicit.name || '', reason: 'felismert beszállító nincs a törzsadatokban', autoMaster: false, unmatchedMaster: true };
+    }
+    const special = supplierSpecial(sourceText);
+    if (special) {
+      const master = suppliers.find(supplier => {
+        const combined = nrm(`${supplier.name || ''} ${supplier.address || ''} ${supplier.site || ''}`);
+        return special.name.startsWith('Szatmári') ? combined.includes('kesmark') : special.name.startsWith('Fogarasi') ? combined.includes('hunyadi') : special.name.startsWith('Szerelvénybolt') ? combined.includes('szerelvenybolt') : combined.includes('larex');
+      });
+      if (master) return { id: master.id || '', name: master.name || special.name, address: master.address || '', pickupNote: master.pickupNote || master.note || '', phone: master.phone || '', email: master.email || '', reason: `${special.reason || 'speciális felismerés'} · törzsadatból`, autoMaster: false };
+      return { id: '', name: '', address: '', pickupNote: '', detectedName: special.name || '', reason: 'felismert beszállító nincs a törzsadatokban', autoMaster: false, unmatchedMaster: true };
+    }
+    const sourceNorm = nrm(sourceText);
+    // A levelekben rövidítve szerepel a cég ("Gienger kp", "Lambda kp"), a
+    // törzsadatban teljes néven ("Gienger Hungária Kft"). Ezért a vezető szó
+    // egyezése is elég, ha az elég egyedi, és a "kp" a központi telephelyre mutat.
+    const wantsCentral = /\bkp\b|kozpont/.test(sourceNorm);
+    const leadWordOf = value => (significantTokens(value)[0] || '');
+    const candidates = suppliers.map(supplier => {
+      const nameNorm = nrm(supplier.name || '');
+      const nameTokens = significantTokens(supplier.name);
+      const exactName = !!nameNorm && sourceNorm.includes(nameNorm);
+      const allDistinctiveTokens = nameTokens.length > 0 && nameTokens.every(token => sourceNorm.includes(token)) && nameTokens.some(token => token.length >= 5);
+      const lead = leadWordOf(supplier.name);
+      const leadHit = lead.length >= 5 && (sourceNorm.includes(lead) || sourceNorm.replace(/\s+/g, '').includes(lead.replace(/\s+/g, '')));
+      let score = supplierScore(supplier, sourceNorm);
+      if (leadHit) score += 12;
+      if (wantsCentral && supplier.isCentral) score += 25;
+      // V79: a "biztos" azonosítás a teljes név vagy minden jellemző szó
+      // egyezése. A puszta vezetőszó-találat bizonytalan.
+      return { supplier, score, strict: exactName || allDistinctiveTokens || leadHit,
+        confident: exactName || allDistinctiveTokens, leadHit };
+    }).filter(candidate => candidate.strict).sort((a, b) => b.score - a.score || Number(Boolean(b.supplier.isCentral)) - Number(Boolean(a.supplier.isCentral)));
+    if (!candidates.length) return null;
+    // Ha csak a vezető szó egyezik és két KÜLÖNBÖZŐ cég is szóba jön, nem
+    // találgatunk: ellenőrzendőnek jelöljük.
+    const topScore = candidates[0].score;
+    /* V79: amit nem ismerünk fel BIZTOSAN, azt inkább üresen hagyjuk – de csak
+       akkor, ha tényleg van mit eltéveszteni. A rövidített név ("Gienger kp",
+       "Lambda") egyértelmű, ha csak EGY cég jöhet szóba; ilyenkor kitöltjük.
+       Ha viszont több különböző cég is illeszkedik, és a teljes név nem
+       egyezik egyikkel sem, a találgatás rosszabb, mint az üres mező: azt
+       kitöltöd, a rossz értéket viszont észre sem veszed. */
+    const allCompanies = new Set(candidates.map(item => leadWordOf(item.supplier.name)));
+    if (!candidates[0].confident && allCompanies.size > 1) {
+      return { id: '', name: '', address: '', pickupNote: '',
+        detectedName: candidates[0].supplier.name || '',
+        reason: 'a beszállító nem azonosítható biztosan, add meg kézzel', autoMaster: false };
+    }
+    const tiedCompanies = new Set(candidates.filter(item => item.score === topScore).map(item => leadWordOf(item.supplier.name)));
+    if (tiedCompanies.size > 1) {
+      return { id: '', name: '', address: '', pickupNote: '', detectedName: sourceText.slice(0, 60), reason: 'több beszállító is illeszkedik, ellenőrizd', autoMaster: false, unmatchedMaster: true };
+    }
+    /* V79: a bizonylatról a CÉGNÉV számít, a telephelyet a törzsadat KÖZPONTI
+       jelölése adja. A papírra nyomtatott cím nem dönt – azt a beszállító
+       tölti ki, ti viszont a saját nyilvántartásotokban tartjátok karban,
+       hol veszitek fel az anyagot. Ha nincs megjelölt központ, marad a
+       pontozás szerinti telephely. */
+    const scored = candidates[0].supplier;
+    const sameCompany = suppliers.filter(item => nrm(item.name) === nrm(scored.name));
+    const winner = sameCompany.find(item => item.isCentral) || scored;
+    return { id: winner.id || '', name: winner.name || '', address: winner.address || '', pickupNote: winner.pickupNote || winner.note || '', phone: winner.phone || '', email: winner.email || '', reason: `biztos törzsadat-egyezés (${candidates[0].score})`, autoMaster: false };
+  }
+
+
+  function supplierFromPdfHeader(pdfText = '', pdfLines = []) {
+    const lines = (pdfLines?.length ? pdfLines : linesOf(pdfText)).slice(0, 55);
+    const headerText = lines.join('\n');
+    const sourceNorm = nrm(headerText);
+    if (!sourceNorm) return null;
+    const suppliers = typeof state !== 'undefined' ? state.suppliers || [] : [];
+    const candidates = suppliers.map(supplier => {
+      let score = supplierScore(supplier, sourceNorm);
+      const nameNorm = nrm(supplier.name || '');
+      if (nameNorm && sourceNorm.includes(nameNorm)) score += 120;
+      const tokens = significantTokens(supplier.name);
+      if (tokens.length && tokens.every(token => sourceNorm.includes(token))) score += 55;
+      if (/niczuk/.test(nameNorm) && /niczuk/.test(sourceNorm)) score += 180;
+      if (/stand\s*98/.test(nameNorm)) score -= 500;
+      const exactName = !!nameNorm && sourceNorm.includes(nameNorm);
+      const allDistinctiveTokens = tokens.length > 0 && tokens.every(token => sourceNorm.includes(token)) && tokens.some(token => token.length >= 5);
+      return { supplier, score, strict: exactName || allDistinctiveTokens || (/niczuk/.test(nameNorm) && /niczuk/.test(sourceNorm)) };
+    }).filter(candidate => candidate.strict).sort((a, b) => b.score - a.score || Number(Boolean(b.supplier.isCentral)) - Number(Boolean(a.supplier.isCentral)) || Number(Boolean(b.supplier.address)) - Number(Boolean(a.supplier.address)));
+    if (!candidates.length) return null;
+    /* V79: a fejlécből a CÉGNÉV számít, a telephelyet a törzsadat központi
+       jelölése adja – ugyanaz a szabály, mint a bestSupplier-ben. */
+    const scored = candidates[0].supplier;
+    const sameCompany = (typeof state !== 'undefined' ? state.suppliers || [] : [])
+      .filter(item => nrm(item.name) === nrm(scored.name));
+    const winner = sameCompany.find(item => item.isCentral) || scored;
+    return {
+      id: winner.id || '',
+      name: winner.name || '',
+      address: winner.address || '',
+      pickupNote: winner.pickupNote || winner.note || '',
+      phone: winner.phone || '',
+      email: winner.email || '',
+      reason: `Szállítói rendelés PDF Szállító mező / fejléc (${candidates[0].score})`,
+      autoMaster: false
+    };
+  }
+
+  function projectScore(project, sourceNorm, hintNorm) {
+    const name = nrm(project?.name || '');
+    if (!name) return -100;
+    const tokens = significantTokens(project.name, PROJECT_NOISE);
+    let score = project?.address ? 3 : 0;
+    if (sourceNorm.includes(name)) score += 35;
+    if (hintNorm && (name.includes(hintNorm) || hintNorm.includes(name))) score += 30;
+    for (const token of tokens) {
+      if (sourceNorm.includes(token)) score += token.length >= 5 ? 8 : 5;
+      if (hintNorm.includes(token)) score += 6;
+    }
+    if (tokens.length && tokens.every(token => sourceNorm.includes(token) || hintNorm.includes(token))) score += 12;
+    if (name.includes('terv') && !sourceNorm.includes('terv') && !hintNorm.includes('terv')) score -= 28;
+    if (name.includes('garancia') && !sourceNorm.includes('garancia') && !hintNorm.includes('garancia')) score -= 24;
+    return score;
+  }
+
+  function bestProject(sourceText, hint = '') {
+    const sourceNorm = nrm(sourceText), hintNorm = nrm(hint);
+    const projects = typeof state !== 'undefined' ? state.projects || [] : [];
+    const candidates = projects.map(project => ({ project, score: projectScore(project, sourceNorm, hintNorm) }))
+      .sort((a, b) => b.score - a.score || Number(Boolean(b.project.address)) - Number(Boolean(a.project.address)));
+    if (!candidates.length || candidates[0].score < 8) {
+      return hint ? { id: '', name: hint, address: '', reason: 'projekt a fájlnévből; törzsadat-egyezés nincs' } : null;
+    }
+    /* V79 – BIZONYTALAN PROJEKT: INKÁBB ÜRES
+
+       A 8 pontos küszöb gyenge egyezésnél is elfogadott: néhány rövid szó
+       véletlen találata elég volt. A rossz projekt rosszabb, mint az üres
+       mező – az üreset kitöltöd, a rosszat viszont észre sem veszed, és az
+       anyag más építkezésre megy.
+
+       Biztosnak azt tekintjük, ha a teljes projektnév szerepel a szövegben
+       vagy a fájlnévben (35, illetve 30 pont), vagy ha MINDEN jellemző szava
+       megvan (12 pont a záró jutalom). Emellé kell, hogy a második helyezett
+       érezhetően hátrébb legyen – különben két projekt között találgatnánk. */
+    const topScore = candidates[0].score;
+    const runnerUp = candidates[1]?.score ?? 0;
+    const strongProject = topScore >= 30 || (topScore >= 20 && topScore - runnerUp >= 8);
+    if (!strongProject) {
+      return { id: '', name: hint || '', address: '',
+        reason: `a projekt nem azonosítható biztosan (${candidates[0].project.name}), add meg kézzel` };
+    }
+    const winner = candidates[0].project;
+    return { id: winner.id || '', name: winner.name || hint, address: winner.address || '', defaultRecipientId: winner.defaultRecipientId || '', reason: `projekt törzsadat-egyezés (${candidates[0].score})` };
+  }
+
+  /*
+    KRPR célraktár-cím pótlás.
+    A raktárközi bizonylaton gyakran csak a célraktár/projekt neve szerepel.
+    Ilyenkor kizárólag olyan projekt-törzsadatból pótolunk, amelyhez tényleges cím tartozik.
+    A névazonos, aliasos és token-alapú egyezéseknél is a címmel rendelkező projekt élvez elsőbbséget.
+  */
+  function projectWithAddressFromMaster(target = {}, sourceText = '') {
+    const projects = typeof state !== 'undefined' ? state.projects || [] : [];
+    const targetName = typeof target === 'string' ? target : (target?.name || '');
+    const targetId = typeof target === 'object' ? (target?.id || '') : '';
+    const targetNorm = nrm(targetName);
+    const sourceNorm = nrm(`${sourceText || ''} ${targetName || ''}`);
+    const aliases = (typeof state !== 'undefined' && state.aliases?.projects) || {};
+    const aliasId = aliases[targetNorm] || '';
+    const targetTokens = significantTokens(targetName, PROJECT_NOISE);
+
+    const candidates = projects
+      .filter(project => String(project?.address || '').trim())
+      .map(project => {
+        const nameNorm = nrm(project.name || '');
+        let score = projectScore(project, sourceNorm, targetNorm);
+        if (targetId && project.id === targetId) score += 1000;
+        if (aliasId && project.id === aliasId) score += 900;
+        if (targetNorm && nameNorm === targetNorm) score += 500;
+        if (targetNorm && (nameNorm.includes(targetNorm) || targetNorm.includes(nameNorm))) score += 120;
+        const projectTokens = significantTokens(project.name, PROJECT_NOISE);
+        const overlap = targetTokens.filter(token => projectTokens.includes(token)).length;
+        score += overlap * 20;
+        if (targetTokens.length && overlap === targetTokens.length) score += 40;
+        if (/\b(?:terv|garancia)\b/.test(nameNorm) && !/\b(?:terv|garancia)\b/.test(targetNorm)) score -= 35;
+        return { project, score };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    if (!candidates.length || candidates[0].score < 8) return null;
+    const winner = candidates[0].project;
+    return {
+      id: winner.id || '',
+      name: winner.name || targetName,
+      address: winner.address || '',
+      defaultRecipientId: winner.defaultRecipientId || '',
+      reason: `KRPR célraktár címe a projekttörzsből (${candidates[0].score})`
+    };
+  }
+
+  function stripSignature(text = '') {
+    const value = cleanText(text);
+    const markers = [/\n\s*[uü]dv[oö]zlettel\s*:/i, /\n\s*k[oö]sz[oö]n[oö]m\s*!?\s*\n/i];
+    let cut = value.length;
+    for (const marker of markers) {
+      const match = marker.exec(value);
+      if (match && match.index > 20) cut = Math.min(cut, match.index);
+    }
+    return value.slice(0, cut).trim() || value;
+  }
+
+  /* V90: ha a projekthez nincs cím a törzsadatban, a KORÁBBI FUVAROKBÓL
+     vesszük a leggyakrabban használt címet. Visszárunál a felrakó egy
+     projekt, és a 60 projektből 36-nak nincs címe – emiatt maradt üresen a
+     felrakó cím mezője. */
+  function projectAddressFromHistoryV90(name) {
+    const key = nrm(name || '');
+    if (!key || typeof state === 'undefined') return '';
+    const counts = new Map();
+    for (const order of state.orders || []) {
+      const matchesDrop = nrm(order.projectName || '') === key;
+      const matchesPickup = nrm(order.pickupName || '') === key;
+      if (!matchesDrop && !matchesPickup) continue;
+      const address = String((matchesDrop ? order.dropAddress : order.pickupAddress) || '').trim();
+      if (address) counts.set(address, (counts.get(address) || 0) + 1);
+    }
+    let best = '', bestCount = 0;
+    for (const [address, count] of counts) if (count > bestCount) { best = address; bestCount = count; }
+    return best;
+  }
+
+  function projectMasterByIdentity(location) {
+    if (!location || typeof state === 'undefined') return location || null;
+    const projects = state.projects || [];
+    const byId = location.id ? projects.find(item => item.id === location.id) : null;
+    const byName = projects.find(item => nrm(item.name) === nrm(location.name));
+    const byLooseName = projects.find(item => {
+      const a = significantTokens(item.name, PROJECT_NOISE), b = significantTokens(location.name, PROJECT_NOISE);
+      return a.length && b.length && (a.every(token => b.includes(token)) || b.every(token => a.includes(token)));
+    });
+    const master = byId || byName || byLooseName;
+    return master ? { ...location, id: master.id || location.id || '', name: master.name || location.name || '', address: master.address || location.address || '', defaultRecipientId: master.defaultRecipientId || location.defaultRecipientId || '', reason: `${location.reason || ''}${location.reason ? ' · ' : ''}cím a projekttörzsből` } : location;
+  }
+
+  function projectLabelWindow(pdfText = '', pdfLines = [], mode = 'SR0') {
+    const lines = (pdfLines?.length ? pdfLines : linesOf(pdfText));
+    const target = mode === 'KRPR' || mode === 'NRPR' || mode === 'BR0' || mode === 'PRPR'
+      ? /c[eé]l\s*rakt[aá]r/i
+      : /projekt\s*n[eé]v|(?:^|\s)rakt[aá]r\s*:/i;
+    const found = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (!target.test(lines[i])) continue;
+      found.push(lines.slice(i, i + 3).join(' '));
+    }
+    return found.join('\n');
+  }
+
+  function projectFromPdfMaster(pdfText = '', pdfLines = [], hint = '', mode = 'SR0') {
+    const labelText = projectLabelWindow(pdfText, pdfLines, mode);
+    let project = labelText ? bestProject(labelText, labelText) : null;
+    if (!project || !project.name) project = bestProject(pdfText, hint);
+    return projectMasterByIdentity(project);
+  }
+
+  function inferReturnProjectHint(subject = '', body = '') {
+    const cleanSubject = cleanText(subject).replace(/\.(?:msg|pdf)$/i, '');
+    const direct = cleanSubject.match(/vissz[aá]ru\s*[-–:]\s*(.+)$/i);
+    if (direct) return direct[1].replace(/[_-]+/g, ' ').trim();
+    const projects = typeof state !== 'undefined' ? state.projects || [] : [];
+    const source = nrm(`${cleanSubject} ${stripSignature(body)}`);
+    const ranked = projects.map(project => ({ project, score: projectScore(project, source, source) })).sort((a, b) => b.score - a.score);
+    return ranked[0]?.score >= 8 ? ranked[0].project.name : cleanSubject;
+  }
+
+  function resolveReturnSupplier(subject = '', body = '', combined = '') {
+    const core = stripSignature(body);
+    const special = supplierSpecial(`${subject}\n${core}`);
+    if (special) {
+      const master = (typeof state !== 'undefined' ? state.suppliers || [] : []).find(item => nrm(item.address) === nrm(special.address) || significantTokens(special.name).every(token => nrm(item.name).includes(token)));
+      if (master) return { id: master.id || '', name: master.name || special.name, address: master.address || '', pickupNote: master.pickupNote || master.note || '', reason: `${special.reason || 'visszáru felismerés'} · törzsadatból`, autoMaster: false };
+      return { id: '', name: special.name || '', address: '', pickupNote: '', reason: 'felismert beszállító nincs a törzsadatokban', autoMaster: false, unmatchedMaster: true };
+    }
+    let supplier = bestSupplier(`${subject}\n${core}`) || bestSupplier(combined);
+    // Visszárunál a levél gyakran csak a telephely nevét írja (pl. „Késmárkba”).
+    // Ilyenkor is kizárólag a feltöltött törzsből választunk, és csak akkor,
+    // ha a telephelyszöveg pontosan egy beszállítót azonosít.
+    if (!supplier && typeof state !== 'undefined') {
+      const text = nrm(`${subject} ${core}`);
+      const common = new Set(['budapest','magyarorszag','utca','kft','zrt','telephely','raktar']);
+      const matches = (state.suppliers || []).filter(item => significantTokens(`${item.name || ''} ${item.address || ''}`)
+        .filter(token => token.length >= 5 && !common.has(token))
+        .some(token => text.includes(token)));
+      if (matches.length === 1) {
+        const master = matches[0];
+        supplier = { id: master.id || '', name: master.name || '', address: master.address || '', pickupNote: master.pickupNote || master.note || '', reason: 'visszáru telephely-egyezés · törzsadatból', autoMaster: false };
+      }
+    }
+    if (supplier && /k[oö]zponti\s+rakt[aá]r/i.test(supplier.name || '') && !/k[oö]zponti\s+rakt[aá]r(?:ba|hoz|nak|b[oő]l)/i.test(core)) return null;
+    return supplier;
+  }
+
+  function classifyPdfDocument(pdf = {}) {
+    const head = nrm((pdf.lines || []).slice(0, 30).join(' ') || String(pdf.text || '').slice(0, 2500));
+    const refs = extractOrderRefs(pdf.text || '', pdf.name || '');
+    const supplierOrder = /szallito\s+rendeles/.test(head);
+    // V64: a belső rendelés (BR0) mindenben a raktárközivel azonos.
+    const warehouseTransfer = /raktarkozi|belso rendeles/.test(head)
+      || refs.some(ref => ref.type === 'KRPR' || ref.type === 'NRPR' || ref.type === 'BR0' || ref.type === 'PRPR');
+    const confirmation = /visszaigazolas|rendeles\s+visszaigazolas|megrendeles\s+visszaigazolasa|ajanlat/.test(head) && !supplierOrder && !warehouseTransfer;
+    return { primary: supplierOrder || warehouseTransfer, supplierOrder, warehouseTransfer, confirmation, refs };
+  }
+
+  function splitPdfDocumentByOrders(pdf = {}) {
+    const refs = extractOrderRefs(pdf.text || '', pdf.name || '');
+    if (refs.length <= 1) return [pdf];
+    const textRefs = extractOrderRefsDetailed(pdf.text || '').filter(ref => ref.index >= 0);
+    if (textRefs.length <= 1) return refs.map(ref => ({ ...pdf, forcedRefs: [ref] }));
+    const result = [];
+    for (let i = 0; i < textRefs.length; i++) {
+      const ref = textRefs[i];
+      const next = textRefs[i + 1];
+      const previousHeader = Math.max(0, (pdf.text || '').lastIndexOf('Szállító rendelés', ref.index));
+      const start = i === 0 ? previousHeader : ref.index;
+      const end = next ? next.index : (pdf.text || '').length;
+      const text = (pdf.text || '').slice(start, end);
+      result.push({ ...pdf, text, lines: linesOf(text), forcedRefs: [ref] });
+    }
+    return result;
+  }
+
+  /* V71 – SZÁLANYAG FELISMERÉSE
+
+     A korábbi szabály puszta szórészletként kereste a "cso" szót, ezért az
+     "AquaPlus PP-R tokos csatlakozó D 50 mm / 1 1/2" CSÖVEKHEZ" nevű idom is
+     szálanyagnak minősült – pedig húsz centis műanyag idom. Emiatt az egész
+     felrakó kötelezően Martinhoz került volna.
+
+     Az új szabály kétféleképpen jelöl szálanyagot:
+       - a névben szóként szerepel a "szál" / "szálas", VAGY
+       - hosszú tárgy (cső, rúd, profil, léc, deszka, fűrészáru) ÉS legalább
+         4 méteres hossz szerepel mellette.
+     A "csövekhez", "csőidom", "csőbilincs" nem minősül hosszú tárgynak. */
+  const LONG_OBJECT_V71 = /\b(cso|csovek|rud|rudak|profil|lec|deszka|fureszaru|palca|szelveny|zartszelveny)\b/;
+  const LONG_LENGTH_V71 = /\b([4-9]|1[0-2])\s*(m|fm|meter)\b|\b(4000|5000|5500|6000)\s*mm\b/;
+  function isLongMaterialV71(text) {
+    const value = String(text || '');
+    if (/\bszal(as|ak|anyag)?\b/.test(value)) return true;
+    return LONG_OBJECT_V71.test(value) && LONG_LENGTH_V71.test(value);
+  }
+
+  /* V71: a bizonylaton az ezres elválasztó szóköz lehet ("1 000 db"), a
+     tizedesjel pedig vessző ("12,5 m2"). Egységes alakra hozzuk. */
+  function normalizeQtyV71(value) {
+    return String(value || '').replace(/[\s\u00a0]/g, '').replace(',', '.');
+  }
+
+  /* A sorban a szóközös ezres elválasztót ELŐRE összevonjuk ("1 000" -> "1000").
+     Enélkül a mohó névrész elnyelné az egyest, és 1000 helyett 000 lenne a
+     mennyiség. Csak számjegy + szóköz + pontosan három számjegy alakot von
+     össze, tehát a "105 M10x30mm" és a "(100/doboz) 500" érintetlen marad. */
+  /* V101 – AZ EZRES ÖSSZEVONÁS NE RÁNTSA ÖSSZE A MÉRETEKET
+
+     A szóközös ezres elválasztót összevonjuk (1 000 db -> 1000 db). Eddig
+     viszont TIZEDESVESSZŐ után is összevont, ezért a méretmegjelölés és a
+     mennyiség egybeolvadt:
+
+        ... csőszigeteléssel, 25x2,5 200m   ->   ... 25x2,5200m
+
+     Így a sor végén nem maradt felismerhető mennyiség, és a rendelésről
+     EGYETLEN tételt sem ismert fel a program.
+
+     Mostantól nem vonunk össze, ha a bal oldali szám tizedes törtből jön
+     (tehát ponttal vagy vesszővel folytatódó szám része), mert az méret,
+     nem ezres elválasztó. */
+  function joinThousandsV71(line) {
+    let out = String(line || '');
+    for (let i = 0; i < 3; i++) {
+      const next = out.replace(/(?<![.,]\d{0,6})(\d)[ \u00a0](\d{3})(?![0-9])/g, '$1$2');
+      if (next === out) break;
+      out = next;
+    }
+    return out;
+  }
+
+  /* V101 – ÉKEZETES CIKKSZÁM
+
+     A cikkszám mintája eddig csak ékezet nélküli nagybetűt engedett, ezért a
+     magyar betűt tartalmazó kódok kiestek, és a rendelésről EGYETLEN tételt
+     sem ismert fel:
+
+        1 . SZKÖSZ35015  Kaucsuk öntapadó ragszalag 3x50mmx15m  24db
+
+     Az Ö miatt egyik minta sem illeszkedett. Mostantól az Á É Í Ó Ö Ő Ú Ü Ű
+     is szerepelhet a kódban. */
+  function parsePdfItemsFromLines(lines) {
+    const items = [];
+
+    /* V105 – A TÉTEL MEGJEGYZÉSE NEM ÖNÁLLÓ TÉTEL
+
+       A bizonylaton a megjegyzés külön sorban áll a tétel alatt, az ár után:
+
+          1 . FES017        Festék 2,5L                    2db
+                  HUF            14 803,-        29 606,-
+                  DUNAPLASZT PRIMER VÖRÖS 800 2,5 L
+
+       A harmadik sor végén a "2,5 L" mennyiségnek látszik, ezért a program
+       MÁSODIK TÉTELKÉNT vette fel. A megkülönböztetés egyértelmű jele a
+       SORSZÁM: ebben a rendszerben minden valódi tétel számozott, a
+       megjegyzés soha.
+
+       Ezért ha a bizonylaton van legalább egy számozott tétel, csak a
+       számozott sorokat vesszük tételnek, a köztes szövegsorok pedig az
+       előző tétel megjegyzésévé válnak. Ha nincs számozás (más beszállító
+       más formátuma), marad a korábbi viselkedés. */
+    const tisztit = raw => joinThousandsV71(String(raw || '').replace(/\s+/g, ' ').trim());
+    const szamozott = sor => /^\s*\d+\s*[.)]?\s+[A-ZÁÉÍÓÖŐÚÜŰ0-9._\/-]/.test(sor);
+    const vanSorszam = (lines || []).some(raw => szamozott(tisztit(raw)));
+    const arSor = sor => /^(HUF|EUR|USD)\b/i.test(sor) || /^[\d\s.,-]+$/.test(sor);
+
+    for (let raw of lines || []) {
+      const line = joinThousandsV71(String(raw || '').replace(/\s+/g, ' ').trim());
+      if (!line || /egys[eé]g[aá]r|engedm[eé]ny|nett[oó]|[oö]sszesen|alapbizonylat|rendel[eé]s\s*:/i.test(line)) continue;
+
+      /* Számozott bizonylaton a nem számozott sor nem lehet tétel. Ha
+         értelmes szöveg, az ELŐZŐ tétel megjegyzése lesz. */
+      if (vanSorszam && !szamozott(line)) {
+        const utolso = items[items.length - 1];
+        // a bizonylat kísérőszövegei nem a tétel megjegyzései
+        const labjegyzet = /copyright|serpa|progen|oldal\s*\d|^\d+\s*$|alairas|alá[ií]r|k[eé]zbes|kelt\b|p\.h\.|bankszaml|ad[oó]sz[aá]m|^stand\s*98/i.test(line);
+        if (utolso && !arSor(line) && !labjegyzet && line.length > 3) {
+          utolso.note = [utolso.note, line].filter(Boolean).join(' · ');
+        }
+        continue;
+      }
+      let code = '', name = '', qty = '', unit = '';
+      let match = line.match(/^\s*\d+\s*\.\s*([A-ZÁÉÍÓÖŐÚÜŰ0-9._\/-]+)\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+      if (match) [, code, name, qty, unit] = match;
+      if (!match) {
+        match = line.match(/^\s*\d+\s+([A-ZÁÉÍÓÖŐÚÜŰ0-9._\/-]{3,})\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+        if (match) [, code, name, qty, unit] = match;
+      }
+      if (!match) {
+        // V71: a cikkszám kezdődhet SZÁMMAL is (pl. 77702D02), nem csak betűvel.
+        //      Legalább egy betűt vagy két számjegyet várunk, hogy a fejlécsorok
+        //      és a dátumok ne illeszkedjenek rá.
+        match = line.match(/^\s*((?=[A-ZÁÉÍÓÖŐÚÜŰ0-9._\/-]*[A-Z0-9])[A-Z0-9][A-ZÁÉÍÓÖŐÚÜŰ0-9._\/-]{2,})\s+(.+)\s+(\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(m2|m\u00b2|m3|m\u00b3|fm|foly[o\u00f3]m[e\u00e9]ter|zs[a\u00e1]k|sz[a\u00e1]l|t[a\u00e1]bla|tekercs|raklap|k[o\u00f6]teg|karton|doboz|v[o\u00f6]d[o\u00f6]r|kanna|palack|flakon|hord[o\u00f3]|csomag|k[e\u00e9]szlet|garnit[u\u00fa]ra|tonna|liter|dkg|klt|lap|p[a\u00e1]r|ml|kg|db|g|l|t|m)\b/i);
+        if (match) [, code, name, qty, unit] = match;
+      }
+      if (!match || /^huf$/i.test(code) || name.length < 3) continue;
+      const materialSearch = nrm(`${name} ${qty} ${unit}`);
+      items.push({ code: code.replace(/^\./, ''), name: name.trim(), qty: normalizeQtyV71(qty), unit, itemNote: '', longMaterial: isLongMaterialV71(materialSearch), received: false });
+    }
+    return items;
+  }
+
+  async function loadMsgReader() {
+    const Reader = global.LocalMsgReader;
+    if (typeof Reader !== 'function') {
+      throw new Error('A beépített Outlook MSG-olvasó nem indult el. Ellenőrizd, hogy az ole-msg-reader.js fájl is felkerült-e a GitHubra, majd frissíts Ctrl+F5-tel.');
+    }
+    return Reader;
+  }
+
+  function getPdfLib() {
+    const lib = global.pdfjsLib;
+    if (!lib) throw new Error('A PDF-feldolgozó nem töltődött be. Frissítsd az oldalt internetkapcsolattal.');
+    lib.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
+    return lib;
+  }
+
+  async function pdfTextAndLines(bytes) {
+    const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    if (typeof global.V41PdfTextExtractor === 'function') return await global.V41PdfTextExtractor(data);
+    if (typeof global.V40PdfTextExtractor === 'function') return await global.V40PdfTextExtractor(data);
+    const pdfjs = getPdfLib();
+    const doc = await pdfjs.getDocument({ data }).promise;
+    const allLines = [], allRows = [];
+    for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
+      const page = await doc.getPage(pageNo);
+      const content = await page.getTextContent();
+      const rows = [];
+      for (const item of content.items || []) {
+        const str = String(item.str || '').trim();
+        if (!str) continue;
+        const y = +(item.transform?.[5] || 0), x = +(item.transform?.[4] || 0);
+        let row = rows.find(candidate => Math.abs(candidate.y - y) < 2.2);
+        if (!row) { row = { y, parts: [] }; rows.push(row); }
+        row.parts.push({ x, str });
+      }
+      rows.sort((a, b) => b.y - a.y);
+      for (const row of rows) {
+        const parts = row.parts.sort((a, b) => a.x - b.x);
+        allRows.push({ page: pageNo, y: row.y, parts: parts.map(part => ({ x: part.x, str: part.str })) });
+        allLines.push(parts.map(part => part.str).join(' ').replace(/\s+/g, ' ').trim());
+      }
+    }
+    // A hasábos bizonylatoknál (Raktárközi) az x koordináta dönti el, hogy egy
+    // szöveg a Forrás vagy a Cél raktár oszlopába tartozik, ezért megőrizzük.
+    return { lines: allLines, text: allLines.join('\n'), rows: allRows };
+  }
+
+  function recipientFromProject(project) {
+    if (!project?.defaultRecipientId || typeof state === 'undefined') return {};
+    const recipient = (state.recipients || []).find(item => item.id === project.defaultRecipientId);
+    return recipient ? { recipientId: recipient.id, recipientName: recipient.name || '', recipientPhone: recipient.phone || '', recipientEmail: recipient.email || '' } : {};
+  }
+
+  function buildExtractedEntry({ category, sourceName, subject, body, pdfName = '', pdfText = '', pdfLines = [], pdfRows = [], attachmentNames = [], forcedRefs = [] }) {
+    const combined = [subject, body, pdfName, pdfText, ...attachmentNames].filter(Boolean).join('\n');
+    const refs = forcedRefs.length ? forcedRefs : extractOrderRefs(pdfText, pdfName, subject, sourceName, body);
+    const returnMode = isReturnText(subject, body, pdfName, pdfText);
+    const orderType = returnMode ? 'VISSZARU' : (refs[0]?.type || 'SR0');
+    const sourceOrderNos = refs.length ? unique(refs.map(ref => ref.no)) : unique([extractOrderNo(pdfText, pdfName, subject, sourceName, body)]);
+    const orderNo = sourceOrderNos.join(', ');
+    const hint = inferProjectHint(pdfName, subject, sourceName, pdfText);
+    let supplier = null, project = null, pickup = null, drop = null, pickupRole = 'supplier', dropRole = 'project';
+    let items = parsePdfItemsFromLines(pdfLines);
+    if (!items.length) items = parseBodyItems(body);
+    const reasons = [];
+    // V60: a levél szövege szűkítheti a bizonylat tételeit.
+    const bodyScope = applyBodyScopeV60(items, body, subject);
+    if (bodyScope.note) reasons.push(bodyScope.note);
+    items = bodyScope.items;
+    // V79: a levél megnevezhet másik telephelyet ugyanannál a cégnél
+    let pickupSite = null;
+
+    // V63: a belső rendelés (BR0) szerkezetileg ugyanaz, mint a raktárközi:
+    // Forrás raktár / Cél raktár hasáb. A felrakó a központi raktár, a lerakó
+    // a cél oszlopban álló projekt.
+    if (orderType === 'KRPR' || orderType === 'NRPR' || orderType === 'BR0') {
+      pickup = { ...CENTRAL_WAREHOUSE, reason: `${orderType}: felrakó a központi raktár` };
+      // A lerakó KIZÁRÓLAG a Cél raktár hasábjából jöhet. A bal hasábban álló
+      // "Stand 98 Kft. Új Központi Raktár" korábban minden KRPR-nél megnyerte
+      // a lerakó helyét, mert szó szerint egyezett egy projektnévvel.
+      const transfer = extractTransferWarehouses(pdfText || body || combined, pdfRows);
+      let target = transfer.target;
+      if (!target && hint) target = warehouseFromColumn(hint);
+      if (target && isCentralWarehouseName(target.name)) target = null;
+      project = projectMasterByIdentity(target)
+        || (hint ? bestProject(hint, hint) : null);
+      if (project && isCentralWarehouseName(project.name)) project = null;
+      drop = project;
+      if (!drop) reasons.push(`${orderType}: a cél raktár nem azonosítható, ellenőrizd`);
+      else reasons.push(`${orderType}: lerakó a Cél raktár hasábból`);
+      pickupRole = 'warehouse'; dropRole = 'project';
+    } else if (orderType === 'PRPR') {
+      // Projektről projektre: a felrakó a Forrás, a lerakó a Cél hasáb.
+      const transfer = extractTransferWarehouses(pdfText || body || combined, pdfRows);
+      pickup = projectMasterByIdentity(transfer.source) || transfer.source;
+      drop = projectMasterByIdentity(transfer.target) || transfer.target;
+      if (pickup && isCentralWarehouseName(pickup.name) && !drop) { drop = pickup; pickup = null; }
+      reasons.push('PRPR: felrakó a Forrás, lerakó a Cél raktár hasábból');
+      pickupRole = 'project'; dropRole = 'project';
+    } else if (returnMode) {
+      const returnHint = inferReturnProjectHint(subject, body);
+      project = projectMasterByIdentity(bestProject(`${subject}\n${stripSignature(body)}`, returnHint) || bestProject(combined, returnHint));
+      supplier = resolveReturnSupplier(subject, body, combined);
+      // V90: visszárunál a felrakó a projekt – ha nincs címe, a korábbi
+      // fuvarokból pótoljuk, hogy ne maradjon üresen a mező
+      if (project && !project.address) {
+        const known = projectAddressFromHistoryV90(project.name);
+        if (known) project = { ...project, address: known };
+      }
+      pickup = project;
+      drop = supplier;
+      pickupRole = 'project'; dropRole = 'supplier';
+    } else {
+      supplier = supplierFromPdfHeader(pdfText, pdfLines) || bestSupplier(combined);
+      project = projectFromPdfMaster(pdfText || combined, pdfLines, hint, 'SR0') || bestProject(combined, hint);
+      project = projectMasterByIdentity(project);
+      pickup = supplier;
+      drop = project;
+    }
+
+    reasons.push(pickup?.reason, drop?.reason);
+    const warnings = [];
+    if (!sourceOrderNos.length) warnings.push('Rendelésszám nem található');
+    if (!pickup?.name) warnings.push('Felrakó nem azonosítható');
+    if (pickupRole === 'supplier' && (!pickup?.id || pickup?.unmatchedMaster)) warnings.push(`Felrakó nincs a beszállítói törzsadatokban${pickup?.detectedName ? `: ${pickup.detectedName}` : ''}`);
+    if (!pickup?.address) warnings.push('Felrakó címe hiányzik');
+    /* V79: a levélben megnevezett telephely felülírja a bizonylatét, de csak
+       ugyanannál a cégnél. A váltást jelezzük az előnézeten. */
+    if (pickupRole === 'supplier') {
+      const bodySite = applyBodyPickupSiteV79(pickup, body, subject);
+      if (bodySite) { pickupSite = bodySite.site; reasons.push(bodySite.note); }
+    }
+    if (!drop?.name) warnings.push('Lerakó/projekt nem azonosítható');
+    if (!drop?.address) warnings.push('Lerakó címe hiányzik a törzsadatból');
+    if (!items.length) warnings.push('Tételek nem olvashatók automatikusan');
+    const existingOrderNos = unique(matchingOutlookOrders(sourceOrderNos, orderType, returnMode).flatMap(orderNumbersOf));
+    const requested = extractRequestedDate(pdfText);
+    const scheduleDate = selectedImportDate() || requested || tomorrowISO();
+    return {
+      _id: id(), approved: true, category, sourceName, subject: subject || '', pdfName, attachmentNames,
+      scheduleDate, scheduleDateManual: false, requestedDate: requested, orderNo, sourceOrderNos, fullOrderRefs: refs.map(ref => ref.full), orderType, isReturn: returnMode,
+      pickupName: pickupSite?.name || pickup?.name || '', pickupAddress: pickupSite?.address || pickup?.address || '', supplierId: pickupRole === 'supplier' ? (pickupSite?.id || pickup?.id || '') : '', pickupNote: pickup?.pickupNote || '', pickupRole,
+      projectName: drop?.name || hint || '', projectId: dropRole === 'project' ? (drop?.id || '') : '', dropAddress: drop?.address || '', dropRole,
+      returnSourceProjectId: returnMode ? (project?.id || '') : '', returnDestinationSupplierId: returnMode ? (supplier?.id || '') : '',
+      newSupplierData: null,
+      ...recipientFromProject(dropRole === 'project' ? drop : null), items, warnings, duplicate: false, existingOrderNos,
+      extractionReason: unique(reasons).join(' · '), sourceBody: body || '', sourcePdfText: pdfText || ''
+    };
+  }
+
+  function entriesFromPdfDocument({ category, sourceName, subject, body, pdf, attachmentNames = [] }) {
+    const allRefs = extractOrderRefs(pdf.text || '', pdf.name || '', subject || '', sourceName || '', body || '');
+    const messageOrderNos = unique(allRefs.map(ref => ref.no));
+    return splitPdfDocumentByOrders(pdf).map(part => ({
+      ...buildExtractedEntry({
+        category, sourceName, subject, body, pdfName: part.name, pdfText: part.text, pdfLines: part.lines, pdfRows: part.rows || pdf.rows || [], attachmentNames, forcedRefs: part.forcedRefs || []
+      }),
+      messageOrderNos
+    }));
+  }
+
+  function entriesFromMessageBody({ category, sourceName, subject, body, attachmentNames = [], sourceMail = null }) {
+    const refs = extractOrderRefs(subject, sourceName, body);
+    const messageOrderNos = unique(refs.map(ref => ref.no));
+    const returnMode = isReturnText(subject, body);
+    /* V108 – A LEVÉL MELLÉKLETE A PDF NÉLKÜLI ÁGON IS MEGMARAD
+
+       Ha a bizonylatból nem sikerült tételt kiolvasni (vagy nincs is PDF),
+       a fuvar a levél szövegéből jön létre. Ez az ág viszont ELDOBTA a
+       sourceMail objektumot, benne a mellékletek bájtjaival – ezért a
+       Csatolmány üres maradt, pedig a levélben ott volt a PDF.
+
+       Mostantól a sourceMail ezen az ágon is rákerül a bejegyzésre. */
+    if (!returnMode && refs.length > 1) {
+      return refs.map(ref => ({ ...buildExtractedEntry({ category, sourceName, subject, body, attachmentNames, forcedRefs: [ref] }), messageOrderNos, sourceMail }));
+    }
+    return [{ ...buildExtractedEntry({ category, sourceName, subject, body, attachmentNames }), messageOrderNos, sourceMail }];
+  }
+
+  /* V105 – A BEHÚZOTT PDF IS FELKERÜL CSATOLMÁNYKÉNT
+
+     Eddig csak a .msg levél mellékletei kerültek fel a fuvarhoz; ha valaki
+     magát a PDF-et húzta be, a bizonylat sehol nem volt megnyitható.
+
+     A feltöltés a sourceMail.files tömbből dolgozik, ezért a behúzott PDF-et
+     ugyanúgy odatesszük – a levélnél megszokott "Outlook forrás" jelöléssel. */
+  async function parsePdfFile(file, category) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const parsed = await pdfTextAndLines(bytes.buffer.slice(0));
+    const pdf = { name: file.name, ...parsed };
+    const entries = entriesFromPdfDocument({ category, sourceName: file.name, subject: file.name, body: '', pdf, attachmentNames: [file.name] });
+    for (const entry of entries) {
+      entry.sourceMail = entry.sourceMail || { subject: file.name, from: '', body: '', fileName: file.name, attachmentNames: [file.name] };
+      entry.sourceMail.files = [{ name: file.name, content: bytes }];
+      entry.sourceMail.inlineFiles = [{ name: file.name, dataUrl: bytesToDataUrlV73(bytes, 'application/pdf') }];
+    }
+    return entries;
+  }
+
+  async function parseMsgFile(file, category) {
+    const MsgReader = await loadMsgReader();
+    const reader = new MsgReader(await file.arrayBuffer());
+    const info = reader.getFileData() || {};
+    const subject = cleanText(info.subject || file.name);
+    const body = cleanText([info.body || '', info.bodyHTML || info.html || '', info.headers || ''].join('\n'));
+    const attachments = info.attachments || [];
+    const names = attachments.map(att => att.fileName || att.fileNameShort || '').filter(Boolean);
+    const pdfs = [];
+    for (const attachment of attachments) {
+      const attachmentName = attachment.fileName || attachment.fileNameShort || '';
+      if (!/\.pdf$/i.test(attachmentName)) continue;
+      try {
+        const extracted = reader.getAttachment(attachment);
+        const content = extracted?.content || extracted?.data;
+        if (!content) throw new Error('A PDF tartalma üres.');
+        const parsed = await pdfTextAndLines(content);
+        pdfs.push({ name: attachmentName, ...parsed });
+      } catch (error) {
+        console.warn('[V43] PDF melléklet hiba', attachmentName, error);
+      }
+    }
+    // V60: a sofőrnek szüksége lehet az eredeti levélre (cím, megjegyzés,
+    // melléklet), ezért megőrizzük a szövegét és a PDF mellékleteket.
+    const sourceMail = {
+      subject, body,
+      from: cleanText(info.senderEmail || info.senderName || ''),
+      attachmentNames: names,
+      fileName: file.name,
+      files: []
+    };
+    for (const attachment of attachments) {
+      const attachmentName = attachment.fileName || attachment.fileNameShort || '';
+      /* V107 – CSAK DOKUMENTUM-MELLÉKLET
+
+         A levelek alján ott ül az aláírás 4-6 apró képe (image001.png és
+         társai). Ezek eddig mind felkerültek a fuvarhoz, és elnyomták a
+         listában az egyetlen fontos fájlt, a megrendelést.
+
+         Mostantól csak a dokumentumok kerülnek fel: PDF, Word, Excel, CSV.
+         A képmellékletek kimaradnak. */
+      if (!/\.(pdf|docx?|xlsx?|xlsm|csv)$/i.test(attachmentName)) continue;
+      try {
+        const extracted = reader.getAttachment(attachment);
+        /* V107: a beolvasó többféle néven adhatja vissza a tartalmat. Ha
+           egyiket sem találjuk, a melléklet EDDIG csendben elveszett: a neve
+           látszott a levél alján, de gomb nem tartozott hozzá. Most
+           olvashatatlanként jelöljük, hogy a felületen is látszódjon. */
+        const content = extracted?.content || extracted?.data || extracted?.bytes
+          || (extracted instanceof Uint8Array ? extracted : null);
+        if (!content) {
+          sourceMail.unreadable = sourceMail.unreadable || [];
+          sourceMail.unreadable.push(attachmentName);
+        }
+        if (content) {
+          sourceMail.files.push({ name: attachmentName, content });
+          /* V73: a PDF-et azonnal eltesszük helyben is, hogy a Csatolmány
+             akkor is megnyithassa, ha a szerverre nem jut fel. */
+          if (/\.pdf$/i.test(attachmentName)) {
+            const dataUrl = bytesToDataUrlV73(content, 'application/pdf');
+            if (dataUrl) sourceMail.inlineFiles = (sourceMail.inlineFiles || []).concat([{ name: attachmentName, dataUrl }]);
+          }
+        }
+      } catch (error) {
+        console.warn('[V72] melléklet nem olvasható', attachmentName, error);
+        sourceMail.unreadable = sourceMail.unreadable || [];
+        sourceMail.unreadable.push(attachmentName);
+      }
+    }
+    /* V72: ha a levélnek VAN melléklete, de egyet sem tudtunk kibontani, azt
+       jelezzük. Továbbított (FW:) leveleknél előfordul, hogy a beolvasó csak
+       a nyers levélforrást látja – ilyenkor a fuvar a tárgysorból jön létre,
+       de a PDF nem kerül fel, és a Csatolmány üres marad. */
+    const wantedFiles = names.filter(name => /\.(pdf|docx?|xlsx?|xlsm|csv)$/i.test(name));
+    if (wantedFiles.length && !sourceMail.files.length) {
+      sourceMail.attachmentsUnreadable = true;
+    }
+    if (!pdfs.length) return entriesFromMessageBody({ category, sourceName: file.name, subject, body, attachmentNames: names, sourceMail });
+
+    const classified = pdfs.map(pdf => ({ pdf, info: classifyPdfDocument(pdf) }));
+    const primary = classified.filter(item => item.info.primary);
+    const candidates = primary.length
+      ? primary
+      : classified.filter(item => !item.info.confirmation && item.info.refs.length);
+    if (!candidates.length) return entriesFromMessageBody({ category, sourceName: file.name, subject, body, attachmentNames: names, sourceMail });
+
+    const selected = [];
+    const seenRefs = new Set();
+    for (const item of candidates) {
+      const refKey = item.info.refs.map(ref => ref.full).sort().join('|');
+      if (refKey && [...item.info.refs].every(ref => seenRefs.has(ref.full))) continue;
+      item.info.refs.forEach(ref => seenRefs.add(ref.full));
+      selected.push(item.pdf);
+    }
+    const allMessageOrderNos = unique(selected.flatMap(pdf => extractOrderRefs(pdf.text || '', pdf.name || '').map(ref => ref.no)));
+    return selected.flatMap(pdf => entriesFromPdfDocument({ category, sourceName: file.name, subject, body, pdf, attachmentNames: names }))
+      .map(entry => ({ ...entry, sourceMail, messageOrderNos: allMessageOrderNos.length ? allMessageOrderNos : (entry.messageOrderNos || entry.sourceOrderNos || []) }));
+  }
+
+  async function parseDroppedFile(file, category) {
+    if (/\.pdf$/i.test(file.name)) return parsePdfFile(file, category);
+    if (/\.msg$/i.test(file.name)) return parseMsgFile(file, category);
+    throw new Error('Csak .msg vagy teszteléshez .pdf fájl fogadható.');
+  }
+
+  /* V60 – a forráslevél mellékleteinek feltöltése a fuvarhoz.
+     A meglévő szállítólevél-tárolót használjuk, "Outlook forrás" jelöléssel,
+     hogy ne kelljen új infrastruktúra. */
+  /* Bájtokból adat-URL. Nagy fájlnál kihagyjuk, hogy ne foglaljon feleslegesen. */
+  function bytesToDataUrlV73(content, mime) {
+    try {
+      const bytes = content instanceof Uint8Array ? content : new Uint8Array(content);
+      if (!bytes.length || bytes.length > 600 * 1024) return '';
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 8192) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+      }
+      return `data:${mime};base64,${btoa(binary)}`;
+    } catch (error) { return ''; }
+  }
+
+  async function uploadSourceMailFiles(entries, orders) {
+    if (!global.V44Online?.createDeliveryReport || typeof File === 'undefined') return;
+    /* V72: a feltöltés hibája eddig csak a konzolba került, ezért úgy tűnt,
+       hogy a melléklet ott van, pedig soha nem jutott fel. Most szólunk. */
+    const failed = [];
+    for (let index = 0; index < entries.length; index++) {
+      const mail = entries[index]?.sourceMail;
+      const order = orders[index];
+
+      /* V107 – A CSENDES KIHAGYÁS LÁTHATÓVÁ TÉTELE
+
+         Eddig minden olyan bejegyzést szó nélkül átugrottunk, amelynél nem
+         volt feltölthető fájl. Így állt elő az az állapot, hogy a levél
+         alján LÁTSZIK a melléklet neve, de a Csatolmány üres, és semmi nem
+         mondja meg, miért.
+
+         Mostantól, ha a levélnek VAN melléklete, de a tartalmát nem sikerült
+         kibontani, azt ugyanúgy jelezzük, mint a feltöltési hibát. */
+      if (!order?.id) continue;
+      if (!mail?.files?.length) {
+        const nevek = (mail?.attachmentNames || []).filter(nev => /\.(pdf|docx?|xlsx?|xlsm|csv)$/i.test(nev));
+        if (nevek.length) {
+          failed.push(`${order.orderNo || order.id}: a melléklet tartalma nem volt kibontható (${nevek.join(', ')})`);
+        }
+        continue;
+      }
+      const files = [];
+      for (const item of mail.files) {
+        try {
+          const bytes = item.content instanceof Uint8Array ? item.content : new Uint8Array(item.content);
+          const mime = /\.pdf$/i.test(item.name) ? 'application/pdf'
+            : /\.docx$/i.test(item.name) ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            : /\.doc$/i.test(item.name) ? 'application/msword'
+            : /\.xlsx$/i.test(item.name) ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : /\.xlsm?$/i.test(item.name) ? 'application/vnd.ms-excel'
+            : /\.csv$/i.test(item.name) ? 'text/csv'
+            : 'application/octet-stream';
+          files.push(new File([bytes], item.name, { type: mime }));
+        } catch (error) { /* egy melléklet kihagyható */ }
+      }
+      if (!files.length) continue;
+      try {
+        await global.V44Online.createDeliveryReport(order, files,
+          `Outlook forrás · ${mail.fileName || ''}`.trim());
+      } catch (error) {
+        console.warn('[V72] forráslevél feltöltése sikertelen', order.orderNo, error);
+        failed.push(`${order.orderNo || order.id}: ${error.message}`);
+      }
+    }
+    if (failed.length && typeof alert === 'function') {
+      alert('A levél mellékletei nem töltődtek fel, ezért a Csatolmány gombbal nem lesznek megnyithatók.\n'
+        + 'Továbbított (FW:) levélnél mentsd el az EREDETI levelet .msg fájlként, és azt húzd be.\n\n'
+        + failed.slice(0, 5).join('\n') + (failed.length > 5 ? `\n… és további ${failed.length - 5}` : ''));
+    }
+  }
+
+  function statusText(entry) {
+    if (entry.existingOrderNos?.length) return 'Újraimportálás – meglévő frissítése';
+    if (!entry.warnings.length) return 'Felismerve';
+    return `${entry.warnings.length} ellenőrzendő`;
+  }
+
+
+  function uniqueSupplierNames() {
+    return [...new Set((typeof state !== 'undefined' ? state.suppliers || [] : []).map(item => String(item.name || '').trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'hu'));
+  }
+
+  /* V63: az import mindkét választója mindkét fajtát kínálja.
+     Visszárunál a felrakó egy projekt (onnan hozzuk el az anyagot), a lerakó
+     pedig egy beszállító telephelye. Eddig a felrakóban csak beszállítók, a
+     lerakóban csak projektek voltak, ezért a visszáru nem volt beállítható. */
+  function projectNamesForSelect() {
+    return (typeof state !== 'undefined' ? state.projects || [] : [])
+      .filter(item => item.active !== false && item.name)
+      .map(item => String(item.name).trim())
+      .sort((a, b) => a.localeCompare(b, 'hu'));
+  }
+
+  function supplierNameSelect(entry) {
+    const names = uniqueSupplierNames();
+    if (entry.pickupName && !names.some(name => nrm(name) === nrm(entry.pickupName))) names.unshift(entry.pickupName);
+    const projects = projectNamesForSelect().filter(name => !names.some(item => nrm(item) === nrm(name)));
+    const options = ['<option value="">Válassz beszállítót…</option>']
+      .concat(names.map(name => `<option value="${htmlEsc(name)}" ${nrm(name) === nrm(entry.pickupName) ? 'selected' : ''}>${htmlEsc(name)}</option>`))
+      .concat(projects.length ? [`<optgroup label="Visszáru · projektről">`]
+        .concat(projects.map(name => `<option value="${htmlEsc(name)}" ${nrm(name) === nrm(entry.pickupName) ? 'selected' : ''}>${htmlEsc(name)}</option>`))
+        .concat(['</optgroup>']) : []);
+    return `<select data-field="pickupName" data-kind="supplier-name">${options.join('')}</select>`;
+  }
+
+  function supplierAddressSelect(entry) {
+    /* V88: a FELRAKÓ lehet PROJEKT is (visszáru forrása). Eddig ez a lista
+       csak beszállítókban keresett, ezért projektnél üres maradt. */
+    const name = nrm(entry.pickupName || '');
+    const project = (typeof state !== 'undefined' ? state.projects || [] : [])
+      .find(item => nrm(item.name) === name);
+    if (project) {
+      const listId = `pickup-addresses-${String(entry._id || 'entry').replace(/[^a-zA-Z0-9_-]/g, '')}`;
+      const rows = [];
+      const seen = new Set();
+      const push = (address, note) => {
+        const key = nrm(address);
+        if (!address || seen.has(key)) return;
+        seen.add(key);
+        rows.push(`<option value="${htmlEsc(address)}">${htmlEsc(note)}</option>`);
+      };
+      if (project.address) push(project.address, 'törzsadat');
+      const counts = new Map();
+      for (const order of (typeof state !== 'undefined' ? state.orders || [] : [])) {
+        if (nrm(order.projectName || '') !== name && nrm(order.pickupName || '') !== name) continue;
+        for (const value of [order.dropAddress, order.pickupAddress]) {
+          const address = String(value || '').trim();
+          if (address) counts.set(address, (counts.get(address) || 0) + 1);
+        }
+      }
+      [...counts.entries()].sort((a, b) => b[1] - a[1])
+        .forEach(([address, count]) => push(address, `korábbi fuvar · ${count}×`));
+      return `<input data-field="pickupAddress" data-kind="supplier-address" list="${htmlEsc(listId)}" value="${htmlEsc(entry.pickupAddress || '')}" placeholder="Válassz címet vagy írd be"><datalist id="${htmlEsc(listId)}">${rows.join('')}</datalist>`;
+    }
+    const locations = (typeof state !== 'undefined' ? state.suppliers || [] : [])
+      .filter(item => nrm(item.name) === nrm(entry.pickupName))
+      .sort((a, b) => Number(Boolean(b.isCentral)) - Number(Boolean(a.isCentral)) || String(a.address || '').localeCompare(String(b.address || ''), 'hu'));
+    const listId = `supplier-addresses-${String(entry._id || 'entry').replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    const options = locations.map(item => `<option value="${htmlEsc(item.address || '')}">${htmlEsc(`${item.isCentral ? 'Központ · ' : ''}${item.site || ''}${item.pickupNote ? `${item.site ? ' · ' : ''}${item.pickupNote}` : ''}`)}</option>`);
+    return `<input data-field="pickupAddress" data-kind="supplier-address" list="${htmlEsc(listId)}" value="${htmlEsc(entry.pickupAddress || '')}" placeholder="Válassz címet a beszállítói törzsből…"><datalist id="${htmlEsc(listId)}">${options.join('')}</datalist>`;
+  }
+
+  /* V85 – A LERAKÓ CÍMJE IS VÁLASZTHATÓ AZ IMPORTBAN
+
+     A felrakónak eddig is volt cím-lenyílója, a lerakónak nem – ott sima
+     szövegmező állt. Ezért visszárunál nem lehetett a beszállító másik
+     telephelyét kiválasztani.
+
+     A kínálat ugyanaz, mint a fuvarűrlapon:
+       - ha a lerakó egy BESZÁLLÍTÓ (visszáru): a cég összes telephelye,
+         központ elöl
+       - ha PROJEKT: a törzsadat címe, alatta a korábbi fuvarokból ismertek */
+  function dropAddressSelect(entry) {
+    const name = nrm(entry.projectName || '');
+    const listId = `drop-addresses-${String(entry._id || 'entry').replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    const rows = [];
+    const seen = new Set();
+    const push = (address, note) => {
+      const key = nrm(address);
+      if (!address || seen.has(key)) return;
+      seen.add(key);
+      rows.push({ address, note });
+    };
+
+    const suppliers = (typeof state !== 'undefined' ? state.suppliers || [] : [])
+      .filter(item => item.active !== false && nrm(item.name) === name && item.address)
+      .sort((a, b) => Number(Boolean(b.isCentral)) - Number(Boolean(a.isCentral))
+        || String(a.address || '').localeCompare(String(b.address || ''), 'hu'));
+    for (const item of suppliers) push(item.address, item.isCentral ? 'Központ' : (item.site || 'telephely'));
+
+    const project = (typeof state !== 'undefined' ? state.projects || [] : [])
+      .find(item => nrm(item.name) === name);
+    if (project?.address) push(project.address, 'törzsadat');
+
+    // a korábbi fuvarokból ismert címek, gyakoriság szerint
+    const counts = new Map();
+    for (const order of (typeof state !== 'undefined' ? state.orders || [] : [])) {
+      if (nrm(order.projectName || '') !== name) continue;
+      const address = String(order.dropAddress || '').trim();
+      if (address) counts.set(address, (counts.get(address) || 0) + 1);
+    }
+    [...counts.entries()].sort((a, b) => b[1] - a[1])
+      .forEach(([address, count]) => push(address, `korábbi fuvar · ${count}×`));
+
+    const options = rows.map(row => `<option value="${htmlEsc(row.address)}">${htmlEsc(row.note)}</option>`).join('');
+    return `<input data-field="dropAddress" data-kind="drop-address" list="${htmlEsc(listId)}" value="${htmlEsc(entry.dropAddress || '')}" placeholder="Válassz címet vagy írd be"><datalist id="${htmlEsc(listId)}">${options}</datalist>`;
+  }
+
+  function projectNameSelect(entry) {
+    const projects = (typeof state !== 'undefined' ? state.projects || [] : []).slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'hu'));
+    if (entry.projectName && !projects.some(item => nrm(item.name) === nrm(entry.projectName))) {
+      projects.unshift({ id: entry.projectId || '', name: entry.projectName, address: entry.dropAddress || '' });
+    }
+    /* V84: a beszállítók CÉGENKÉNT egyszer, CÍM NÉLKÜL – ugyanúgy, mint a
+       fuvarűrlapon. A telephelyet a "Lerakó címe" mezőben lehet megadni.
+       Korábban telephelyenként, "cég · cím" alakban listáztuk őket, ezért
+       jelent meg a cím a lerakó mezőben. */
+    const companies = new Map();
+    for (const item of (typeof state !== 'undefined' ? state.suppliers || [] : [])) {
+      if (item.active === false || !item.name || !item.address) continue;
+      const key = nrm(item.name);
+      const current = companies.get(key);
+      if (!current || (item.isCentral && !current.isCentral)) companies.set(key, item);
+    }
+    /* V111: egy cég lehet PROJEKT is (visszárunál a cég a lerakó). Ilyenkor a
+       neve kétszer kerülne a listába – egyszer projektként, egyszer
+       beszállítóként. A projekt az erősebb, mert ahhoz cím és átvevő is
+       tartozik, ezért a beszállítói másolatot kivesszük. */
+    const projektNevek = new Set(projects.map(item => nrm(item.name)));
+    const suppliers = [...companies.values()]
+      .filter(item => !projektNevek.has(nrm(item.name)))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'hu'));
+    const supplierOptions = suppliers.length ? ['<optgroup label="Visszáru · beszállítóhoz">']
+      .concat(suppliers.map(item => `<option value="${htmlEsc(item.name)}" data-supplier-address="${htmlEsc(item.address)}" ${nrm(item.name) === nrm(entry.projectName) ? 'selected' : ''}>${htmlEsc(item.name)}</option>`))
+      .concat(['</optgroup>']) : [];
+    const options = ['<option value="">Válassz projektet / lerakót…</option>'].concat(projects.map(item => {
+      // V84: a projekt is csak a nevével – a cím a külön mezőben látszik
+      const label = `${item.name || 'Névtelen projekt'}${item.address ? '' : ' · cím nélkül'}`;
+      return `<option value="${htmlEsc(item.name || '')}" data-project-id="${htmlEsc(item.id || '')}" ${nrm(item.name) === nrm(entry.projectName) ? 'selected' : ''}>${htmlEsc(label)}</option>`;
+    }));
+    return `<select data-field="projectName" data-kind="project-name">${options.concat(supplierOptions).join('')}</select>`;
+  }
+
+  function refreshEntryWarnings(entry) {
+    entry.warnings = (entry.warnings || []).filter(warning => !/Rendelésszám|Felrakó|Projekt címe|Lerakó\/projekt|Lerakó címe|már szerepel|duplik/i.test(warning));
+    // V65: a kézzel beírt tételszöveg teljes értékű tételnek számít, ezért
+    // megszünteti a "Tételek nem olvashatók" jelzést.
+    if (String(entry.manualItems || '').trim()) {
+      entry.warnings = entry.warnings.filter(warning => !/T[eé]telek nem olvashat/i.test(warning));
+    } else if (!(entry.items || []).length && !entry.warnings.some(w => /T[eé]telek nem olvashat/i.test(w))) {
+      entry.warnings.push('Tételek nem olvashatók automatikusan');
+    }
+    if (!entry.orderNo) entry.warnings.push('Rendelésszám nem található');
+    else if (orderNoWaived(entry)) entry.warnings = entry.warnings.filter(w => !/Rendel[eé]ssz[aá]m/i.test(w));
+    if (!entry.pickupName) entry.warnings.push('Felrakó nem azonosítható');
+    if ((entry.pickupRole || 'supplier') === 'supplier' && !entry.supplierId) entry.warnings.push('Felrakó nincs a beszállítói törzsadatokban');
+    if (!entry.pickupAddress) entry.warnings.push('Felrakó címe hiányzik');
+    if (!entry.projectName) entry.warnings.push('Lerakó/projekt nem azonosítható');
+    if (!entry.dropAddress) entry.warnings.push('Projekt címe hiányzik a törzsadatból');
+    entry.warnings = unique(entry.warnings);
+  }
+
+  /* V65: az importot blokkoló hiányok. Csak ez a három adat kötelező –
+     a tételek nem. Az előnézeten is látszik, hogy ne az importálás után
+     derüljön ki, mit kell pótolni. */
+  /* V66: van olyan bizonylat, amin egyszerűen nincs rendelésszám. Ilyenkor
+     elég egy kötőjelet beírni a Rendelésszám mezőbe – a program tudomásul
+     veszi, hogy szándékosan üres, és átengedi az importot. */
+  function orderNoWaived(entry) {
+    return /^[-–—]+$/.test(String(entry?.orderNo || '').trim());
+  }
+
+  function blockingFields(entry) {
+    const numbers = entry.sourceOrderNos?.length ? entry.sourceOrderNos : orderNumbersOf(entry);
+    const missing = [];
+    if (!numbers.length && !orderNoWaived(entry)) missing.push('rendelésszám');
+    if (!entry.pickupName) missing.push('felrakó');
+    if (!entry.projectName) missing.push('lerakó/projekt');
+    return missing;
+  }
+
+  function entryCard(entry, index) {
+    const categoryLabel = entry.category === 'martin' ? 'Martin / Platós' : 'Dobozos';
+    return `<article class="v38-preview-card ${entry.approved ? '' : 'disabled'}" data-entry-id="${htmlEsc(entry._id)}">
+      <header><label class="check"><input class="v38-approved" type="checkbox" ${entry.approved ? 'checked' : ''}> Importálás</label><span class="v38-category ${entry.category}">${categoryLabel}</span><button class="v38-remove" type="button" title="Eltávolítás">×</button></header>
+      <div class="v38-source"><b>${htmlEsc(entry.sourceName)}</b><span>${htmlEsc(entry.orderType || 'SR0')}${entry.isReturn ? ' · visszáru' : ''}</span>${entry.pdfName && entry.pdfName !== entry.sourceName ? `<span>PDF: ${htmlEsc(entry.pdfName)}</span>` : ''}<span class="v38-status ${entry.warnings.length ? 'warn' : 'ok'}">${htmlEsc(statusText(entry))}</span></div>
+      ${entry.sourceMail?.attachmentsUnreadable ? `<div class="v72-attach-warn">A levél mellékletét nem sikerült kibontani (${htmlEsc((entry.sourceMail.attachmentNames || []).join(', '))}). A fuvar importálható, de a Csatolmány üres marad. Továbbított levélnél mentsd el az eredetit, és azt húzd be.</div>` : ''}
+      ${blockingFields(entry).length ? `<div class="v65-blocking">Nem importálható – hiányzik: <b>${htmlEsc(blockingFields(entry).join(', '))}</b>${blockingFields(entry).includes('rendelésszám') ? ' · Ha a bizonylaton nincs rendelésszám, írj be egy kötőjelet (-).' : ''}</div>` : ''}
+      ${orderNoWaived(entry) ? '<div class="v66-waived">Rendelésszám nélkül importálva – a mezőben kötőjel áll.</div>' : ''}
+      <div class="v38-fields">
+        <label>Felvétel dátuma<input data-field="scheduleDate" type="date" value="${htmlEsc(entry.scheduleDate)}"></label>
+        ${entry.messageOrderNos?.length > 1 ? `<label class="v43-all-order-nos">Rendelésszámok a levélben<input value="${htmlEsc(entry.messageOrderNos.join(', '))}" readonly></label>` : ''}
+        <label>${entry.messageOrderNos?.length > 1 ? 'Aktuális rendelés száma' : 'Rendelésszám'}<input data-field="orderNo" value="${htmlEsc(entry.orderNo)}" placeholder="pl. 004911"></label>
+        <label>Felrakó neve${supplierNameSelect(entry)}</label>
+        <label>Felrakó címe${supplierAddressSelect(entry)}</label>
+        <label>Lerakó / projekt${projectNameSelect(entry)}</label>
+        <label>Lerakó címe${dropAddressSelect(entry)}</label>
+      </div>
+      <label class="v65-manual-items ${entry.items.length ? '' : 'needed'}">
+        ${entry.items.length ? 'Kiegészítő megjegyzés a tételekhez' : 'A bizonylatról nem sikerült tételt felismerni – írd be kézzel'}
+        <textarea data-field="manualItems" rows="${entry.items.length ? 2 : 3}"
+          placeholder="Pl. 4 tábla OSB, 2 zsák gipsz – ez a szöveg megjelenik az admin és a sofőri felületen is">${htmlEsc(entry.manualItems || '')}</textarea>
+      </label>
+      <details><summary>Tételek (${entry.items.length}) és felismerési adatok</summary>
+        ${entry.items.length ? `<div class="v38-items">${entry.items.map(item => `<div><b>${htmlEsc(item.code)}</b><span>${htmlEsc(item.name)}</span><span>${htmlEsc(item.qty)} ${htmlEsc(item.unit)}</span></div>`).join('')}</div>` : '<p>Nincs automatikusan felismert tétel.</p>'}
+        ${entry.extractionReason ? `<p><b>Felismerés:</b> ${htmlEsc(entry.extractionReason)}</p>` : ''}
+        ${entry.warnings.length ? `<ul class="v38-warnings">${entry.warnings.map(warning => `<li>${htmlEsc(warning)}</li>`).join('')}</ul>` : '<p class="v38-ok">Minden kötelező adat felismerve.</p>'}
+      </details>
+    </article>`;
+  }
+
+  function emptyPreviewText(category) {
+    return `<div class="v41-empty-preview">Még nincs ${category === 'martin' ? 'Martin / Platós' : 'Dobozos'} rendelés feldolgozva.</div>`;
+  }
+
+  function renderPending() {
+    if (typeof document === 'undefined') return;
+    const boxContainer = document.getElementById('v41BoxPreview');
+    const martinContainer = document.getElementById('v41MartinPreview');
+    const summary = document.getElementById('v38ImportSummary');
+    const commit = document.getElementById('v38CommitImport');
+    const boxEntries = pending.filter(entry => entry.category === 'dobozos');
+    const martinEntries = pending.filter(entry => entry.category === 'martin');
+    if (boxContainer) boxContainer.innerHTML = boxEntries.length ? boxEntries.map(entryCard).join('') : emptyPreviewText('dobozos');
+    if (martinContainer) martinContainer.innerHTML = martinEntries.length ? martinEntries.map(entryCard).join('') : emptyPreviewText('martin');
+    const approved = pending.filter(entry => entry.approved).length;
+    const warnings = pending.filter(entry => entry.warnings.length).length;
+    const reimports = pending.filter(entry => entry.existingOrderNos?.length).length;
+    if (summary) summary.textContent = `${pending.length} rendelés az előnézetben · Dobozos: ${boxEntries.length} · Martin / Platós: ${martinEntries.length} · Jóváhagyva: ${approved} · Ellenőrzendő: ${warnings}${reimports ? ` · Újraimportálás: ${reimports}` : ''}`;
+    if (commit) commit.disabled = processing || !approved;
+    bindPreviewEditors();
+  }
+
+  function bindPreviewEditors() {
+    document.querySelectorAll('.v38-preview-card').forEach(card => {
+      const entry = pending.find(item => item._id === card.dataset.entryId);
+      if (!entry) return;
+      card.querySelector('.v38-approved')?.addEventListener('change', event => { entry.approved = event.target.checked; renderPending(); });
+      card.querySelector('.v38-remove')?.addEventListener('click', () => { pending = pending.filter(item => item !== entry); renderPending(); });
+      card.querySelectorAll('[data-field]').forEach(input => input.addEventListener('change', () => {
+        const field = input.dataset.field;
+        entry[field] = input.value.trim();
+        if (field === 'scheduleDate') entry.scheduleDateManual = true;
+
+        if (input.dataset.kind === 'supplier-name') {
+          /* V88: a FELRAKÓ lehet PROJEKT is (visszáru forrása). Ilyenkor a
+             projekt címét töltjük be, nem a beszállítói törzsből keresünk. */
+          const asProject = (state.projects || []).find(item => nrm(item.name) === nrm(entry.pickupName));
+          /* V89 JAVÍTÁS: itt korábban egy nem létező renderPreview() hívás állt,
+             ami hibára futott – a kezelő megszakadt, és a kártya nem frissült.
+             A helyes név renderPending(), és azt a kezelő VÉGE úgyis meghívja,
+             ezért itt nem hívunk semmit, csak kihagyjuk a beszállítói ágat. */
+          const locations = asProject ? [] : (state.suppliers || []).filter(item => nrm(item.name) === nrm(entry.pickupName));
+          if (asProject) {
+            entry.supplierId = '';
+            entry.pickupAddress = asProject.address || entry.pickupAddress || '';
+            entry.pickupNote = '';
+            entry.newSupplierData = null;
+          }
+          if (!asProject) {
+            const preferred = locations.find(item => item.isCentral) || locations.find(item => nrm(item.pickupNote || item.note).includes('kozpont')) || locations[0] || null;
+            entry.supplierId = preferred?.id || '';
+            entry.pickupAddress = preferred?.address || '';
+            entry.pickupNote = preferred?.pickupNote || preferred?.note || '';
+          }
+        } else if (input.dataset.kind === 'supplier-address') {
+          const supplier = (state.suppliers || []).find(item => nrm(item.name) === nrm(entry.pickupName) && nrm(item.address) === nrm(entry.pickupAddress));
+          if (supplier) {
+            entry.supplierId = supplier.id || '';
+            entry.pickupName = supplier.name || entry.pickupName;
+            entry.pickupAddress = supplier.address || '';
+            entry.pickupNote = supplier.pickupNote || supplier.note || '';
+            entry.newSupplierData = null;
+          } else {
+            /* V79: ha a beírt cím nem talál PONTOSAN a törzsadatra, eddig
+               KIÜRÍTETTÜK a mezőt – ezért nem lehetett átírni a felrakó
+               címét az importnál. Mostantól megtartjuk, amit beírtál.
+
+               Előbb megpróbáljuk a cég telephelyei közül a részleges
+               egyezést ("hengermalom" → Hengermalom út 47A); ha az sincs,
+               a beírt szöveg marad, egyedi címként. */
+            // a házszámot egybe olvassuk, hogy a "47/a" is találjon a "47A"-ra
+            const joinHouse = value => String(value || '').replace(/(\d+)\s*[\/\-]?\s*([a-z])(?![a-z0-9])/g, '$1$2');
+            const typed = joinHouse(nrm(entry.pickupAddress));
+            const sites = (state.suppliers || []).filter(item => nrm(item.name) === nrm(entry.pickupName));
+            const partial = typed && sites.find(item => joinHouse(nrm(item.address)).includes(typed));
+            if (partial) {
+              entry.supplierId = partial.id || '';
+              entry.pickupAddress = partial.address || '';
+              entry.pickupNote = partial.pickupNote || partial.note || '';
+            } else {
+              entry.supplierId = '';
+              entry.pickupNote = '';
+            }
+            entry.newSupplierData = null;
+          }
+        } else if (input.dataset.kind === 'project-name') {
+          const selected = [...input.options].find(option => option.selected);
+          const project = (state.projects || []).find(item => item.id === selected?.dataset.projectId)
+            || (state.projects || []).find(item => nrm(item.name) === nrm(entry.projectName));
+          if (project) {
+            entry.projectId = project.id || '';
+            entry.projectName = project.name || entry.projectName;
+            entry.dropAddress = project.address || '';
+            Object.assign(entry, recipientFromProject(project));
+          } else {
+            /* V88: VISSZÁRUNÁL a lerakó egy BESZÁLLÍTÓ. Eddig csak a projektes
+               ágat kezeltük, ezért a cím a régi projekté maradt. Most a cég
+               KÖZPONTJÁRA áll – a cím mezőben bármelyik telephely választható. */
+            const company = (state.suppliers || []).filter(item =>
+              item.active !== false && nrm(item.name) === nrm(entry.projectName) && item.address);
+            const central = company.find(item => item.isCentral) || company[0];
+            if (central) {
+              entry.projectId = '';
+              entry.dropAddress = selected?.dataset.supplierAddress || central.address || '';
+              entry.isReturn = true;
+            }
+          }
+        }
+
+        entry.sourceOrderNos = orderNumbersOf(entry.orderNo);
+        entry.existingOrderNos = duplicateOrderNumbers(entry.sourceOrderNos);
+        entry.duplicate = false;
+        refreshEntryWarnings(entry);
+        renderPending();
+      }));
+    });
+  }
+
+  function setDropStatus(category, text, kind = '') {
+    if (typeof document === 'undefined') return;
+    const element = document.getElementById(category === 'martin' ? 'v38MartinStatus' : 'v38BoxStatus');
+    if (element) { element.textContent = text; element.className = `v38-drop-status ${kind}`; }
+  }
+
+  async function processFiles(fileList, category) {
+    if (processing) return;
+    const files = [...fileList].filter(file => /\.(msg|pdf)$/i.test(file.name));
+    if (!files.length) return alert('Nem található .msg fájl. Teszteléshez közvetlen .pdf is behúzható.');
+    processing = true;
+    setDropStatus(category, `Feldolgozás: 0 / ${files.length}`, 'busy');
+    renderPending();
+    let success = 0, failures = 0;
+    for (let index = 0; index < files.length; index++) {
+      const file = files[index];
+      setDropStatus(category, `Feldolgozás: ${index + 1} / ${files.length} · ${file.name}`, 'busy');
+      try {
+        const entries = await parseDroppedFile(file, category);
+        /* V92: az újonnan behúzott rendelés a lista TETEJÉRE kerül, hogy ne
+           kelljen mindig az aljára görgetni. Egy fájlon belül a sorrend
+           megmarad. */
+        pending.unshift(...entries);
+        success += entries.length;
+      } catch (error) {
+        failures++;
+        console.error('[V43] Outlook import hiba', file.name, error);
+        pending.unshift({
+          _id: id(), approved: false, category, sourceName: file.name, subject: '', pdfName: '', attachmentNames: [], scheduleDate: selectedImportDate(), orderNo: '', pickupName: '', pickupAddress: '', projectName: '', dropAddress: '', items: [], warnings: [`Feldolgozási hiba: ${error?.message || error}`], duplicate: false, extractionReason: ''
+        });
+      }
+      renderPending();
+    }
+    processing = false;
+    setDropStatus(category, `${success} rendelés felismerve${failures ? ` · ${failures} fájl hibás` : ''}`, failures ? 'warn' : 'ok');
+    renderPending();
+  }
+
+  function findMartinVehicle() {
+    return (typeof activeVehicles === 'function' ? activeVehicles() : state.vehicles || []).find(vehicle => nrm(vehicle.driverName).includes('martin'))
+      || (state.vehicles || []).find(vehicle => nrm(vehicle.driverName).includes('martin'));
+  }
+
+  function findMarioVehicle() {
+    return (typeof activeVehicles === 'function' ? activeVehicles() : state.vehicles || []).find(vehicle => nrm(vehicle.driverName).includes('mario'))
+      || (state.vehicles || []).find(vehicle => nrm(vehicle.driverName).includes('mario'))
+      || (typeof activeVehicles === 'function' ? activeVehicles()[0] : (state.vehicles || []).find(vehicle => vehicle.active !== false));
+  }
+
+  function masterIdsForEntry(entry) {
+    const supplier = (state.suppliers || []).find(item => nrm(item.name) === nrm(entry.pickupName) && (!entry.pickupAddress || nrm(item.address) === nrm(entry.pickupAddress)))
+      || (state.suppliers || []).find(item => nrm(item.address) === nrm(entry.pickupAddress));
+    const exactProjects = (state.projects || []).filter(item => nrm(item.name) === nrm(entry.projectName));
+    let project = (state.projects || []).find(item => entry.projectId && item.id === entry.projectId)
+      || exactProjects.find(item => String(item.address || '').trim())
+      || exactProjects[0]
+      || (state.projects || []).find(item => entry.dropAddress && nrm(item.address) === nrm(entry.dropAddress));
+    if ((entry.orderType === 'KRPR' || entry.orderType === 'NRPR' || entry.orderType === 'BR0') && (!project?.address || !entry.dropAddress)) {
+      project = projectWithAddressFromMaster(project || { id: entry.projectId || '', name: entry.projectName || '' }, `${entry.sourcePdfText || ''}
+${entry.sourceBody || ''}
+${entry.subject || ''}`) || project;
+    }
+    return { supplier, project };
+  }
+
+  function ensureSupplierMaster(entry) {
+    if ((entry?.pickupRole || 'supplier') !== 'supplier') return null;
+    const name = String(entry?.pickupName || '').trim();
+    const address = String(entry?.pickupAddress || '').trim();
+    if (!name || !address) return null;
+    return (state.suppliers || []).find(item => nrm(item.name) === nrm(name) && nrm(item.address) === nrm(address)) || null;
+  }
+
+  function entryToOrder(entry) {
+    const existingSupplier = ensureSupplierMaster(entry);
+    const { supplier, project } = masterIdsForEntry(entry);
+    const resolvedSupplier = supplier || existingSupplier;
+    if ((entry.orderType === 'KRPR' || entry.orderType === 'NRPR' || entry.orderType === 'BR0') && project?.address && !entry.dropAddress) {
+      entry.projectId = project.id || entry.projectId || '';
+      entry.projectName = project.name || entry.projectName || '';
+      entry.dropAddress = project.address;
+      entry.warnings = (entry.warnings || []).filter(warning => !/Lerakó címe|Projekt címe/i.test(warning));
+    }
+    const martin = findMartinVehicle();
+    const mario = findMarioVehicle();
+    const isMartin = entry.category === 'martin';
+    const recipient = project?.defaultRecipientId ? (state.recipients || []).find(item => item.id === project.defaultRecipientId) : null;
+    const sourceNos = entry.sourceOrderNos?.length ? entry.sourceOrderNos : orderNumbersOf(entry);
+    return {
+      id: id(), scheduleDate: normalizeWorkdayISO(entry.scheduleDate || selectedImportDate() || tomorrowISO()), vehicleId: isMartin ? (martin?.id || '') : (mario?.id || ''), sequence: 999,
+      orderNo: entry.orderNo || sourceNos.join(', '), sourceOrderNos: sourceNos, fullOrderRefs: entry.fullOrderRefs || [], orderType: entry.orderType || 'SR0', isReturn: !!entry.isReturn,
+      topicName: entry.projectName, pickupName: entry.pickupRole === 'supplier' ? (resolvedSupplier?.name || '') : entry.pickupName, pickupAddress: entry.pickupRole === 'supplier' ? (resolvedSupplier?.address || '') : entry.pickupAddress, pickupNote: resolvedSupplier?.pickupNote || resolvedSupplier?.note || entry.pickupNote || '', supplierId: entry.pickupRole === 'supplier' ? (resolvedSupplier?.id || '') : '',
+      projectName: entry.projectName, projectId: entry.dropRole === 'project' ? (project?.id || entry.projectId || '') : '', dropAddress: entry.dropAddress,
+      pickupRole: entry.pickupRole || 'supplier', dropRole: entry.dropRole || 'project', returnSourceProjectId: entry.returnSourceProjectId || '', returnDestinationSupplierId: entry.returnDestinationSupplierId || '',
+      recipientId: recipient?.id || entry.recipientId || '', recipientName: recipient?.name || entry.recipientName || '', recipientPhone: recipient?.phone || entry.recipientPhone || '', recipientEmail: recipient?.email || entry.recipientEmail || '',
+      requestedDeadline: entry.requestedDate || '',
+      /* V73: a megjegyzés mezőbe a TE szöveged kerül, nem a fájlnév. Eddig
+         "Outlook import · SR0 · levél.msg" állt benne, ami a buborékban
+         elfoglalta a megjegyzés helyét, és szerkeszteni sem lehetett.
+         A forrás felismeréséhez az outlookImport jelző marad. */
+      note: String(entry.manualItems || '').trim(),
+      outlookImport: true,
+      outlookSourceFile: entry.sourceName || '',
+      outlookPdfFile: entry.pdfName || '',
+      // V60: a levél lényege a fuvaron marad, hogy a sofőr hálózat nélkül is
+      // elolvashassa. A mellékletek a szállítólevél-tárolóba kerülnek.
+      // V65: a kézzel felvitt tételszöveg. Akkor kell, ha a bizonylatról nem
+      // sikerült tételt felismerni; az admin és a sofőri felületen is látszik.
+      manualItems: String(entry.manualItems || '').trim(),
+      sourceMail: entry.sourceMail ? {
+        subject: entry.sourceMail.subject || entry.subject || '',
+        from: entry.sourceMail.from || '',
+        body: String(entry.sourceMail.body || '').slice(0, 6000),
+        attachmentNames: entry.sourceMail.attachmentNames || [],
+        attachmentsUnreadable: !!entry.sourceMail.attachmentsUnreadable,
+        fileName: entry.sourceMail.fileName || entry.sourceName || ''
+      } : null,
+      items: (entry.items || []).map(item => ({ ...item, _id: item._id || id(), received: false, missingQty: '' })),
+      longMaterialReason: isMartin ? ((entry.items || []).find(item => item.longMaterial)?.name || 'Martin / Platós Outlook import') : '',
+      markedMartin: isMartin, importVehicleCategory: isMartin ? 'martin' : 'dobozos', importAutoRaw: isMartin ? 'Martin' : 'Dobozos', importVehicleLocked: isMartin,
+      messageOrderNos: entry.messageOrderNos?.length ? entry.messageOrderNos.slice() : sourceNos.slice(),
+      missingSupplierMaster: ((entry.pickupRole || 'supplier') === 'supplier' && !resolvedSupplier?.id) || (entry.dropRole === 'supplier' && !entry.returnDestinationSupplierId),
+      missingProjectMaster: (entry.pickupRole === 'project' && !entry.pickupAddress) || ((entry.dropRole || 'project') === 'project' && !entry.dropAddress),
+      outlookImport: true, outlookSourceFile: entry.sourceName, outlookPdfFile: entry.pdfName || '', outlookImportedAt: new Date().toISOString(), completed: false
+    };
+  }
+
+  /* V73 – A 000000 A "NINCS RENDELÉSSZÁM" GYŰJTŐKÓD
+
+     Visszárunál és hasonló fuvaroknál nincs valódi rendelésszám. Ilyenkor
+     000000 írható be. Ez viszont NEM azonosító: ha egy napon több ilyen
+     fuvar van, azok külön fuvarok, nem egymás frissítései.
+
+     Ezért a 000000 (és a csupa nulla alakok) sem az azonosításban, sem a
+     meglévő fuvar keresésében nem vesznek részt – minden ilyen bejegyzés
+     önálló marad. */
+  function isPlaceholderOrderNo(value) {
+    const text = String(value || '').trim();
+    return !!text && /^0+$/.test(text);
+  }
+
+  function meaningfulOrderNos(numbers) {
+    return (numbers || []).map(String).filter(no => no && !isPlaceholderOrderNo(no));
+  }
+
+  function importIdentity(entry) {
+    const raw = (entry.sourceOrderNos?.length ? entry.sourceOrderNos : orderNumbersOf(entry));
+    const numbers = meaningfulOrderNos(raw).sort();
+    // gyűjtőkódnál az entry saját azonosítója dönt, így minden ilyen fuvar külön marad
+    return `${entry.isReturn ? 'VISSZARU' : (entry.orderType || 'SR0')}|${numbers.join(',') || entry._id}`;
+  }
+
+  function commitImport() {
+    const approved = pending.filter(entry => entry.approved);
+    if (!approved.length) return alert('Nincs jóváhagyott rendelés.');
+
+    const latestByIdentity = new Map();
+    approved.forEach(entry => latestByIdentity.set(importIdentity(entry), entry));
+    const selected = [...latestByIdentity.values()];
+    const acceptedEntries = [], skipped = [];
+    for (const entry of selected) {
+      const numbers = entry.sourceOrderNos?.length ? entry.sourceOrderNos : orderNumbersOf(entry);
+      /* V65: korábban csak annyi állt az üzenetben, hogy "Kihagyva: 1", ezért
+         nem lehetett tudni, mit kell pótolni. Most megnevezi a hiányzó mezőt.
+         A tételek NEM kötelezők – az importot csak ez a három adat blokkolja. */
+      const missing = [];
+      if (!numbers.length && !orderNoWaived(entry)) missing.push('rendelésszám');
+      if (!entry.pickupName) missing.push('felrakó');
+      if (!entry.projectName) missing.push('lerakó/projekt');
+      if (missing.length) {
+        skipped.push(`${entry.sourceName}: hiányzik – ${missing.join(', ')}`);
+        continue;
+      }
+      if (!numbers.length && orderNoWaived(entry)) entry.orderNo = '-';
+      entry.sourceOrderNos = numbers;
+      entry.scheduleDate = normalizeWorkdayISO(entry.scheduleDate || selectedImportDate() || tomorrowISO());
+      acceptedEntries.push(entry);
+    }
+    if (!acceptedEntries.length) return alert(`Nem került be rendelés.\n${skipped.join('\n')}`);
+
+    const replaceIds = new Set();
+    for (const entry of acceptedEntries) {
+      // a gyűjtőkódos fuvar soha nem ír felül korábbit
+      const numbers = meaningfulOrderNos(entry.sourceOrderNos);
+      if (!numbers.length) continue;
+      matchingOutlookOrders(numbers, entry.orderType, entry.isReturn, entry.scheduleDate,
+        pickupIdentityKey(entry.pickupName, entry.pickupAddress))
+        .forEach(order => replaceIds.add(order.id));
+    }
+    const replacementCount = replaceIds.size;
+    /* V107 – A FRISSÍTETT FUVAR ÖRÖKLI A RÉGI MELLÉKLETEIT
+
+       Az import a meglévő fuvart TÖRLI, és új azonosítóval hozza létre
+       újra. A korábban feltöltött szállítólevelek és csatolmányok viszont a
+       RÉGI azonosítóhoz tartoznak a tárolóban – így az új fuvar üresen állt,
+       és a Csatolmány azt írta, hogy a fájlok nincsenek feltöltve.
+
+       Ezért megjegyezzük, melyik régi fuvar helyére jön az új, és a
+       feltöltés után átkötjük a régi fájlokat. */
+    const lecsereltek = (state.orders || []).filter(order => replaceIds.has(order.id));
+    const elozoAzonositok = new Map();
+    for (const regi of lecsereltek) {
+      const kulcs = `${String(regi.orderNo || '').trim()}|${norm(regi.pickupName || '')}`;
+      elozoAzonositok.set(kulcs, String(regi.id));
+    }
+    if (replaceIds.size) {
+      state.orders = (state.orders || []).filter(order => !replaceIds.has(order.id));
+      state.backlog = (state.backlog || []).filter(record => !replaceIds.has(record.sourceOrderId) && !replaceIds.has(record.targetOrderId));
+      state.resolvedBacklog = (state.resolvedBacklog || []).filter(record => !replaceIds.has(record.sourceOrderId) && !replaceIds.has(record.targetOrderId));
+    }
+
+    const accepted = acceptedEntries.map(entryToOrder);
+    state.orders = state.orders || [];
+    state.orders.push(...accepted);
+    if (global.V47MasterLearning?.learnFromOrder) accepted.forEach(order => global.V47MasterLearning.learnFromOrder(order, null, {}));
+    state.routePlans = state.routePlans || {};
+    for (const order of accepted) state.routePlans[order.scheduleDate] = {};
+    if (typeof save === 'function') save(false);
+
+    /* V77: az import eredményét AZONNAL feltöltjük, nem várunk a 900 ms-os
+       késleltetésre. Ha közben újratöltődik a lap – vagy a helyi mentés
+       elbukik –, a beimportált fuvarok akkor is megvannak a szerveren. */
+    try { global.flushPendingSyncV70?.(); } catch (error) { console.warn('[V77] azonnali feltöltés', error); }
+
+    // V60: a levél mellékleteit feltöltjük a fuvarhoz, hogy a sofőr a saját
+    // felületén megnyithassa. Ha nincs kapcsolat, a levél szövege akkor is
+    // elérhető marad a fuvaron.
+    /* V73: a helyi mentés a feltöltéstől függetlenül megtörténik. */
+    acceptedEntries.forEach((entry, index) => {
+      const inline = entry?.sourceMail?.inlineFiles;
+      const order = accepted[index];
+      if (inline?.length && order?.id && typeof global.saveOrderAttachmentsV73 === 'function') {
+        global.saveOrderAttachmentsV73(order.id, inline);
+      }
+    });
+    /* a régi fuvar mellékleteinek átkötése az újra */
+    if (elozoAzonositok.size && global.V44Online?.relinkDeliveryFiles) {
+      for (const order of accepted) {
+        const kulcs = `${String(order.orderNo || '').trim()}|${norm(order.pickupName || '')}`;
+        const regiId = elozoAzonositok.get(kulcs);
+        if (regiId && regiId !== String(order.id)) {
+          global.V44Online.relinkDeliveryFiles(regiId, String(order.id))
+            .catch(error => console.warn('[V107] a régi mellékletek átkötése nem sikerült', order.orderNo, error));
+        }
+      }
+    }
+    /* V108: a levél mellékletei a FUVARHOZ is elmentődnek, a levélből érkező
+       eredeti bájtokkal. Így a Csatolmány akkor is megnyitja őket, ha a
+       szerverre nem jutottak fel, vagy épp nincs internet. */
+    if (global.saveMailAttachmentsV108) {
+      acceptedEntries.forEach((entry, index) => {
+        const order = accepted[index];
+        const files = (entry?.sourceMail?.files || []).map(item => ({
+          name: item.name,
+          type: /\.pdf$/i.test(item.name) ? 'application/pdf'
+            : /\.docx$/i.test(item.name) ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            : /\.xlsx$/i.test(item.name) ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : 'application/octet-stream',
+          bytes: item.content instanceof Uint8Array ? item.content : new Uint8Array(item.content || [])
+        }));
+        if (order?.id && files.length) {
+          global.saveMailAttachmentsV108(String(order.id), files)
+            .catch(error => console.warn('[V108] a melléklet helyi mentése', error));
+        }
+      });
+    }
+    uploadSourceMailFiles(acceptedEntries, accepted).catch(error =>
+      console.warn('[V60] A levél mellékletének feltöltése nem sikerült', error));
+
+    const acceptedIds = new Set(acceptedEntries.map(entry => entry._id));
+    pending = pending.filter(entry => !acceptedIds.has(entry._id));
+    renderPending();
+
+    const firstDate = accepted[0]?.scheduleDate || tomorrowISO();
+    const workDate = typeof document !== 'undefined' ? document.getElementById('workDate') : null;
+    const driverDate = typeof document !== 'undefined' ? document.getElementById('driverDate') : null;
+    if (workDate) workDate.value = firstDate;
+    if (driverDate) driverDate.value = firstDate;
+    if (typeof showPage === 'function') showPage('planner');
+    if (typeof render === 'function') render();
+    else {
+      if (typeof renderRoutes === 'function') renderRoutes();
+      if (typeof renderOrders === 'function') renderOrders();
+    }
+
+    const martinCount = accepted.filter(order => order.importVehicleCategory === 'martin').length;
+    const boxCount = accepted.filter(order => order.importVehicleCategory === 'dobozos').length;
+    alert(`${accepted.length} Outlook-rendelés importálva a(z) ${firstDate} napra. Martin / Platós: ${martinCount}, Dobozos: ${boxCount}.${replacementCount ? `\nFrissített korábbi Outlook-import: ${replacementCount}` : ''}${skipped.length ? `\n\nKIHAGYVA (${skipped.length}):\n${skipped.join('\n')}\n\nEzeket az előnézetben pótold, majd importáld újra.` : ''}\nA Dobozos fuvarok ideiglenesen Máriónál látszanak, a „Fuvar szétosztása” gomb újraosztja őket.`);
+  }
+
+  function clearPreview() {
+    if (pending.length && !confirm('Törlöd az Outlook-import teljes előnézetét?')) return;
+    pending = [];
+    renderPending();
+    setDropStatus('dobozos', 'Még nincs fájl.');
+    setDropStatus('martin', 'Még nincs fájl.');
+  }
+
+  function clearAllImports() {
+    if (pending.length && !confirm('Törlöd az Outlook-import jelenlegi előnézetét? A már jóváhagyott fuvarok megmaradnak.')) return;
+    pending = [];
+    renderPending();
+    setDropStatus('dobozos', 'Még nincs fájl.');
+    setDropStatus('martin', 'Még nincs fájl.');
+    if (typeof updateSummary === 'function') updateSummary();
+  }
+
+  function bindDropZone(zoneId, inputId, category) {
+    const zone = document.getElementById(zoneId), input = document.getElementById(inputId);
+    if (!zone || !input) return;
+    ['dragenter', 'dragover'].forEach(type => zone.addEventListener(type, event => { event.preventDefault(); zone.classList.add('dragover'); }));
+    ['dragleave', 'drop'].forEach(type => zone.addEventListener(type, event => { event.preventDefault(); zone.classList.remove('dragover'); }));
+    zone.addEventListener('drop', event => processFiles(event.dataTransfer.files, category));
+    input.addEventListener('change', event => { processFiles(event.target.files, category); input.value = ''; });
+  }
+
+  function migrateV41MasterData() {
+    let changed = false;
+    for (const supplier of state.suppliers || []) {
+      if (/szerelv[eé]nybolt/i.test(supplier.name || '') && nrm(supplier.address) !== nrm('1182 Budapest, Üllői út 807/B')) { supplier.address = '1182 Budapest, Üllői út 807/B'; supplier.manualOverride = true; changed = true; }
+    }
+    for (const order of state.orders || []) if (/szerelv[eé]nybolt/i.test(order.pickupName || '') && nrm(order.pickupAddress) !== nrm('1182 Budapest, Üllői út 807/B')) { order.pickupAddress = '1182 Budapest, Üllői út 807/B'; changed = true; }
+    for (const project of state.projects || []) if (/^(k[oö]zponti rakt[aá]r|szigetszentmikl[oó]s_rakt[aá]r)$/i.test(project.name || '') && nrm(project.address) !== nrm(CENTRAL_WAREHOUSE.address)) { project.address = CENTRAL_WAREHOUSE.address; changed = true; }
+    state.settings = state.settings || {};
+    if (!state.settings.baseAddress || /keresked[oő] utca(?:\s*$|\s*2)/i.test(state.settings.baseAddress)) state.settings.baseAddress = CENTRAL_WAREHOUSE.address;
+    if (changed) { state.routePlans = {}; state.routeStats = {}; if (typeof KEY !== 'undefined' && typeof localStorage !== 'undefined') localStorage.setItem(KEY, JSON.stringify(state)); }
+    return changed;
+  }
+
+  function syncBacklogItemState(order) {
+    if (!order) return;
+    state.backlog = state.backlog || [];
+    state.resolvedBacklog = state.resolvedBacklog || [];
+    const received = new Set((order.items || []).filter(item => item.received).map(item => item._id).filter(Boolean));
+    const open = [];
+    for (const record of state.backlog) {
+      if (record.targetOrderId === order.id && record.itemId && received.has(record.itemId)) state.resolvedBacklog.push({ ...record, resolvedAt: new Date().toISOString() });
+      else open.push(record);
+    }
+    state.backlog = open;
+    const openItemIds = new Set((order.items || []).filter(item => !item.received).map(item => item._id).filter(Boolean));
+    const stillResolved = [];
+    for (const record of state.resolvedBacklog) {
+      if (record.targetOrderId === order.id && record.itemId && openItemIds.has(record.itemId)) {
+        const restored = { ...record }; delete restored.resolvedAt; state.backlog.push(restored);
+      } else stillResolved.push(record);
+    }
+    state.resolvedBacklog = stillResolved;
+    order.completed = (order.items || []).length > 0 && order.items.every(item => item.received);
+    order.backlogResolved = order.completed && ((state.resolvedBacklog || []).some(record => record.targetOrderId === order.id) || !!order.movedFromOrderId);
+    if (order.backlogResolved) order.resolvedBacklogAt = order.resolvedBacklogAt || new Date().toISOString();
+  }
+
+  function installBacklogPatch() {
+    global.toggleItem = (orderId, index, value) => {
+      const order = state.orders.find(item => item.id === orderId);
+      if (!order?.items?.[index]) return;
+      order.items[index].received = !!value;
+      if (value) order.items[index].missingQty = '';
+      syncBacklogItemState(order);
+      if (typeof save === 'function') save(false);
+      if (typeof openItems === 'function' && document.getElementById('itemsDialog')?.open) openItems(orderId);
+      if (typeof renderRoutes === 'function') renderRoutes();
+      if (typeof renderDriver === 'function') renderDriver();
+      if (typeof renderBacklog === 'function') renderBacklog();
+    };
+  }
+
+  function bindV41() {
+    migrateV41MasterData();
+    installBacklogPatch();
+    const dateInput = document.getElementById('v38ImportDate');
+    if (dateInput && !dateInput.value) dateInput.value = tomorrowISO();
+    dateInput?.addEventListener('change', () => {
+      const date = normalizeWorkdayISO(dateInput.value || tomorrowISO()) || tomorrowISO();
+      dateInput.value = date;
+      pending.forEach(entry => { if (!entry.scheduleDateManual) entry.scheduleDate = date; });
+      renderPending();
+    });
+    bindDropZone('v38BoxDrop', 'v38BoxInput', 'dobozos');
+    bindDropZone('v38MartinDrop', 'v38MartinInput', 'martin');
+    document.getElementById('v38ClearPreview')?.addEventListener('click', clearPreview);
+    document.getElementById('v41ClearAllImports')?.addEventListener('click', clearAllImports);
+    document.getElementById('v38CommitImport')?.addEventListener('click', commitImport);
+    renderPending();
+    global.FUVARSZERVEZO_VERSION = VERSION;
+    const previousDiagnostics = global.getFuvarszervezoDiagnostics;
+    global.getFuvarszervezoDiagnostics = () => ({ ...(typeof previousDiagnostics === 'function' ? previousDiagnostics() : {}), version: VERSION, outlookImport: true, outlookImportCategories: ['Dobozos', 'Martin / Platós'], outlookOrderNoRule: 'csak a / utáni rész', outlookPdfAttachments: true, outlookMsgReader: 'beépített helyi CFB parser', krprRule: true, prprRule: true, returnRule: true, autoSupplierMaster: false, supplierAddressSource: 'uploaded-master-only', itemLevelBacklog: true });
+  }
+
+  const V41_API = {
+    version: VERSION,
+    extractOrderNo,
+    extractOrderRefs,
+    orderNumbersOf,
+    isReturnText,
+    extractExplicitPickup,
+    parseBodyItems,
+    extractTransferWarehouses,
+    transferColumns,
+    warehouseFromColumn,
+    transferNameKeys,
+    transferNameMatch,
+    isCentralWarehouseName,
+    duplicateOrderNumbers,
+    inferProjectHint,
+    supplierSpecial,
+    parsePdfItemsFromLines,
+    blockingFields,
+    pickupIdentityKey,
+    projectAddressFromHistoryV90,
+    dropAddressSelect,
+    supplierAddressSelect,
+    applyBodyPickupSiteV79,
+    bytesToDataUrlV73,
+    isPlaceholderOrderNo,
+    meaningfulOrderNos,
+    normalizeQtyV71,
+    transferNameMatch,
+    closeEnoughV71,
+    isLongMaterialV71,
+    headerOrderTypeV71,
+    orderNoWaived,
+    importIdentity,
+    refreshEntryWarnings,
+    supplierNameSelect,
+    projectNameSelect,
+    applyBodyScopeV60,
+    meaningfulBodyText,
+    bestSupplier,
+    supplierFromPdfHeader,
+    bestProject,
+    projectWithAddressFromMaster,
+    buildExtractedEntry,
+    entryToOrder,
+    ensureSupplierMaster,
+    migrateV41MasterData,
+    syncBacklogItemState,
+    parseDroppedFile,
+    processFiles,
+    commitImport,
+    clearPreview,
+    clearAllImports,
+    classifyPdfDocument,
+    splitPdfDocumentByOrders,
+    projectFromPdfMaster,
+    projectMasterByIdentity,
+    matchingOutlookOrders,
+    tomorrowISO,
+    shiftWorkdayISO,
+    normalizeWorkdayISO,
+    getPending: () => pending.slice(),
+    setPending: value => { pending = Array.isArray(value) ? value : []; if (typeof document !== 'undefined') renderPending(); }
+  };
+  global.V41OutlookImport = V41_API;
+  global.V40OutlookImport = V41_API;
+
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindV41, { once: true });
+    else bindV41();
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
