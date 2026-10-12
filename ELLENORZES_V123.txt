@@ -1,0 +1,24 @@
+ELLENŐRZÉS – V123
+=================
+
+Automatikus elfogadási tesztek: TEST_V123.js
+Eredmény: 430/430 sikeres.
+
+JavaScript szintaxisellenőrzés:
+- app.js: OK
+- planner-v44.js: OK
+- auth-v44-2.js: OK
+- online-v44-2.js: OK
+- sw.js: OK
+
+HTMLParser: index.html hibamentes.
+
+Kiemelt ellenőrzések:
+- Az archív ZIP a szállítóleveleket közvetlenül a gyökérbe teszi.
+- A név rendelésszám_dátum.kiterjesztés alakú, például 6786_20261012.jpeg.
+- Az azonos névre ütköző fájlok sorszámot kapnak, nem írják felül egymást.
+- Csak sikeresen letöltött fájl kap archivált jelölést.
+- Új szállítólevél megjelenik az archiválási számlálóban.
+- A friss fájl nem törölhető; a korábbi legalább két napos szabály megmarad.
+- A sofőr korábbi fuvarjainak SQL-szabálya változatlan; nem kell újra futtatni.
+- Az alkalmazás V123 erőforrás-hivatkozásokat és friss cache-nevet használ.

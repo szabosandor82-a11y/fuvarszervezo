@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V123Planner?.version||window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -1730,6 +1730,30 @@ function humanSizeV119(bytes){
   return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round((+bytes || 0) / 1024))} kB`;
 }
 
+/* V123 – a ZIP-ben minden szállítólevél közvetlenül a gyökérbe kerül.
+   Az azonos rendelés/nap/kiterjesztés ütközéseit sorszámmal oldjuk fel,
+   hogy egyetlen feltöltés se írja felül a másikat. */
+function archiveFileNameV123(file, order, usedNames){
+  const orderNo = String(order?.orderNo || '').trim();
+  const orderPart = orderNo.replace(/[^\w.-]+/g, '_') ||
+    `rendeles_${String(file?.order_id || 'ismeretlen').replace(/[^\w.-]+/g, '_')}`;
+  const uploadDate = String(file?.created_at || '').slice(0, 10).replace(/-/g, '') || 'datum_nelkul';
+  const originalName = String(file?.file_name || '');
+  const extensionMatch = originalName.match(/(\.[A-Za-z0-9]{1,10})$/);
+  const mimeExtensions = {
+    'image/jpeg': '.jpeg', 'image/jpg': '.jpg', 'image/png': '.png',
+    'image/webp': '.webp', 'application/pdf': '.pdf'
+  };
+  const extension = (extensionMatch?.[1] || mimeExtensions[String(file?.mime_type || '').toLowerCase()] || '.bin').toLowerCase();
+  const base = `${orderPart}_${uploadDate}`;
+  let name = `${base}${extension}`;
+  let suffix = 2;
+  const taken = usedNames || new Set();
+  while (taken.has(name.toLowerCase())) name = `${base}_${suffix++}${extension}`;
+  taken.add(name.toLowerCase());
+  return name;
+}
+
 function bindArchiveButtonsV119(){
   const arch=$('#v119Archive'), purge=$('#v119Purge'), refresh=$('#v119ArchiveRefresh');
   if(arch&&arch.dataset.v119!=='1'){ arch.dataset.v119='1'; arch.onclick=runArchiveV119; }
@@ -1782,7 +1806,8 @@ async function runArchiveV119(){
     if (!lista.length) { host.textContent = 'Nincs archiválandó fájl.'; return; }
 
     const zip = new JSZip();
-    const sorok = ['rendelés;fájl;feltöltve;méret'];
+    const sorok = ['rendelés;archív fájlnév;eredeti fájlnév;feltöltve;méret'];
+    const hasznaltFajlnevek = new Set();
     let kesz = 0, sikertelen = 0;
 
     /* V120 – GYORSABB ARCHIVÁLÁS
@@ -1822,10 +1847,9 @@ async function runArchiveV119(){
       if (!valasz.ok) throw new Error('letöltési hiba');
       const adat = await valasz.arrayBuffer();
       const fuvar = (state.orders || []).find(o => String(o.id) === String(file.order_id));
-      const mappa = (fuvar?.orderNo || file.order_id || 'egyeb').replace(/[^\w.-]+/g, '_');
-      const nev = `${String(file.created_at || '').slice(0, 10)}_${(file.file_name || 'fajl').replace(/[^\w.-]+/g, '_')}`;
-      zip.folder(mappa).file(nev, adat);
-      sorok.push(`${fuvar?.orderNo || ''};${file.file_name || ''};${String(file.created_at || '').slice(0, 16)};${file.file_size || 0}`);
+      const nev = archiveFileNameV123(file, fuvar, hasznaltFajlnevek);
+      zip.file(nev, adat);
+      sorok.push(`${fuvar?.orderNo || ''};${nev};${file.file_name || ''};${String(file.created_at || '').slice(0, 16)};${file.file_size || 0}`);
       file.__archived = true;
     };
 

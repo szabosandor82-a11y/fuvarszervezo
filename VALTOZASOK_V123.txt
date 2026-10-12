@@ -1,0 +1,30 @@
+FUVARSZERVEZŐ V123
+==================
+
+1. ARCHÍV ZIP – LAPOS FÁJLLISTA
+-------------------------------
+Az archiválás nem hoz létre rendelésenkénti almappákat. A szállítólevelek
+közvetlenül a ZIP megnyitásakor, annak gyökerében látszanak.
+
+A név a fuvar rendelésszámából és a feltöltés napjából áll, a fájl
+kiterjesztése megmarad. Példa: 6786_20261012.jpeg. A fájlnévben útvonalat
+létrehozó karaktereket aláhúzás váltja. Ha ugyanahhoz a rendeléshez ugyanazon
+a napon több azonos kiterjesztésű fájl érkezik, a továbbiak _2, _3 stb.
+sorszámot kapnak, így a ZIP nem írja felül őket.
+
+A tartalomjegyzék a generált archív fájlnevet és a feltöltött eredeti
+fájlnevet is tartalmazza. Az archiválás továbbra sem töröl: csak az a fájl
+kap archivált jelölést, amely sikeresen bekerült a ZIP-be. A tárhelyről csak
+a már archivált, legalább két napos fájl törölhető, külön megerősítéssel.
+
+2. A V122-BEN ELKÉSZÜLT FUNKCIÓK MEGMARADTAK
+------------------------------------------
+- A teljes havi naptár egy képernyőn látható.
+- A nap részleteinél a fuvarok és megjegyzéseik megnyithatók.
+- Az új feltöltések azonnal archiválásra jelölhetők.
+- A sofőr korábbi fuvarjainak dátum-összehasonlítása működő SQL-típust használ.
+
+3. VERZIÓ ÉS GYORSÍTÓTÁR
+------------------------
+Az alkalmazás V123 néven jelenik meg. A hivatkozások és a service worker
+cache-neve frissült, hogy a böngésző az új archiválási logikát töltse be.
