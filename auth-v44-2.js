@@ -141,7 +141,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V121Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V122Planner?.version||global.V121Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -490,7 +490,10 @@
       await global.V44Online.loadOrdersIntoState();
       if (isAdmin()) { await global.V44Online.loadMasterIntoState({ preserveLocalIfRemoteEmpty: true }); if (typeof render === 'function') render(); }
       await refreshTransfers();
-      if (isAdmin()) await renderAdminOnlinePage(); else await renderDriverPortal();
+      if (isAdmin()) {
+        await renderAdminOnlinePage();
+        if (byId('onlineAdmin')?.classList.contains('active')) await global.renderArchiveSummaryV119?.();
+      } else await renderDriverPortal();
     } catch (error) {
       alert(`Online frissítési hiba: ${error.message}`);
     } finally {
@@ -1354,7 +1357,7 @@
          Korábban külön menüpontot csináltunk neki, pedig ez a lap már
          létezett – csak belépéskor épül, ezért nem volt az index.html-ben. */
       section.innerHTML = '<div class="page-head"><div><small>ONLINE</small><h2>Beállítások és fuvarátadások</h2></div></div><div id="onlineAdminContent"></div>'
-        + '<section class="panel v119-archive"><h3>Szállítólevelek archiválása</h3><p class="v108-hint">Az archiválás egy zip-be menti a feltöltött szállítóleveleket. A törlés csak azokat veszi le a tárhelyről, amik már bizonyítottan bekerültek egy zip-be. A mai és tegnapi fuvarokhoz nem nyúl.</p><div id="v119Summary" class="v119-summary">Összesítés betöltése…</div><div class="v119-buttons"><button type="button" id="v119Archive">Archiválás</button><button type="button" id="v119Purge" class="v115-danger">Archiváltak törlése</button></div><div id="v119Progress" class="v119-progress hidden"></div></section>';
+        + '<section class="panel v119-archive"><h3>Szállítólevelek archiválása</h3><p class="v108-hint">Az új feltöltések is azonnal bekerülhetnek a ZIP-be. Törölni csak már archivált, legalább két napos fájlokat lehet, külön megerősítéssel.</p><div id="v119Summary" class="v119-summary">Összesítés betöltése…</div><div class="v119-buttons"><button type="button" id="v119ArchiveRefresh" class="secondary">Összesítés frissítése</button><button type="button" id="v119Archive">Archiválás</button><button type="button" id="v119Purge" class="v115-danger">Archiváltak törlése</button></div><div id="v119Progress" class="v119-progress hidden"></div></section>';
       document.querySelector('main')?.append(section);
       const navButton = document.createElement('button');
       navButton.className = 'nav'; navButton.dataset.page = 'onlineAdmin'; navButton.innerHTML = '<span>⚙</span><small>Beállítások</small>';

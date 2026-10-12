@@ -2,10 +2,10 @@
 <html lang="hu">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0c1c2b" media="(min-width:1024px)"><meta name="theme-color" content="#f2f6fb" media="(max-width:1023px)"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Fuvar V121"><meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0c1c2b" media="(min-width:1024px)"><meta name="theme-color" content="#f2f6fb" media="(max-width:1023px)"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Fuvar V122"><meta name="mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><link rel="stylesheet" href="styles.css?v=121.0">
-<title>Fuvarszervező V121</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><link rel="stylesheet" href="styles.css?v=122.0">
+<title>Fuvarszervező V122</title>
 </head>
 <body class="auth-pending">
 <section id="authScreen" class="auth-screen hidden" aria-label="Belépés">
@@ -24,7 +24,7 @@
 
 <section id="driverPortal" class="driver-portal hidden">
   <header class="driver-portal-header">
-    <div><small>STAND 98 · MOBIL</small><h1 data-app-version>Fuvarszervező V121</h1><p id="driverPortalIdentity"></p></div>
+    <div><small>STAND 98 · MOBIL</small><h1 data-app-version>Fuvarszervező V122</h1><p id="driverPortalIdentity"></p></div>
     <div class="driver-account-actions"><button id="driverLogout" type="button">Kilépés</button></div>
   </header>
   <div class="driver-portal-main">
@@ -32,13 +32,13 @@
     <div id="driverPortalContent"></div>
   </div>
 </section>
-<header class="topbar"><div id="brandHome" class="brand-home" title="Ugrás a következő munkanapra"><small>STAND 98 · LOGISZTIKA</small><h1 data-app-version>Fuvarszervező V121</h1></div><div class="header-search"><input id="globalSearch" type="search" placeholder="Keresés minden fuvaradatban…" autocomplete="off"><button id="clearGlobalSearch" class="search-clear hidden" type="button" title="Keresés törlése">×</button></div><div id="accountBar" class="account-bar hidden"><span id="accountIdentity"></span><button id="accountLogout" type="button" class="ghost">Kilépés</button></div></header>
+<header class="topbar"><div id="brandHome" class="brand-home" title="Ugrás a következő munkanapra"><small>STAND 98 · LOGISZTIKA</small><h1 data-app-version>Fuvarszervező V122</h1></div><div class="header-search"><input id="globalSearch" type="search" placeholder="Keresés minden fuvaradatban…" autocomplete="off"><button id="clearGlobalSearch" class="search-clear hidden" type="button" title="Keresés törlése">×</button></div><div id="accountBar" class="account-bar hidden"><span id="accountIdentity"></span><button id="accountLogout" type="button" class="ghost">Kilépés</button></div></header>
 <main>
 <section id="planner" class="page active">
   <div id="plannerMobileControlHost"></div>
   <div id="dayWarning" class="notice hidden"></div><div id="routes" class="routes"></div>
 </section>
-<section id="calendar" class="page"><div class="page-head"><div><small>STAND 98 · LOGISZTIKA</small><h2>Naptár</h2></div><div class="v121-cal-nav"><button type="button" id="calPrev" aria-label="Előző hónap">‹</button><b id="calTitle">—</b><button type="button" id="calNext" aria-label="Következő hónap">›</button><button type="button" id="calToday">Mai hónap</button></div></div><div id="calGrid" class="v121-cal"></div></section>
+<section id="calendar" class="page"><div class="page-head v122-calendar-head"><div><small>STAND 98 · LOGISZTIKA</small><h2>Naptár</h2></div><div class="v122-cal-nav"><button type="button" id="calPrev" aria-label="Előző hónap">‹</button><b id="calTitle">—</b><button type="button" id="calNext" aria-label="Következő hónap">›</button><button type="button" id="calToday" aria-label="Mai hónap">Ma</button></div></div><div id="calGrid" class="v122-cal"></div></section>
 <section id="orders" class="page"><div class="page-head"><div><small>RENDELÉSEK</small><h2>Összes fuvar</h2></div><button id="addOrderBtn" class="round">＋</button></div><div class="filters panel"><input id="orderSearch" placeholder="Keresés..."><select id="orderVehicleFilter"><option value="">Minden aktív autó</option></select></div><div id="orderList"></div></section>
 <section id="transfers" class="page"><div class="page-head"><div><small>SOFŐRÖK</small><h2>Fuvarátadások</h2></div><button type="button" id="transfersRefresh" class="round">⟳</button></div><div id="transfersContent"><div class="notice">Betöltés…</div></div></section>
 <section id="backlog" class="page"><div class="page-head"><div><small>HÁTRALÉK</small><h2>Mi csúszott meg, és mikor jön</h2></div></div><div class="backlog-search panel"><input id="backlogSearch" placeholder="Keresés a hátralékban…"><button id="clearBacklogSearch" class="search-clear hidden" type="button" title="Keresés törlése">×</button></div><div id="backlogBody" class="backlog-list"></div></section>
@@ -100,9 +100,10 @@
 <dialog id="vehicleDialog"><form id="vehicleForm"><div class="dialog-head"><h3 id="vehicleTitle">Jármű</h3><button type="button" class="close" data-close="vehicleDialog">×</button></div><input id="editVehicleId" type="hidden"><label>Sofőr neve<input id="driverName" required></label><label>Jármű neve / rendszám<input id="vehicleName" required></label><label>Járműtípus<select id="vehicleType"></select></label><label>Indulási / lakóhely címe<input id="homeCity" placeholder="Irányítószám, település, utca, házszám"></label><label class="check"><input id="vehicleActive" type="checkbox" checked> Aktív, kaphat fuvart</label><label class="check"><input id="vehicleDayOnly" type="checkbox"> Csak a kiválasztott napra <b id="vehicleDayOnlyDate">—</b></label><small class="v97-hint">Bejelölve a jármű csak ezen az egy napon jelenik meg. Az állandó járművek minden napon ott vannak.</small><button type="submit">Mentés</button></form></dialog>
 <dialog id="masterDialog"><form id="masterForm"><div class="dialog-head"><h3 id="masterTitle">Törzsadat</h3><button type="button" class="close" data-close="masterDialog">×</button></div><input id="editMasterId" type="hidden"><div id="masterFields"></div><button type="submit">Mentés</button></form></dialog>
 
+<dialog id="calendarDayDialog" class="v122-cal-dialog"><div class="dialog-body"><div class="dialog-head"><div><small>NAP RÉSZLETEI</small><h3 id="calendarDayTitle">—</h3></div><button type="button" class="close" data-close="calendarDayDialog" aria-label="Bezárás">×</button></div><div id="calendarDayDetail"></div><button type="button" id="calendarOpenPlanner" class="secondary">Fuvarok megnyitása</button></div></dialog>
 <dialog id="sourceMailDialog"><div class="dialog-body"><div class="dialog-head"><h3 id="sourceMailTitle">Csatolmány</h3><button type="button" class="close" data-close="sourceMailDialog">×</button></div><div id="sourceMailBody" class="source-mail"></div></div></dialog>
 <dialog id="mediaGalleryDialog"><div class="dialog-body"><div class="dialog-head"><h3 id="mediaGalleryTitle">Mentett szállítólevelek</h3><button type="button" class="close" data-close="mediaGalleryDialog">×</button></div><div id="mediaGalleryBody" class="media-gallery"></div></div></dialog>
 
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script><script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script><script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script src="ole-msg-reader.js?v=121.0"></script><script src="data.js?v=121.0"></script><script src="app.js?v=121.0"></script><script src="delivery-camera-v69.js?v=121.0"></script><script src="planner-v32.js?v=121.0"></script><script src="planner-v33.js?v=121.0"></script><script src="planner-v34.js?v=121.0"></script><script src="planner-v35.js?v=121.0"></script><script src="planner-v37.js?v=121.0"></script>
-<script src="daily-list-v93.js?v=121.0"></script><script src="planner-v41.js?v=121.0"></script><script src="planner-v43.js?v=121.0"></script><script src="planner-v44.js?v=121.0"></script><script src="online-config.js?v=121.0"></script><script src="online-v44-2.js?v=121.0"></script><script src="auth-v44-2.js?v=121.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script><script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script><script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script src="ole-msg-reader.js?v=122.0"></script><script src="data.js?v=122.0"></script><script src="app.js?v=122.0"></script><script src="delivery-camera-v69.js?v=122.0"></script><script src="planner-v32.js?v=122.0"></script><script src="planner-v33.js?v=122.0"></script><script src="planner-v34.js?v=122.0"></script><script src="planner-v35.js?v=122.0"></script><script src="planner-v37.js?v=122.0"></script>
+<script src="daily-list-v93.js?v=122.0"></script><script src="planner-v41.js?v=122.0"></script><script src="planner-v43.js?v=122.0"></script><script src="planner-v44.js?v=122.0"></script><script src="online-config.js?v=122.0"></script><script src="online-v44-2.js?v=122.0"></script><script src="auth-v44-2.js?v=122.0"></script>
 </body></html>

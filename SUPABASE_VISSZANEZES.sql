@@ -53,7 +53,7 @@ create policy "orders_driver_read_history"
     or (
       driver_key is not null
       and driver_key = public.my_driver_key()
-      and schedule_date <= (current_date + interval '3 days')::date::text
+      and schedule_date <= current_date + 3
     )
   );
 
@@ -69,6 +69,9 @@ create policy "orders_driver_read_history"
 --
 --   select policyname, cmd from pg_policies
 --    where tablename = 'orders';
+--
+-- schedule_date SQL DATE típusú, ezért dátummal hasonlítsd, ne szöveggel:
+-- helyes példa: schedule_date < current_date
 --
 -- MEGJEGYZES: ha a regi olvasasi szabaly mas neven letezik es szukebb, azt
 -- is at kell nezni - ket SELECT szabaly kozul a bovebb ervenyesul, tehat ez

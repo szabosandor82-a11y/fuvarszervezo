@@ -1,0 +1,40 @@
+FUVARSZERVEZŐ V122
+==================
+
+1. HAVI NAPTÁR – A TELJES HÓNAP EGY KÉPERNYŐN
+---------------------------------------------
+A naptár hétoszlopos rácsban mutatja a teljes hónapot, és nem növeli meg a
+napcellákat akkor sem, ha sok fuvar esik egy napra. Telefonon a cellák a
+napot, a fuvarok számát, a sofőr színjelölőit és a megjegyzés ikonját mutatják.
+
+Egy napra koppintva megnyílik annak teljes fuvarlistája: rendelési szám,
+sofőr, felrakó, lerakó, időablak és a fuvarhoz, felrakóhoz, sofőrhöz,
+tételekhez vagy szállítólevélhez rögzített megjegyzések. Innen a napi
+Fuvarok lap is megnyitható. A navigáció naptárnézetben keskeny, rögzített
+sávra vált, hogy a havi rács görgetés nélkül látható maradjon.
+
+2. ÚJ SZÁLLÍTÓLEVÉL AZONNALI ARCHIVÁLÁSA
+-----------------------------------------
+Az archiválási lista most minden olyan fájlt tartalmaz, amely még nincs
+letöltött ZIP-be felvéve, dátumtól függetlenül. Egy új felhasználói feltöltés
+így azonnal megjelenik az „Archiválásra vár” számban; a Beállítások lapon az
+„Összesítés frissítése” újra lekéri a listát.
+
+A ZIP készítése továbbra sem töröl fájlt. A tárhelyről törlés csak a már
+archivált és legalább két napos fájlokra engedélyezett, és külön, a fájlszám
+beírásával kell megerősíteni. A mai és tegnapi feltöltés tehát archiválható,
+de nem törölhető.
+
+3. SOFŐRI ELŐZMÉNYEK SQL-JAVÍTÁSA
+--------------------------------
+A SUPABASE_VISSZANEZES.sql a schedule_date DATE mezőt dátummal hasonlítja:
+
+  schedule_date <= current_date + 3
+
+Ez elkerüli a date < text típusütközést. A sofőr továbbra is csak a saját
+járművéhez tartozó fuvarokat olvashatja; az írási jogosultság nem változik.
+
+4. CACHE ÉS VERZIÓ
+------------------
+Az alkalmazás V122 néven jelenik meg. A service worker új cache-nevet és
+V122 erőforrásverziókat használ, hogy a frissített naptár betöltődjön.

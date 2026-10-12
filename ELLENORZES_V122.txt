@@ -1,0 +1,20 @@
+ELLENŐRZÉS – V122
+=================
+
+Automatikus elfogadási tesztek: TEST_V122.js
+Eredmény: 429/429 sikeres.
+
+JavaScript szintaxisellenőrzés:
+- app.js: OK
+- planner-v44.js: OK
+- auth-v44-2.js: OK
+- online-v44-2.js: OK
+- sw.js: OK
+
+HTMLParser: index.html hibamentes.
+
+Kiemelt ellenőrzések:
+- Az új, még nem archivált fájl engedélyezi az Archiválás gombot.
+- A friss archivált fájl még várakozik; a régebbi archivált fájl törölhető.
+- A teljes Supabase szabály dátumot hasonlít dátumhoz: current_date + 3.
+- A V122 hivatkozások és a service worker cache-neve frissültek.

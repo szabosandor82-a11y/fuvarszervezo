@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -216,7 +216,7 @@ function marioVehicle(){return activeVehicles().find(v=>norm(v.driverName).inclu
 function selectedDate(){return $('#workDate').value||today()}
 function dayOrders(vehicleId=null,date=selectedDate()){return state.orders.filter(o=>o.scheduleDate===date&&(!vehicleId||o.vehicleId===vehicleId))}
 function option(v,t,sel=''){return`<option value="${esc(v)}" ${String(v)===String(sel)?'selected':''}>${esc(t)}</option>`}
-function showPage(id){$$('.page').forEach(p=>p.classList.toggle('active',p.id===id));if(id==='calendar'&&typeof renderCalendarV121==='function'){bindCalendarV121();setTimeout(renderCalendarV121,10);}if(id==='transfers'&&typeof window.renderTransfersPageV121==='function')setTimeout(window.renderTransfersPageV121,10);if(id==='dailylist'&&typeof renderDailyListV93==='function'){const picker=$('#v94Picker');if(picker)picker.value=selectedDate();if(typeof bindDayControlsV94==='function')bindDayControlsV94();setTimeout(renderDailyListV93,10);}function restoreFile(file){const r=new FileReader();r.onload=()=>{try{const incoming=JSON.parse(r.result),mode=confirm('OK = összevonás, Mégse = teljes csere')?'merge':'replace';if(mode==='replace')state=incoming;else{state.orders=[...state.orders,...(incoming.orders||[]).filter(x=>!state.orders.some(y=>y.id===x.id))];state.projects=[...state.projects,...(incoming.projects||[]).filter(x=>!state.projects.some(y=>norm(y.name)===norm(x.name)))];state.suppliers=[...state.suppliers,...(incoming.suppliers||[]).filter(x=>!state.suppliers.some(y=>norm(y.name)===norm(x.name)&&norm(y.address)===norm(x.address)))];state.recipients=[...state.recipients,...(incoming.recipients||[]).filter(x=>!state.recipients.some(y=>norm(y.name)===norm(x.name)&&norm(y.project)===norm(x.project)))]}save();alert('Adatok betöltve.')}catch(e){alert('Hibás mentési fájl.')}};r.readAsText(file)}
+function showPage(id){document.body.classList.toggle('calendar-active',id==='calendar');$$('.page').forEach(p=>p.classList.toggle('active',p.id===id));if(id==='calendar'&&typeof renderCalendarV121==='function'){bindCalendarV121();setTimeout(renderCalendarV121,10);}if(id==='transfers'&&typeof window.renderTransfersPageV121==='function')setTimeout(window.renderTransfersPageV121,10);if(id==='dailylist'&&typeof renderDailyListV93==='function'){const picker=$('#v94Picker');if(picker)picker.value=selectedDate();if(typeof bindDayControlsV94==='function')bindDayControlsV94();setTimeout(renderDailyListV93,10);}function restoreFile(file){const r=new FileReader();r.onload=()=>{try{const incoming=JSON.parse(r.result),mode=confirm('OK = összevonás, Mégse = teljes csere')?'merge':'replace';if(mode==='replace')state=incoming;else{state.orders=[...state.orders,...(incoming.orders||[]).filter(x=>!state.orders.some(y=>y.id===x.id))];state.projects=[...state.projects,...(incoming.projects||[]).filter(x=>!state.projects.some(y=>norm(y.name)===norm(x.name)))];state.suppliers=[...state.suppliers,...(incoming.suppliers||[]).filter(x=>!state.suppliers.some(y=>norm(y.name)===norm(x.name)&&norm(y.address)===norm(x.address)))];state.recipients=[...state.recipients,...(incoming.recipients||[]).filter(x=>!state.recipients.some(y=>norm(y.name)===norm(x.name)&&norm(y.project)===norm(x.project)))]}save();alert('Adatok betöltve.')}catch(e){alert('Hibás mentési fájl.')}};r.readAsText(file)}
 $('#recordStart').onclick=async()=>{try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});audioChunks=[];mediaRecorder=new MediaRecorder(stream);mediaRecorder.ondataavailable=e=>e.data.size&&audioChunks.push(e.data);mediaRecorder.onstop=()=>{audioBlob=new Blob(audioChunks,{type:mediaRecorder.mimeType||'audio/webm'});$('#audioPreview').src=URL.createObjectURL(audioBlob);$('#audioPreview').classList.remove('hidden');$('#recordStatus').textContent='Felvétel elkészült.';stream.getTracks().forEach(t=>t.stop())};mediaRecorder.start();$('#recordStart').disabled=true;$('#recordStop').disabled=false;$('#recordStatus').textContent='Felvétel folyamatban…'}catch(e){alert(e.message)}};
 $('#recordStop').onclick=()=>{if(mediaRecorder&&mediaRecorder.state!=='inactive')mediaRecorder.stop();$('#recordStart').disabled=false;$('#recordStop').disabled=true};
 $$('.nav').forEach(n=>n.classList.toggle('active',n.dataset.page===id));scrollTo(0,0);render()}
@@ -1695,12 +1695,12 @@ window.markThreadReadV115=markThreadReadV115;
    megszakadt letöltés véglegesen elvinné a szállítóleveleket. Így előbb
    megkapod a zip-et, megnézed, és csak utána törölsz.
 
-   Az archiválás alapból csak azt viszi, ami még nincs archiválva – napi
-   használatnál ez a természetes. A törlés pedig CSAK azokat a fájlokat
-   veszi le, amik bizonyítottan bekerültek egy korábbi zip-be.
+   Az archiválás minden olyan fájlt visz, amely még nem került be korábbi
+   zip-be – az új feltöltések is azonnal aktiválják a gombot. A törlés külön
+   lépés: csak a régebbi, már archivált fájlokat érinti.
 
-   A mai és tegnapi fuvarok fájljaihoz egyik művelet sem nyúl: az élő
-   munkához nem érünk hozzá. */
+   A mai és tegnapi fájlok bekerülhetnek a zip-be, de a tárhelyről még nem
+   törölhetők. Így a friss szállítólevél megőrzése és mentése nem akad el. */
 const ARCHIVE_KEY_V119 = 'archivedFilesV119';
 
 function archivedMapV119(){
@@ -1716,8 +1716,8 @@ function markArchivedV119(files){
   return mikor;
 }
 
-/* A mai és tegnapi nap kimarad – azokon még dolgozunk. */
-function archivableV119(file){
+/* Törléshez a mai és tegnapi fájlok még várakoznak. */
+function purgeEligibleV122(file){
   const nap = String(file.created_at || '').slice(0, 10);
   if (!nap) return false;
   const ma = typeof today === 'function' ? today() : new Date().toISOString().slice(0, 10);
@@ -1731,9 +1731,17 @@ function humanSizeV119(bytes){
 }
 
 function bindArchiveButtonsV119(){
-  const arch=$('#v119Archive'), purge=$('#v119Purge');
+  const arch=$('#v119Archive'), purge=$('#v119Purge'), refresh=$('#v119ArchiveRefresh');
   if(arch&&arch.dataset.v119!=='1'){ arch.dataset.v119='1'; arch.onclick=runArchiveV119; }
   if(purge&&purge.dataset.v119!=='1'){ purge.dataset.v119='1'; purge.onclick=runPurgeV119; }
+  if(refresh&&refresh.dataset.v122!=='1'){
+    refresh.dataset.v122='1';
+    refresh.onclick=async()=>{
+      refresh.disabled=true;refresh.textContent='Frissítés…';
+      try{await renderArchiveSummaryV119();}
+      finally{refresh.disabled=false;refresh.textContent='Összesítés frissítése';}
+    };
+  }
 }
 window.bindArchiveButtonsV119=bindArchiveButtonsV119;
 
@@ -1744,12 +1752,15 @@ async function renderArchiveSummaryV119(){
   try {
     const mind = (await window.V44Online.listAllDeliveryFiles()) || [];
     const terkep = archivedMapV119();
-    const archivalhato = mind.filter(f => archivableV119(f) && !terkep[String(f.id)]);
-    const torolheto = mind.filter(f => terkep[String(f.id)]);
+    const archivalhato = mind.filter(f => !terkep[String(f.id)]);
+    const archivalt = mind.filter(f => terkep[String(f.id)]);
+    const varakozik = archivalt.filter(f => !purgeEligibleV122(f));
+    const torolheto = archivalt.filter(purgeEligibleV122);
     const meret = lista => lista.reduce((sum, f) => sum + (+f.file_size || 0), 0);
     host.innerHTML = `
       <div class="v119-row"><span>Összes szállítólevél</span><b>${mind.length} fájl · ${humanSizeV119(meret(mind))}</b></div>
       <div class="v119-row"><span>Archiválásra vár</span><b>${archivalhato.length} fájl · ${humanSizeV119(meret(archivalhato))}</b></div>
+      <div class="v119-row"><span>Archiválva, várakozik törlésre</span><b>${varakozik.length} fájl · ${humanSizeV119(meret(varakozik))}</b></div>
       <div class="v119-row"><span>Archiválva, törölhető</span><b>${torolheto.length} fájl · ${humanSizeV119(meret(torolheto))}</b></div>`;
     const archGomb = $('#v119Archive'), purgeGomb = $('#v119Purge');
     if (archGomb) { archGomb.disabled = !archivalhato.length; archGomb.textContent = archivalhato.length ? `Archiválás (${archivalhato.length})` : 'Nincs mit archiválni'; }
@@ -1767,7 +1778,7 @@ async function runArchiveV119(){
   try {
     const mind = (await window.V44Online.listAllDeliveryFiles()) || [];
     const terkep = archivedMapV119();
-    const lista = mind.filter(f => archivableV119(f) && !terkep[String(f.id)]);
+    const lista = mind.filter(f => !terkep[String(f.id)]);
     if (!lista.length) { host.textContent = 'Nincs archiválandó fájl.'; return; }
 
     const zip = new JSZip();
@@ -1854,7 +1865,7 @@ async function runPurgeV119(){
   try {
     const mind = (await window.V44Online.listAllDeliveryFiles()) || [];
     const terkep = archivedMapV119();
-    const lista = mind.filter(f => terkep[String(f.id)]);
+    const lista = mind.filter(f => terkep[String(f.id)] && purgeEligibleV122(f));
     if (!lista.length) return alert('Nincs archivált fájl, amit törölni lehetne.');
 
     const meret = lista.reduce((sum, f) => sum + (+f.file_size || 0), 0);
@@ -3096,13 +3107,11 @@ function backlogRecordForItem(orderId, itemId) {
 window.backlogRecordForItem = backlogRecordForItem;
 
 /* Áthelyezett tétel átütemezése másik napra. */
-/* ===== V121 – HAVI NAPTÁR ===========================================
+/* ===== V122 – HAVI NAPTÁR ===========================================
 
-   Egy képernyőn a teljes hónap, hogy a későbbre ütemezett szállítások is
-   láthatók legyenek. Minden napon a fuvarok egy-egy sora: rendelésszám,
-   felrakó, lerakó.
-
-   A napra kattintva a Fuvarok lap nyílik meg azzal a nappal. */
+   A teljes hónap egyetlen képernyőn marad. Telefonon a cellák csak a
+   legfontosabb jelölőket mutatják; a napra koppintva a részletes fuvar- és
+   megjegyzéslista nyílik meg. */
 let calMonthV121 = '';
 
 function calMonthStartV121(){
@@ -3115,42 +3124,73 @@ function renderCalendarV121(){
   const elso = new Date(calMonthStartV121() + 'T12:00:00');
   const ev = elso.getFullYear(), ho = elso.getMonth();
   const cim = $('#calTitle');
-  if (cim) cim.textContent = elso.toLocaleDateString('hu-HU', { year: 'numeric', month: 'long' });
+  if (cim) cim.textContent = elso.toLocaleDateString('hu-HU', { year: 'numeric', month: 'short' });
 
   /* A hét hétfővel kezdődik, ahogy itthon szokás. */
   const elsoNap = (elso.getDay() + 6) % 7;
   const napokSzama = new Date(ev, ho + 1, 0).getDate();
   const ma = typeof today === 'function' ? today() : new Date().toISOString().slice(0,10);
 
-  const fejlec = ['hétfő','kedd','szerda','csütörtök','péntek','szombat','vasárnap']
-    .map(nev => `<div class="v121-cal-head">${nev}</div>`).join('');
+  const hetSzam = Math.ceil((elsoNap + napokSzama) / 7);
+  grid.style.setProperty('--weeks', hetSzam);
+  const fejlec = [['H','hétfő'],['K','kedd'],['Sze','szerda'],['Cs','csütörtök'],['P','péntek'],['Szo','szombat'],['V','vasárnap']]
+    .map(([rovid, nev]) => `<div class="v122-cal-head" aria-label="${nev}"><span>${rovid}</span><b>${nev}</b></div>`).join('');
 
   const cellak = [];
-  for (let i = 0; i < elsoNap; i++) cellak.push('<div class="v121-cal-cell v121-cal-empty"></div>');
+  for (let i = 0; i < elsoNap; i++) cellak.push('<div class="v122-cal-empty" aria-hidden="true"></div>');
 
   for (let nap = 1; nap <= napokSzama; nap++) {
     const datum = `${ev}-${String(ho + 1).padStart(2, '0')}-${String(nap).padStart(2, '0')}`;
     const hetvege = [0, 6].includes(new Date(datum + 'T12:00:00').getDay());
-    const fuvarok = (state.orders || [])
-      .filter(order => order.scheduleDate === datum)
-      .sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
-
-    const sorok = fuvarok.map(order => {
+    const fuvarok = calendarOrdersForDateV122(datum);
+    const megjegyzeses = fuvarok.filter(calendarOrderHasNoteV122).length;
+    const soforok = [...new Set(fuvarok.map(order => {
+      const sofor = (state.vehicles || []).find(v => v.id === order.vehicleId);
+      return { key: typeof v24DriverKey === 'function' ? v24DriverKey(sofor || {}) : '', name: sofor?.driverName || 'Nincs sofőr' };
+    }).map(driver => driver.key || driver.name))];
+    const pontok = soforok.slice(0, 3).map(key => {
+      const sofor = (state.vehicles || []).find(v => {
+        const driverKey = typeof v24DriverKey === 'function' ? v24DriverKey(v || {}) : '';
+        return (driverKey || v.driverName) === key;
+      });
+      return `<i class="v122-cal-dot" data-driver="${esc(key)}" title="${esc(sofor?.driverName || key)}"></i>`;
+    }).join('');
+    const sorok = fuvarok.slice(0, 2).map(order => {
       const sofor = (state.vehicles || []).find(v => v.id === order.vehicleId);
       const kulcs = typeof v24DriverKey === 'function' ? v24DriverKey(sofor || {}) : '';
-      return `<div class="v121-cal-trip" data-driver="${esc(kulcs)}" title="${esc(sofor?.driverName || '')}">
-        <b>${esc(order.orderNo || '—')}</b>
-        <span>${esc(order.pickupName || '')} → ${esc(order.projectName || order.dropAddress || '')}</span>
-      </div>`;
+      return `<span class="v122-cal-trip" data-driver="${esc(kulcs)}"><b>${esc(order.orderNo || '—')}</b><span>${esc(order.pickupName || '')} → ${esc(order.projectName || order.dropAddress || '')}</span></span>`;
     }).join('');
-
-    cellak.push(`<div class="v121-cal-cell${hetvege ? ' v121-cal-weekend' : ''}${datum === ma ? ' v121-cal-today' : ''}"
-      onclick="openCalendarDayV121('${datum}')" role="button" tabindex="0">
-      <div class="v121-cal-date">${nap}${fuvarok.length ? `<em>${fuvarok.length}</em>` : ''}</div>
-      ${sorok || '<div class="v121-cal-none">—</div>'}</div>`);
+    const cimke = `${ev}. ${ho + 1}. ${nap}. · ${fuvarok.length} fuvar${megjegyzeses ? ` · ${megjegyzeses} megjegyzéses` : ''}`;
+    cellak.push(`<button type="button" class="v122-cal-cell${hetvege ? ' v122-cal-weekend' : ''}${datum === ma ? ' v122-cal-today' : ''}${fuvarok.length ? ' v122-cal-has-trips' : ''}"
+      onclick="openCalendarDayV121('${datum}')" aria-label="${cimke}" title="${cimke}">
+      <span class="v122-cal-date-row"><b>${nap}</b>${fuvarok.length ? `<em class="v122-cal-count">${fuvarok.length}</em>` : ''}${megjegyzeses ? `<i class="v122-cal-note" aria-label="${megjegyzeses} megjegyzés">✎</i>` : ''}</span>
+      <span class="v122-cal-dots">${pontok}</span><span class="v122-cal-events">${sorok}${fuvarok.length > 2 ? `<small class="v122-cal-more">+${fuvarok.length - 2}</small>` : ''}</span>
+    </button>`);
   }
   grid.innerHTML = fejlec + cellak.join('');
 }
+
+function calendarOrdersForDateV122(datum){
+  return (state.orders || []).filter(order => order.scheduleDate === datum)
+    .sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
+}
+
+function calendarOrderNotesV122(order){
+  const notes=[];
+  if(String(order?.note||'').trim())notes.push({label:'Fuvar',text:String(order.note).trim()});
+  if(String(order?.pickupNote||'').trim())notes.push({label:'Felrakó',text:String(order.pickupNote).trim()});
+  if(String(order?.driverNoteV111||'').trim())notes.push({label:'Sofőr',text:String(order.driverNoteV111).trim()});
+  (order?.items||[]).forEach((item,index)=>{
+    const note=typeof itemNoteValue==='function'?itemNoteValue(item):String(item?.itemNote||'');
+    if(String(note||'').trim())notes.push({label:`${index+1}. tétel`,text:String(note).trim()});
+  });
+  (order?.deliveryReports||[]).forEach(report=>{
+    if(String(report?.note||'').trim())notes.push({label:'Szállítólevél',text:String(report.note).trim()});
+  });
+  return notes;
+}
+
+function calendarOrderHasNoteV122(order){return calendarOrderNotesV122(order).length>0}
 
 function stepCalendarV121(irany){
   const alap = new Date(calMonthStartV121() + 'T12:00:00');
@@ -3160,15 +3200,37 @@ function stepCalendarV121(irany){
 }
 
 function openCalendarDayV121(datum){
-  if ($('#workDate')) $('#workDate').value = datum;
-  if (typeof render === 'function') render();
-  if (typeof showPage === 'function') showPage('planner');
+  const dialog=$('#calendarDayDialog'),host=$('#calendarDayDetail');
+  const elso=new Date(datum+'T12:00:00');
+  const cim=$('#calendarDayTitle');
+  if(cim)cim.textContent=elso.toLocaleDateString('hu-HU',{year:'numeric',month:'long',day:'numeric'});
+  if(!dialog||!host)return openCalendarPlannerV122(datum);
+  const fuvarok=calendarOrdersForDateV122(datum);
+  host.innerHTML=fuvarok.length?fuvarok.map((order,index)=>{
+    const sofor=(state.vehicles||[]).find(v=>v.id===order.vehicleId);
+    const kulcs=typeof v24DriverKey==='function'?v24DriverKey(sofor||{}):'';
+    const notes=calendarOrderNotesV122(order);
+    return `<article class="v122-cal-detail" data-driver="${esc(kulcs)}"><header><span>${index+1}. fuvar</span><b>${esc(order.orderNo||'—')}</b><small>${esc(sofor?.driverName||'Nincs sofőr')}</small></header>
+      <p><b>Felrakó:</b> ${esc(order.pickupName||'Nincs megadva')} · ${esc(order.pickupAddress||'')}</p>
+      <p><b>Lerakó:</b> ${esc(order.projectName||'Egyedi úticél')} · ${esc(order.dropAddress||'')}</p>
+      ${order.pickupFrom||order.dropFrom?`<p><b>Időablak:</b> ${esc([order.pickupFrom&&`felrakó ${order.pickupFrom}${order.pickupTo?`–${order.pickupTo}`:''}`,order.dropFrom&&`lerakó ${order.dropFrom}${order.dropTo?`–${order.dropTo}`:''}`].filter(Boolean).join(' · ') )}</p>`:''}
+      ${notes.length?`<div class="v122-cal-notes"><b>Megjegyzések</b>${notes.map(note=>`<p><strong>${esc(note.label)}:</strong> ${esc(note.text)}</p>`).join('')}</div>`:'<p class="v122-cal-no-note">Nincs megjegyzés.</p>'}</article>`;
+  }).join(''):'<div class="v122-cal-empty-day">Erre a napra nincs fuvar.</div>';
+  const planner=$('#calendarOpenPlanner');if(planner)planner.onclick=()=>openCalendarPlannerV122(datum);
+  if(typeof dialog.showModal==='function')dialog.showModal();
+}
+
+function openCalendarPlannerV122(datum){
+  const dialog=$('#calendarDayDialog');if(dialog?.open)dialog.close();
+  if($('#workDate'))$('#workDate').value=datum;
+  if(typeof render==='function')render();
+  if(typeof showPage==='function')showPage('planner');
 }
 
 function bindCalendarV121(){
   if ($('#calPrev')) $('#calPrev').onclick = () => stepCalendarV121(-1);
   if ($('#calNext')) $('#calNext').onclick = () => stepCalendarV121(1);
-  if ($('#calToday')) $('#calToday').onclick = () => { calMonthV121 = ''; renderCalendarV121(); };
+  if ($('#calToday')) $('#calToday').onclick = () => { const ma=typeof today==='function'?today():new Date().toISOString().slice(0,10); calMonthV121 = ma.slice(0,7)+'-01'; renderCalendarV121(); };
 }
 
 window.renderCalendarV121 = renderCalendarV121;
