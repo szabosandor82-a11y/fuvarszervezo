@@ -1158,10 +1158,33 @@ button.mail-file{font:inherit;cursor:pointer}
   border:1px solid #c6dcf0;font-size:12.5px;color:#13507f}
 .v119-progress.hidden{display:none}
 
-/* V119 – teljes képernyős kamera */
+/* V120 – TELJES KÉPERNYŐS KAMERA, LÁTHATÓ KILÉPÉSSEL
+
+   A V119-ben a réteg középre igazította a tartalmat, ezért a gombok a kép
+   alá, a látható részen kívülre kerültek – nem lehetett kilépni. Most a kép
+   tölti ki a hátteret, a gombok pedig RÁ kerülnek, alulra rögzítve, a
+   telefon alsó sávja fölött. A bezárás jobb felül külön is ott van. */
 .v119-fullscreen{position:fixed!important;inset:0!important;z-index:9999!important;
   margin:0!important;padding:0!important;border-radius:0!important;background:#000!important;
-  display:flex!important;flex-direction:column;align-items:center;justify-content:center}
-.v119-fullscreen video{width:100%!important;height:100%!important;max-height:none!important;
-  object-fit:contain;background:#000}
+  display:block!important}
+.v119-fullscreen video{position:absolute;inset:0;width:100%!important;height:100%!important;
+  max-height:none!important;object-fit:contain;background:#000}
+
+/* a gombsor a képre, alulra */
+.v119-fullscreen .delivery-camera-actions{position:absolute;left:0;right:0;
+  bottom:calc(16px + env(safe-area-inset-bottom,0px));
+  display:flex;gap:10px;justify-content:center;flex-wrap:wrap;
+  padding:0 16px;margin:0;z-index:2}
+.v119-fullscreen .delivery-camera-actions>button{flex:0 1 auto;min-width:150px;height:54px;
+  font-size:15px;font-weight:700;border-radius:14px;box-shadow:0 8px 24px #0006}
+.v119-fullscreen #captureDeliveryPhoto{background:#fff;color:#17232c;border:0}
+.v119-fullscreen #stopDeliveryCamera{background:#2a2a2a;color:#fff;border:1px solid #555}
+
+/* a bezárás jobb felül – mindig elérhető kiút */
+.v120-close{display:none}
+.v119-fullscreen .v120-close{display:flex;position:absolute;
+  top:calc(12px + env(safe-area-inset-top,0px));right:14px;
+  width:46px;height:46px;min-width:0;align-items:center;justify-content:center;
+  border-radius:50%;background:#000a;color:#fff;border:1px solid #fff6;
+  font-size:24px;line-height:1;cursor:pointer;z-index:3;box-shadow:none}
 body.v119-camera-open{overflow:hidden}

@@ -141,7 +141,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V119Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V120Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -1322,12 +1322,16 @@
     if (!byId('onlineAdmin')) {
       const section = document.createElement('section');
       section.id = 'onlineAdmin'; section.className = 'page';
-      section.innerHTML = '<div class="page-head"><div><small>ONLINE</small><h2>Beállítások és fuvarátadások</h2></div></div><div id="onlineAdminContent"></div>';
+      /* V120: a szállítólevelek archiválása a MEGLÉVŐ Beállítások lapra kerül.
+         Korábban külön menüpontot csináltunk neki, pedig ez a lap már
+         létezett – csak belépéskor épül, ezért nem volt az index.html-ben. */
+      section.innerHTML = '<div class="page-head"><div><small>ONLINE</small><h2>Beállítások és fuvarátadások</h2></div></div><div id="onlineAdminContent"></div>'
+        + '<section class="panel v119-archive"><h3>Szállítólevelek archiválása</h3><p class="v108-hint">Az archiválás egy zip-be menti a feltöltött szállítóleveleket. A törlés csak azokat veszi le a tárhelyről, amik már bizonyítottan bekerültek egy zip-be. A mai és tegnapi fuvarokhoz nem nyúl.</p><div id="v119Summary" class="v119-summary">Összesítés betöltése…</div><div class="v119-buttons"><button type="button" id="v119Archive">Archiválás</button><button type="button" id="v119Purge" class="v115-danger">Archiváltak törlése</button></div><div id="v119Progress" class="v119-progress hidden"></div></section>';
       document.querySelector('main')?.append(section);
       const navButton = document.createElement('button');
       navButton.className = 'nav'; navButton.dataset.page = 'onlineAdmin'; navButton.innerHTML = '<span>⚙</span><small>Beállítások</small>';
       document.querySelector('nav')?.append(navButton);
-      navButton.onclick = () => { if (typeof showPage === 'function') showPage('onlineAdmin'); renderAdminOnlinePage(); };
+      navButton.onclick = () => { if (typeof showPage === 'function') showPage('onlineAdmin'); renderAdminOnlinePage(); global.renderArchiveSummaryV119?.(); };
     }
     if (!byId('manualOnlineRefresh')) {
       const refreshButton = document.createElement('button');

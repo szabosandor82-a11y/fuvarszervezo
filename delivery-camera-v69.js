@@ -239,5 +239,40 @@
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && stream) { stop(); message('Kamera leállítva.'); }
   });
+
+  /* ===== V120 – A TELEFON SAJÁT KAMERA-ALKALMAZÁSA ===================
+
+     A böngészőbe épített kamera kis előnézetet ad, és a telefon ahhoz
+     igazodva nem mindig a legjobb felbontást választja. A telefon saját
+     kamera-alkalmazása viszont a teljes szenzorfelbontással dolgozik, és
+     ott van a vaku, az élességállítás, a nagyítás – amit a sofőr már ismer.
+
+     Ehhez nem kell kameraengedély a böngészőtől: a fájlmező capture
+     jelölése nyitja meg az alkalmazást.
+
+     A böngészős kamera megmarad tartalékként, mert asztali gépen
+     webkamerával csak az működik. */
+  const nativeInput = byId('nativeCameraInputV120');
+  const nativeButton = byId('nativeCameraV120');
+  if (nativeButton && nativeInput) {
+    nativeButton.onclick = () => nativeInput.click();
+    nativeInput.onchange = () => {
+      const valasztott = Array.from(nativeInput.files || []);
+      nativeInput.value = '';
+      if (valasztott.length) addFilesV97(valasztott);
+    };
+  }
+
+  /* A teljes képernyős nézetben a bezárás MINDIG látszódjon. A V119-ben a
+     réteg középre igazított, ezért a gombok a kép alá, a látható részen
+     kívülre kerültek – nem lehetett kilépni. */
+  const closeButton = byId('closeCameraV120');
+  if (closeButton) closeButton.onclick = () => { stop(); message('Kamera leállítva.'); };
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && byId('deliveryCameraLive')?.classList.contains('v119-fullscreen')) {
+      stop();
+    }
+  });
+
   global.V69DeliveryCamera = { reset, files: () => files.slice(), optimiseImageV97, targetSizeV97 };
 })(window);

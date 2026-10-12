@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V119Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V120Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -220,7 +220,7 @@ function showPage(id){$$('.page').forEach(p=>p.classList.toggle('active',p.id===
 $('#recordStart').onclick=async()=>{try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});audioChunks=[];mediaRecorder=new MediaRecorder(stream);mediaRecorder.ondataavailable=e=>e.data.size&&audioChunks.push(e.data);mediaRecorder.onstop=()=>{audioBlob=new Blob(audioChunks,{type:mediaRecorder.mimeType||'audio/webm'});$('#audioPreview').src=URL.createObjectURL(audioBlob);$('#audioPreview').classList.remove('hidden');$('#recordStatus').textContent='Felvétel elkészült.';stream.getTracks().forEach(t=>t.stop())};mediaRecorder.start();$('#recordStart').disabled=true;$('#recordStop').disabled=false;$('#recordStatus').textContent='Felvétel folyamatban…'}catch(e){alert(e.message)}};
 $('#recordStop').onclick=()=>{if(mediaRecorder&&mediaRecorder.state!=='inactive')mediaRecorder.stop();$('#recordStart').disabled=false;$('#recordStop').disabled=true};
 $$('.nav').forEach(n=>n.classList.toggle('active',n.dataset.page===id));scrollTo(0,0);render()}
-function render(){applyAfterFourRule();renderRoutes();renderOrders();renderBacklog();renderMasters();renderVehicles();renderHomePointsV108();renderArchiveSummaryV119();renderDriver();fillSelectors();$('#baseAddress').value=state.settings.baseAddress}
+function render(){applyAfterFourRule();renderRoutes();renderOrders();renderBacklog();renderMasters();renderVehicles();renderHomePointsV108();renderDriver();fillSelectors();$('#baseAddress').value=state.settings.baseAddress}
 function longReason(name=''){const n=norm(name);let m=n.match(/(?:^|[^0-9])([456])\s*(?:m|meter)(?:es|eres)?\b/);if(m)return`${m[1]} méteres szálanyag`;m=n.match(/\b(4000|5000|6000)\s*mm\b/);if(m&&/(szal|cso|acel|rud|profil)/.test(n))return`${+m[1]/1000} méteres szálanyag`;return''}
 function canCarryLong(v){return/(plato|kcr|kamion)/.test(norm(v.type))}
 function centralSupplier(name){const group=state.suppliers.filter(s=>norm(s.name)===norm(name));return group.find(s=>s.isCentral)||group[0]||null}
@@ -1730,7 +1730,15 @@ function humanSizeV119(bytes){
   return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round((+bytes || 0) / 1024))} kB`;
 }
 
+function bindArchiveButtonsV119(){
+  const arch=$('#v119Archive'), purge=$('#v119Purge');
+  if(arch&&arch.dataset.v119!=='1'){ arch.dataset.v119='1'; arch.onclick=runArchiveV119; }
+  if(purge&&purge.dataset.v119!=='1'){ purge.dataset.v119='1'; purge.onclick=runPurgeV119; }
+}
+window.bindArchiveButtonsV119=bindArchiveButtonsV119;
+
 async function renderArchiveSummaryV119(){
+  bindArchiveButtonsV119();
   const host = $('#v119Summary'); if (!host) return;
   if (!window.V44Online?.listAllDeliveryFiles) { host.textContent = 'Nincs online kapcsolat.'; return; }
   try {
@@ -1765,28 +1773,61 @@ async function runArchiveV119(){
     const zip = new JSZip();
     const sorok = ['rendelés;fájl;feltöltve;méret'];
     let kesz = 0, sikertelen = 0;
+
+    /* V120 – GYORSABB ARCHIVÁLÁS
+
+       A korábbi változat fájlonként KÉT lekérdezést indított a szerverhez
+       (az elsőt el is dobta), majd egyesével töltött le. 285 fájlnál ez 855
+       kérés egymás után – több perc.
+
+       Most fuvaronként EGY lekérdezés fut (az úgyis az adott fuvar összes
+       fájljának hivatkozását visszaadja), a letöltések pedig hatosával,
+       párhuzamosan. Ugyanaz az eredmény, töredék idő alatt. */
+    const fuvarSzerint = new Map();
     for (const file of lista) {
+      const kulcs = String(file.order_id);
+      if (!fuvarSzerint.has(kulcs)) fuvarSzerint.set(kulcs, []);
+      fuvarSzerint.get(kulcs).push(file);
+    }
+
+    host.textContent = `Hivatkozások lekérése: 0 / ${fuvarSzerint.size} fuvar…`;
+    const hivatkozas = new Map();
+    let fuvarKesz = 0;
+    for (const [orderId] of fuvarSzerint) {
       try {
-        const [row] = await window.V44Online.listDeliveryFiles(String(file.order_id));
-        const url = (await window.V44Online.listDeliveryFiles(String(file.order_id)))
-          .find(x => String(x.id) === String(file.id))?.url;
-        if (!url) throw new Error('nincs letöltési hivatkozás');
-        const valasz = await fetch(url);
-        if (!valasz.ok) throw new Error('letöltési hiba');
-        const adat = await valasz.arrayBuffer();
-        const fuvar = (state.orders || []).find(o => String(o.id) === String(file.order_id));
-        const mappa = (fuvar?.orderNo || file.order_id || 'egyeb').replace(/[^\w.-]+/g, '_');
-        const nev = `${String(file.created_at || '').slice(0, 10)}_${(file.file_name || 'fajl').replace(/[^\w.-]+/g, '_')}`;
-        zip.folder(mappa).file(nev, adat);
-        sorok.push(`${fuvar?.orderNo || ''};${file.file_name || ''};${String(file.created_at || '').slice(0, 16)};${file.file_size || 0}`);
-        file.__archived = true;
-        kesz++;
+        for (const sor of (await window.V44Online.listDeliveryFiles(orderId)) || []) {
+          if (sor?.url) hivatkozas.set(String(sor.id), sor.url);
+        }
       } catch (error) {
-        sikertelen++;
-        console.warn('[V119] a fájl nem került a zip-be', file.file_name, error);
+        console.warn('[V120] a fuvar hivatkozásai nem jöttek le', orderId, error);
       }
+      host.textContent = `Hivatkozások lekérése: ${++fuvarKesz} / ${fuvarSzerint.size} fuvar…`;
+    }
+
+    const egyFajl = async file => {
+      const url = hivatkozas.get(String(file.id));
+      if (!url) throw new Error('nincs letöltési hivatkozás');
+      const valasz = await fetch(url);
+      if (!valasz.ok) throw new Error('letöltési hiba');
+      const adat = await valasz.arrayBuffer();
+      const fuvar = (state.orders || []).find(o => String(o.id) === String(file.order_id));
+      const mappa = (fuvar?.orderNo || file.order_id || 'egyeb').replace(/[^\w.-]+/g, '_');
+      const nev = `${String(file.created_at || '').slice(0, 10)}_${(file.file_name || 'fajl').replace(/[^\w.-]+/g, '_')}`;
+      zip.folder(mappa).file(nev, adat);
+      sorok.push(`${fuvar?.orderNo || ''};${file.file_name || ''};${String(file.created_at || '').slice(0, 16)};${file.file_size || 0}`);
+      file.__archived = true;
+    };
+
+    const ADAG = 6;
+    for (let i = 0; i < lista.length; i += ADAG) {
+      const adag = lista.slice(i, i + ADAG);
+      await Promise.all(adag.map(async file => {
+        try { await egyFajl(file); kesz++; }
+        catch (error) { sikertelen++; console.warn('[V120] a fájl nem került a zip-be', file.file_name, error); }
+      }));
       host.textContent = `Archiválás: ${kesz + sikertelen} / ${lista.length}` + (sikertelen ? ` · ${sikertelen} sikertelen` : '');
     }
+
     if (!kesz) { host.textContent = 'Egyetlen fájlt sem sikerült letölteni. A törlés nem indul el.'; return; }
 
     zip.file('tartalom.csv', sorok.join('\n'));
