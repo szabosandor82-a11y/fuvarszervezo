@@ -1,0 +1,85 @@
+FUVARSZERVEZO V125
+==================
+
+Szinezett naptar, es az "Atmozgatva" jelzes a FORRAS napot mutatja.
+
+MODOSITOTT FAJLOK
+-----------------
+app.js          naptar-szinezes, cimfelismeres, forrasnap jegyzese
+planner-v37.js  a buborek a forrasnapot mutatja
+styles.css      a naptar napjainak szinei
+TEST_V125.js    435 teszt
+
+
+1. A NAPTAR A NAPOKAT SZINEZI
+-----------------------------
+A havi nezetben nem a fuvarok felsorolasa a lenyeg - az egy kepernyon
+olvashatatlan. Ami egy pillantasbol kell: HOL lesz dolgunk aznap.
+
+   ZOLD   minden fuvar budapesti, oda-vissza
+   PIROS  van videki felrako vagy lerako
+   VEGYES mindketto elofordul aznap (atlos szinezes)
+   SZURKE van fuvar, de hianyos a cim - nem talalgatunk
+
+A nap szamaval egyutt latszik a fuvarok szama, a soforok pontjai, es a
+ceruza jel, ha van megjegyzes.
+
+A NAPRA KATTINTVA ugyanaz a felugro ablak nyilik, mint eddig - ott vannak a
+fuvarok reszletesen.
+
+A budapesti cim felismerese IRANYITOSZAMBOL megy: 1011-tol 1239-ig minden
+budapesti kerulet. Ha nincs iranyitoszam, a varos nevet nezzuk. Ha a cim
+hianyos, a nap szurke marad - nem talalgatunk.
+
+Egy fuvar akkor szamit budapestinek, ha a FELRAKO ES A LERAKO is az. A
+videki felrako eppugy tobb idot jelent, mint a videki lerako.
+
+
+2. AZ "ATMOZGATVA" A FORRAS NAPOT MUTATJA
+-----------------------------------------
+Eddig a jelzes melletti datum a CELNAP volt - vagyis ugyanaz a nap, amit
+eppen nezel. Semmit nem mondott.
+
+Mostantol az a nap latszik, AHONNAN athoztak:
+
+   Atmozgatva . 2026-10-09      (a 10-13-i buborekon)
+
+Ez az, amit keresel, amikor rajossz, hogy egy fuvar nem ott van, ahol
+vartad. A celnapot ugyis latod, hiszen azt a napot nezed.
+
+Ra mutatva tovabbra is latszik, KI es MIKOR mozgatta.
+
+
+TESZTEK
+-------
+TEST_V125.js   435/435
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Negy uj teszt: a cimfelismeres (iranyitoszam es varosnev), a nap szinenek
+osszeallitasa, a havi nezet szinezese, es a forrasnap megjelenitese.
+
+MEGJEGYZES: az atvett V124 csomagban nehany regi teszt meg a V121-es
+verziószamot kereste - ezeket a verzioemelessel rendeztuk.
+
+Futtatas: node TEST_V125.js
+
+========================================================================
+KORABBI VALTOZASOK
+========================================================================
+
+FUVARSZERVEZŐ V124
+==================
+
+1. SOFŐR ÁLTAL ÁTHELYEZETT FUVAROK DÁTUMA
+-----------------------------------------
+A sofőr által másik napra tett tétel jelölése eddig a forrásfuvaron maradt.
+A módosítás most a célfuvaron menti a dátumot, és a buborékban is kiírja.
+
+A dátum az admin Fuvarok nézetében és a sofőr User menüjében is látható.
+Hátralék átütemezésekor a célbuborék és a Hátralék-bejegyzés dátuma együtt
+frissül, így újratöltés után is az új nap jelenik meg.
+
+2. VERZIÓ ÉS GYORSÍTÓTÁR
+------------------------
+Az alkalmazás V124 néven jelenik meg. A webes hivatkozások és a service
+worker gyorsítótára frissült.

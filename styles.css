@@ -1309,3 +1309,16 @@ body.v119-camera-open{overflow:hidden}
 
 .tag.moved-date-tag{background:#fff2d8!important;color:#7a5712!important;border:1px solid #f0dcac}
 .mobile-bubble-tags .moved-date-tag{background:#fff2d8!important;color:#7a5712!important}
+
+/* V125 – a naptár napjai szín szerint */
+.v121-cal-cell[data-szin="bp"]{background:#e8f6e6;border-color:#9ccf9a}
+.v121-cal-cell[data-szin="bp"]:hover{background:#dcf0da}
+.v121-cal-cell[data-szin="videk"]{background:#fdeaea;border-color:#e3a6a6}
+.v121-cal-cell[data-szin="videk"]:hover{background:#f8dcdc}
+.v121-cal-cell[data-szin="vegyes"]{background:linear-gradient(135deg,#e8f6e6 0 50%,#fdeaea 50% 100%);border-color:#c9b79a}
+.v121-cal-cell[data-szin="ismeretlen"]{background:#f1f3f5;border-color:#c3cad1}
+.v121-cal-cell[data-szin="bp"].v121-cal-today,
+.v121-cal-cell[data-szin="videk"].v121-cal-today,
+.v121-cal-cell[data-szin="vegyes"].v121-cal-today{border:2px solid var(--blue)}
+.v125-cal-marks{display:flex;align-items:center;gap:5px;margin-top:auto;flex-wrap:wrap}
+.v125-cal-note{font-style:normal;font-size:12px;color:#7a4d06}

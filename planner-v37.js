@@ -481,7 +481,12 @@
        zászlósorban látszik – nevével és napjával együtt. */
     const mozgatas = (group.orders || []).map(order => order.movedByDriverV121).filter(Boolean)[0];
     const atmozgatottFuvar = (group.orders || []).find(order => order.movedFromOrderId || order.failedMovedFrom || order.movedByDriverV121?.targetDate);
-    const mozgatasDatum = atmozgatottFuvar?.scheduleDate || mozgatas?.targetDate || '';
+    /* V125: AHONNAN áthozták – nem az a nap, ahol most van. A célnapot úgyis
+       látod, hiszen azt a napot nézed; a forrásnap az, amit keresel. */
+    const forrasFuvar = (group.orders || [])
+      .map(order => (state.orders || []).find(x => String(x.id) === String(order.movedFromOrderId)))
+      .find(Boolean);
+    const mozgatasDatum = mozgatas?.fromDate || forrasFuvar?.scheduleDate || '';
     const mozgatasJelzes = mozgatas || mozgatasDatum
       ? `<span class="v121-moved" title="${escHtml(mozgatas?.by || '')}${mozgatas?.at ? ` · ${escHtml(String(mozgatas.at).slice(0, 16).replace('T', ' '))}` : ''}">Átmozgatva${mozgatasDatum ? ` · ${escHtml(mozgatasDatum)}` : ''}</span>`
       : '';

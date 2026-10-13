@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V124Planner?.version||window.V123Planner?.version||window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V125Planner?.version||window.V123Planner?.version||window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -3143,6 +3143,50 @@ function calMonthStartV121(){
   return alap.slice(0,7) + '-01';
 }
 
+/* ===== V125 – A NAPTÁR A NAPOKAT SZÍNEZI =============================
+
+   A havi nézetben nem a fuvarok felsorolása a lényeg – az olvashatatlan egy
+   képernyőn. Ami egy pillantásból kell: HOL lesz dolgunk aznap.
+
+   zöld  – minden fuvar budapesti, oda-vissza
+   piros – van vidéki felrakó vagy lerakó (több idő, több km)
+   vegyes – mindkettő előfordul aznap
+
+   A budapesti cím felismerése az irányítószámból megy: 1011-től 1239-ig
+   minden budapesti kerület. Ha nincs irányítószám, a város nevét nézzük. */
+function budapestiCimV125(cim){
+  const szoveg = String(cim || '').trim();
+  if (!szoveg) return null;                      // nem tudjuk eldönteni
+  const irsz = szoveg.match(/\b(\d{4})\b/);
+  if (irsz) {
+    const szam = +irsz[1];
+    return szam >= 1011 && szam <= 1239;
+  }
+  return /budapest|\bbp\b/i.test(szoveg);
+}
+
+/* Egy fuvar akkor budapesti, ha a FELRAKÓ és a LERAKÓ is az. */
+function fuvarBudapestiV125(order){
+  const fel = budapestiCimV125(order.pickupAddress || order.pickupName);
+  const le = budapestiCimV125(order.dropAddress || order.projectAddress || order.projectName);
+  if (fel === null || le === null) return null;  // hiányos cím: nem színezünk
+  return fel && le;
+}
+
+/* A nap színe a rajta lévő fuvarokból. */
+function napSzineV125(fuvarok){
+  const allapotok = (fuvarok || []).map(fuvarBudapestiV125).filter(x => x !== null);
+  if (!allapotok.length) return fuvarok?.length ? 'ismeretlen' : '';
+  const budapesti = allapotok.filter(Boolean).length;
+  if (budapesti === allapotok.length) return 'bp';
+  if (budapesti === 0) return 'videk';
+  return 'vegyes';
+}
+
+window.budapestiCimV125 = budapestiCimV125;
+window.fuvarBudapestiV125 = fuvarBudapestiV125;
+window.napSzineV125 = napSzineV125;
+
 function renderCalendarV121(){
   const grid = $('#calGrid'); if (!grid) return;
   const elso = new Date(calMonthStartV121() + 'T12:00:00');
@@ -3168,29 +3212,33 @@ function renderCalendarV121(){
     const hetvege = [0, 6].includes(new Date(datum + 'T12:00:00').getDay());
     const fuvarok = calendarOrdersForDateV122(datum);
     const megjegyzeses = fuvarok.filter(calendarOrderHasNoteV122).length;
-    const soforok = [...new Set(fuvarok.map(order => {
+
+    /* V125: a nap SZÍNE mondja meg, hol lesz dolgunk – a fuvarok felsorolása
+       egy havi nézetben úgyis olvashatatlan. A részletek a napra kattintva
+       jönnek elő, ugyanabban a felugró ablakban, mint eddig. */
+    const szin = napSzineV125(fuvarok);
+
+    /* A sofőrök pontjai megmaradnak: egy pillantásra látszik, ki dolgozik. */
+    const soforKulcsok = [...new Set(fuvarok.map(order => {
       const sofor = (state.vehicles || []).find(v => v.id === order.vehicleId);
-      return { key: typeof v24DriverKey === 'function' ? v24DriverKey(sofor || {}) : '', name: sofor?.driverName || 'Nincs sofőr' };
-    }).map(driver => driver.key || driver.name))];
-    const pontok = soforok.slice(0, 3).map(key => {
+      return typeof v24DriverKey === 'function' ? v24DriverKey(sofor || {}) : (sofor?.driverName || '');
+    }).filter(Boolean))];
+    const pontok = soforKulcsok.slice(0, 4).map(kulcs => {
       const sofor = (state.vehicles || []).find(v => {
-        const driverKey = typeof v24DriverKey === 'function' ? v24DriverKey(v || {}) : '';
-        return (driverKey || v.driverName) === key;
+        const dk = typeof v24DriverKey === 'function' ? v24DriverKey(v || {}) : '';
+        return (dk || v.driverName) === kulcs;
       });
-      return `<i class="v122-cal-dot" data-driver="${esc(key)}" title="${esc(sofor?.driverName || key)}"></i>`;
+      return `<i class="v122-cal-dot" data-driver="${esc(kulcs)}" title="${esc(sofor?.driverName || kulcs)}"></i>`;
     }).join('');
-    const sorok = fuvarok.slice(0, 2).map(order => {
-      const sofor = (state.vehicles || []).find(v => v.id === order.vehicleId);
-      const kulcs = typeof v24DriverKey === 'function' ? v24DriverKey(sofor || {}) : '';
-      return `<span class="v122-cal-trip" data-driver="${esc(kulcs)}"><b>${esc(order.orderNo || '—')}</b><span>${esc(order.pickupName || '')} → ${esc(order.projectName || order.dropAddress || '')}</span></span>`;
-    }).join('');
-    const cimke = `${ev}. ${ho + 1}. ${nap}. · ${fuvarok.length} fuvar${megjegyzeses ? ` · ${megjegyzeses} megjegyzéses` : ''}`;
-    cellak.push(`<button type="button" class="v122-cal-cell${hetvege ? ' v122-cal-weekend' : ''}${datum === ma ? ' v122-cal-today' : ''}${fuvarok.length ? ' v122-cal-has-trips' : ''}"
-      onclick="openCalendarDayV121('${datum}')" aria-label="${cimke}" title="${cimke}">
-      <span class="v122-cal-date-row"><b>${nap}</b>${fuvarok.length ? `<em class="v122-cal-count">${fuvarok.length}</em>` : ''}${megjegyzeses ? `<i class="v122-cal-note" aria-label="${megjegyzeses} megjegyzés">✎</i>` : ''}</span>
-      <span class="v122-cal-dots">${pontok}</span><span class="v122-cal-events">${sorok}${fuvarok.length > 2 ? `<small class="v122-cal-more">+${fuvarok.length - 2}</small>` : ''}</span>
-    </button>`);
+
+    cellak.push(`<div class="v121-cal-cell${hetvege ? ' v121-cal-weekend' : ''}${datum === ma ? ' v121-cal-today' : ''}"
+      data-szin="${esc(szin)}" onclick="openCalendarDayV121('${datum}')" role="button" tabindex="0"
+      title="${fuvarok.length ? `${fuvarok.length} fuvar · ${szin === 'bp' ? 'budapesti' : szin === 'videk' ? 'vidéki' : szin === 'vegyes' ? 'budapesti és vidéki' : 'hiányos cím'}` : 'Nincs fuvar'}">
+      <div class="v121-cal-date">${nap}${fuvarok.length ? `<em>${fuvarok.length}</em>` : ''}</div>
+      ${fuvarok.length ? `<div class="v125-cal-marks">${pontok}${megjegyzeses ? `<i class="v125-cal-note" title="${megjegyzeses} megjegyzés">✎</i>` : ''}</div>` : ''}
+    </div>`);
   }
+
   grid.innerHTML = fejlec + cellak.join('');
 }
 
@@ -3269,7 +3317,7 @@ window.bindCalendarV121 = bindCalendarV121;
 
    A jelölés megjegyzi, KI és MIKOR mozgatta, és a buborék zászlósorában
    jelenik meg. Az admin saját mozgatása NEM kap jelölést: arról tudsz. */
-function markMovedByDriverV121(order, mit, targetDate){
+function markMovedByDriverV121(order, mit, targetDate, fromDate){
   if(!order)return;
   const profil=window.V44Online?.getProfile?.();
   if(!profil||String(profil.role||'')==='admin')return;   // az admin mozgatása nem jelölendő
@@ -3278,7 +3326,11 @@ function markMovedByDriverV121(order, mit, targetDate){
     by: profil.display_name||profil.driver_key||profil.email||'sofőr',
     at: movedAt,
     what: mit||'fuvar',
-    targetDate: targetDate||order.scheduleDate||''
+    targetDate: targetDate||order.scheduleDate||'',
+    /* V125: a buborékon az a nap érdekes, AHONNAN áthozták – azt keresed,
+       amikor rájössz, hogy egy fuvar nem ott van, ahol vártad. A célnapot
+       úgyis látod: az a nap, amit épp nézel. */
+    fromDate: fromDate||''
   };
   order.localUpdatedAt=movedAt;
 }
@@ -3313,7 +3365,7 @@ function rescheduleMovedItem(orderId, itemId, newDate) {
   rec.targetOrderId = dest.id;
   rec.movedToDate = target;
   rec.rescheduledAt = new Date().toISOString();
-  if(typeof markMovedByDriverV121==='function')markMovedByDriverV121(dest,'hátralék',target);
+  if(typeof markMovedByDriverV121==='function')markMovedByDriverV121(dest,'hátralék',target,current.scheduleDate);
   save();
   if (document.getElementById('itemsDialog')?.open) {
     if (state.orders.some(o => o.id === orderId)) openItems(orderId); else openItems(dest.id);
@@ -3388,7 +3440,7 @@ function moveSingleItemToDate(o,it,target){
   targetOrder.items.push(moved);
   state.backlog=state.backlog||[];
   state.backlog.push({id:uid(),sourceOrderId:o.id,targetOrderId:targetOrder.id,itemId:moved._id,orderNo:o.orderNo,supplier:o.pickupName,projectName:o.projectName,code:it.code,name:it.name,itemNote:itemNoteValue(it),quantity:formatQty(moveQty),unit:it.unit,movedToDate:target,movedAt:new Date().toISOString()});
-  if(typeof markMovedByDriverV121==='function')markMovedByDriverV121(targetOrder,'hátralék',target);
+  if(typeof markMovedByDriverV121==='function')markMovedByDriverV121(targetOrder,'hátralék',target,o.scheduleDate);
   if(total>0&&moveQty<total){it.qty=formatQty(total-moveQty);it.received=true;it.missingQty='';it.moveTargetDate=''}
   else{o.items=(o.items||[]).filter(x=>String(x._id)!==String(it._id))}
   o.completed=(o.items||[]).length>0&&(o.items||[]).every(x=>x.received);
@@ -3435,7 +3487,7 @@ function moveUncheckedItemsFromDialog(){
   for(const target of dates){
     let targetOrder=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===o.orderNo&&x.vehicleId===o.vehicleId&&x.projectName===o.projectName&&x.pickupName===o.pickupName&&x.movedFromOrderId===o.id);
     if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id};state.orders.push(targetOrder)}
-    if(typeof markMovedByDriverV121==='function')markMovedByDriverV121(targetOrder,'hátralék',target);
+    if(typeof markMovedByDriverV121==='function')markMovedByDriverV121(targetOrder,'hátralék',target,o.scheduleDate);
     for(const p of plan.filter(x=>x.target===target)){
       const it=p.it;
       const moved={...it,_id:uid(),qty:formatQty(p.moveQty),received:false,missingQty:'',moveTargetDate:''};

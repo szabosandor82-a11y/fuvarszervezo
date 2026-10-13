@@ -1,8 +1,8 @@
-FUVARSZERVEZŐ V124
+FUVARSZERVEZŐ V125
 
 FRISSÍTÉS
 1. Készíts biztonsági másolatot a jelenlegi GitHub Pages fájlokról.
-2. Bontsd ki a Fuvarszervezo_V124_Mobile_PWA_GitHub_Pages.zip fájlt.
+2. Bontsd ki a Fuvarszervezo_V125_Mobile_PWA_GitHub_Pages.zip fájlt.
 3. A csomag gyökérkönyvtárának tartalmát másold a meglévő alkalmazás
    gyökérkönyvtárába a korábbi azonos nevű fájlok felülírásával.
    Az index.html közvetlenül az alkalmazás gyökerében legyen.
@@ -22,8 +22,8 @@ VÁLTOZÁSOK
 - A sofőr korábbi fuvarjainak SQL-szabálya valódi DATE típusú összehasonlítást
   használ.
 
-A változtatások részletei: VALTOZASOK_V124.txt.
-A helyi ellenőrzések eredménye: ELLENORZES_V124.txt.
+A változtatások részletei: VALTOZASOK_V125.txt.
+A helyi ellenőrzések eredménye: ELLENORZES_V125.txt.
 
 SUPABASE
 Ha a sofőr korábbi fuvarjainak visszanézése már működik, a SQL-fájlt nem kell
@@ -45,4 +45,4 @@ A ZIP ellenőrzése után az „Archiváltak törlése” gombbal, a kért fájl
 beírásával törölhetők a legalább két napos fájlok.
 
 
-A V124 verzió a sofőr által átmozgatott fuvarok és hátralékok céldátumát az admin és a sofőr buborékjában is megjeleníti. Részletek: VALTOZASOK_V124.txt.
+A V125 verzió a sofőr által átmozgatott fuvarok és hátralékok céldátumát az admin és a sofőr buborékjában is megjeleníti. Részletek: VALTOZASOK_V125.txt.
