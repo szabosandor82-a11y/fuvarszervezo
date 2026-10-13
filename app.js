@@ -1,5 +1,61 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V126Planner?.version||window.V123Planner?.version||window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V127Planner?.version||window.V123Planner?.version||window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
+
+/* ===== V126 – KÉT CÉG: STAND 98 ÉS STAND FUTURE =====================
+
+   A FÁJL ELEJÉN áll, mert a belépés korábban hívhatja, mint ahová a
+   V126-ban eredetileg került – a const addig nem elérhető, és a belépés
+   "Cannot access before initialization" hibával állt meg.
+
+   A fuvarok két céghez tartozhatnak. Az alapértelmezés MINDIG a Stand 98 –
+   így a meglévő több száz fuvar és minden új felvitel változatlan marad,
+   amíg valaki kifejezetten át nem állítja.
+
+   A cég a fuvar tulajdonsága, nem a sofőré: ugyanaz a sofőr viszi mindkettőt.
+   A visszáru és a hátralék örökli az eredeti fuvar cégét. */
+const COMPANIES_V126 = {
+  stand98: { id: 'stand98', name: 'Stand 98', short: 'Stand 98' },
+  future:  { id: 'future',  name: 'Stand Future', short: 'Future' }
+};
+
+/* Az űrlap cégválasztója. Két gomb, mert egy kattintás legyen. */
+function setOrderCompanyV126(ertek){
+  const mezo=$('#orderCompanyV126');
+  const vegleges=COMPANIES_V126[ertek]?ertek:'stand98';
+  if(mezo)mezo.value=vegleges;
+  for(const gomb of $$('.v126-company-btn'))
+    gomb.classList.toggle('active',gomb.dataset.company===vegleges);
+}
+function bindOrderCompanyV126(){
+  for(const gomb of $$('.v126-company-btn')){
+    if(gomb.dataset.v126==='1')continue;
+    gomb.dataset.v126='1';
+    gomb.onclick=()=>setOrderCompanyV126(gomb.dataset.company);
+  }
+}
+window.setOrderCompanyV126=setOrderCompanyV126;
+window.bindOrderCompanyV126=bindOrderCompanyV126;
+
+function orderCompanyV126(order){
+  const ertek = String(order?.companyV126 || '').trim();
+  return COMPANIES_V126[ertek] ? ertek : 'stand98';   // alapértelmezés
+}
+function companyLabelV126(order){ return COMPANIES_V126[orderCompanyV126(order)].name; }
+function isFutureOrderV126(order){ return orderCompanyV126(order) === 'future'; }
+
+/* Örökítés: a visszáru és a hátralék ugyanahhoz a céghez tartozik, mint az
+   eredeti fuvar. Enélkül a másolatok csendben visszaesnének Stand 98-ra. */
+function inheritCompanyV126(forras, cel){
+  if (!forras || !cel) return cel;
+  cel.companyV126 = orderCompanyV126(forras);
+  return cel;
+}
+
+window.COMPANIES_V126 = COMPANIES_V126;
+window.orderCompanyV126 = orderCompanyV126;
+window.companyLabelV126 = companyLabelV126;
+window.isFutureOrderV126 = isFutureOrderV126;
+window.inheritCompanyV126 = inheritCompanyV126;
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
 let maps={},masterType='projects',currentItemsOrderId='',mediaRecorder=null,audioChunks=[],audioBlob=null,importOrders=[],reviewQueue=[],reviewIndex=0,deferredPrompt=null;
@@ -3156,49 +3212,7 @@ function calMonthStartV121(){
 
    A cég a fuvar tulajdonsága, nem a sofőré: ugyanaz a sofőr viszi mindkettőt.
    A visszáru és a hátralék örökli az eredeti fuvar cégét. */
-const COMPANIES_V126 = {
-  stand98: { id: 'stand98', name: 'Stand 98', short: 'Stand 98' },
-  future:  { id: 'future',  name: 'Stand Future', short: 'Future' }
-};
 
-/* Az űrlap cégválasztója. Két gomb, mert egy kattintás legyen. */
-function setOrderCompanyV126(ertek){
-  const mezo=$('#orderCompanyV126');
-  const vegleges=COMPANIES_V126[ertek]?ertek:'stand98';
-  if(mezo)mezo.value=vegleges;
-  for(const gomb of $$('.v126-company-btn'))
-    gomb.classList.toggle('active',gomb.dataset.company===vegleges);
-}
-function bindOrderCompanyV126(){
-  for(const gomb of $$('.v126-company-btn')){
-    if(gomb.dataset.v126==='1')continue;
-    gomb.dataset.v126='1';
-    gomb.onclick=()=>setOrderCompanyV126(gomb.dataset.company);
-  }
-}
-window.setOrderCompanyV126=setOrderCompanyV126;
-window.bindOrderCompanyV126=bindOrderCompanyV126;
-
-function orderCompanyV126(order){
-  const ertek = String(order?.companyV126 || '').trim();
-  return COMPANIES_V126[ertek] ? ertek : 'stand98';   // alapértelmezés
-}
-function companyLabelV126(order){ return COMPANIES_V126[orderCompanyV126(order)].name; }
-function isFutureOrderV126(order){ return orderCompanyV126(order) === 'future'; }
-
-/* Örökítés: a visszáru és a hátralék ugyanahhoz a céghez tartozik, mint az
-   eredeti fuvar. Enélkül a másolatok csendben visszaesnének Stand 98-ra. */
-function inheritCompanyV126(forras, cel){
-  if (!forras || !cel) return cel;
-  cel.companyV126 = orderCompanyV126(forras);
-  return cel;
-}
-
-window.COMPANIES_V126 = COMPANIES_V126;
-window.orderCompanyV126 = orderCompanyV126;
-window.companyLabelV126 = companyLabelV126;
-window.isFutureOrderV126 = isFutureOrderV126;
-window.inheritCompanyV126 = inheritCompanyV126;
 
 /* ===== V125 – A NAPTÁR A NAPOKAT SZÍNEZI =============================
 

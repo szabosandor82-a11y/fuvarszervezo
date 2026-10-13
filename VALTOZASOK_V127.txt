@@ -1,0 +1,219 @@
+FUVARSZERVEZO V127
+==================
+
+SURGOS JAVITAS: "Belepesi hiba: Cannot access 'COMPANIES_V126' before
+initialization"
+
+MODOSITOTT FAJLOK
+-----------------
+app.js         a ceg-deklaracio a fajl ELEJERE kerult
+TEST_V127.js   441 teszt
+
+
+MI TORTENT
+----------
+A V126-ban a ceg-deklaracio (COMPANIES_V126) a fajl kozepere kerult, a
+3159. sor koruli reszre.
+
+Az app.js viszont a 2456. sorban mar MEGHIVJA a render() fuggvenyt - vagyis
+kirajzolja a feluletet. A kirajzolas eljut a buborekokhoz, azok lekerdezik a
+fuvar ceget, az pedig a meg NEM LETEZO deklaraciohoz nyul.
+
+A JavaScript a const-ot nem engedi hasznalni a deklaracioja elott - ezert
+allt meg a belepes.
+
+A JAVITAS
+---------
+A deklaracio es a hozza tartozo alapfuggvenyek a fajl ELEJERE kerultek, a
+16. sor koruli reszre - minden hasznalat ele.
+
+Uj teszt figyeli, hogy a deklaracio a felso szintu render() hivas ELOTT
+alljon. Ez a hiba igy nem terhet vissza.
+
+A V126 minden mas resze valtozatlan: a ket ceg, a turkiz buborek, a
+cegvalaszto es a cegenkenti kimutatas ugyanugy mukodik.
+
+
+TESZTEK
+-------
+TEST_V127.js   441/441
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Futtatas: node TEST_V127.js
+
+========================================================================
+A V126 VALTOZASAI
+========================================================================
+
+FUVARSZERVEZO V126
+==================
+
+Ket ceg: Stand 98 es Stand Future.
+
+MODOSITOTT FAJLOK
+-----------------
+app.js          ceg-mezo, urlapi valaszto, kimutatas cegenkent, naptari pont
+planner-v41.js  cegvalaszto az import elonezeten
+planner-v37.js  turkiz buborek es "Future" cimke
+auth-v44-2.js   ugyanez a sofori feluleten
+index.html      cegvalaszto az urlapon, km-jelzes a kimutatasban
+styles.css      turkiz szinek, cimke, kimutatas-fejlecek
+TEST_V126.js    440 teszt
+
+
+1. AZ ALAPERTELMEZES MINDIG STAND 98
+------------------------------------
+A ceg a FUVAR tulajdonsaga, nem a sofore - ugyanaz a sofor viszi mindkettot.
+
+Ahol nincs beallitva, ott Stand 98: a meglevo tobb szaz fuvarnal, minden uj
+felvitelnel, es minden importnal. Semmi nem valtozik magatol.
+
+
+2. HOL ALLITHATO
+----------------
+UJ FUVAR es SZERKESZTES: ket gomb a fuvar urlapjan, a megjegyzes folott.
+Nem lenyilo, hogy egy kattintas legyen.
+
+OUTLOOK IMPORT: minden elonezeti kartyan ket gomb. A setAllEntriesCompanyV126
+muvelettel mind atallithato egyszerre, ha egy levelben csak az egyik ceg
+rendelesei jonnek.
+
+OROKLES: a visszaru es a hatralek ugyanahhoz a ceghez tartozik, mint az
+eredeti fuvar. Mind az ot masolo helyen ellenorizve.
+
+
+3. A MEGJELENES
+---------------
+A Stand Future fuvarok VILAGOS TURKIZ hatteret kapnak - az admin buborekon
+es a sofori fuvarsoron egyarant. A Stand 98 valtozatlan, a megszokott kep
+nem borul fel.
+
+A szint NEM bizzuk magara: a buborekon es a sofori soron egy "FUTURE" cimke
+is all. A napi fuvarlista nyomtatasban fekete-feher, es a szintevesztes is
+valos.
+
+A NAPTARBAN a napok mar zold-piros szinezest kapnak (budapesti/videki),
+ezert ott a Future csak egy TURKIZ PONT - nem utkozik.
+
+
+4. A KIMUTATAS CEGENKENT
+------------------------
+Ugyanazok az oszlopok, mint eddig, csak cegenkent kulon, es a vegen
+mindosszesen:
+
+   STAND 98
+     Mario      412 km   18 fuvar   22 felrako   19 lerako   1 meghiusult
+     osszesen   800 km   34 fuvar
+   STAND FUTURE
+     Mario       96 km    4 fuvar    5 felrako    4 lerako   0 meghiusult
+     osszesen    96 km    4 fuvar
+   MINDOSSZESEN 896 km   38 fuvar
+
+A KILOMETER kulon gondolat: a napi utvonalstatisztika SOFORONKENT all
+rendelkezesre, nem fuvaronkent. Ezert a ket ceg kozott a teljesult fuvarok
+ARANYABAN osztjuk szet - ez BECSLES, es a fejlecben jelezzuk is, hogy ne
+tunjon pontosabbnak, mint amilyen.
+
+Ha pontos km kell cegenkent, ahhoz az utvonalszamitast kellene fuvaronkent
+rogziteni - szoljal, ha erre szukseg van.
+
+
+TESZTEK
+-------
+TEST_V126.js   440/440
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Ot uj teszt: az alapertelmezes, az orokles mind az ot masolonal, a
+cegvalasztok, a turkiz megjelenes a cimkevel, es a cegenkenti kimutatas.
+
+Futtatas: node TEST_V126.js
+
+========================================================================
+KORABBI VALTOZASOK
+========================================================================
+
+FUVARSZERVEZO V125
+==================
+
+Szinezett naptar, es az "Atmozgatva" jelzes a FORRAS napot mutatja.
+
+MODOSITOTT FAJLOK
+-----------------
+app.js          naptar-szinezes, cimfelismeres, forrasnap jegyzese
+planner-v37.js  a buborek a forrasnapot mutatja
+styles.css      a naptar napjainak szinei
+TEST_V125.js    435 teszt
+
+
+1. A NAPTAR A NAPOKAT SZINEZI
+-----------------------------
+A havi nezetben nem a fuvarok felsorolasa a lenyeg - az egy kepernyon
+olvashatatlan. Ami egy pillantasbol kell: HOL lesz dolgunk aznap.
+
+   ZOLD   minden fuvar budapesti, oda-vissza
+   PIROS  van videki felrako vagy lerako
+   VEGYES mindketto elofordul aznap (atlos szinezes)
+   SZURKE van fuvar, de hianyos a cim - nem talalgatunk
+
+A nap szamaval egyutt latszik a fuvarok szama, a soforok pontjai, es a
+ceruza jel, ha van megjegyzes.
+
+A NAPRA KATTINTVA ugyanaz a felugro ablak nyilik, mint eddig - ott vannak a
+fuvarok reszletesen.
+
+A budapesti cim felismerese IRANYITOSZAMBOL megy: 1011-tol 1239-ig minden
+budapesti kerulet. Ha nincs iranyitoszam, a varos nevet nezzuk. Ha a cim
+hianyos, a nap szurke marad - nem talalgatunk.
+
+Egy fuvar akkor szamit budapestinek, ha a FELRAKO ES A LERAKO is az. A
+videki felrako eppugy tobb idot jelent, mint a videki lerako.
+
+
+2. AZ "ATMOZGATVA" A FORRAS NAPOT MUTATJA
+-----------------------------------------
+Eddig a jelzes melletti datum a CELNAP volt - vagyis ugyanaz a nap, amit
+eppen nezel. Semmit nem mondott.
+
+Mostantol az a nap latszik, AHONNAN athoztak:
+
+   Atmozgatva . 2026-10-09      (a 10-13-i buborekon)
+
+Ez az, amit keresel, amikor rajossz, hogy egy fuvar nem ott van, ahol
+vartad. A celnapot ugyis latod, hiszen azt a napot nezed.
+
+Ra mutatva tovabbra is latszik, KI es MIKOR mozgatta.
+
+
+TESZTEK
+-------
+TEST_V125.js   435/435
+TEST_V54/53/52/49/44/43/41/37/35/34/33 - mind sikeres
+
+Negy uj teszt: a cimfelismeres (iranyitoszam es varosnev), a nap szinenek
+osszeallitasa, a havi nezet szinezese, es a forrasnap megjelenitese.
+
+MEGJEGYZES: az atvett V124 csomagban nehany regi teszt meg a V121-es
+verziószamot kereste - ezeket a verzioemelessel rendeztuk.
+
+Futtatas: node TEST_V125.js
+
+========================================================================
+KORABBI VALTOZASOK
+========================================================================
+
+FUVARSZERVEZŐ V124
+==================
+
+1. SOFŐR ÁLTAL ÁTHELYEZETT FUVAROK DÁTUMA
+-----------------------------------------
+A sofőr által másik napra tett tétel jelölése eddig a forrásfuvaron maradt.
+A módosítás most a célfuvaron menti a dátumot, és a buborékban is kiírja.
+
+A dátum az admin Fuvarok nézetében és a sofőr User menüjében is látható.
+Hátralék átütemezésekor a célbuborék és a Hátralék-bejegyzés dátuma együtt
+frissül, így újratöltés után is az új nap jelenik meg.
+
+2. VERZIÓ ÉS GYORSÍTÓTÁR
+------------------------
+Az alkalmazás V124 néven jelenik meg. A webes hivatkozások és a service
+worker gyorsítótára frissült.
