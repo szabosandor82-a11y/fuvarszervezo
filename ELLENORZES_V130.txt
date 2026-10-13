@@ -1,0 +1,14 @@
+FUVARSZERVEZŐ V130 – HELYI ELLENŐRZÉS
+
+Futtatott parancsok:
+  node --check app.js
+  node --check planner-v44.js
+  node --check TEST_V130.js
+  node TEST_V130.js
+
+Eredmény:
+  Szintaktikai ellenőrzés: sikeres.
+  Elfogadási tesztek: 449/449 sikeres.
+  Új regressziós ellenőrzés: a megnyitott naptól kezdődő összes későbbi
+  ütemezett fuvar bekerül; a korábbi kimarad; a dátum és a cég oszlopa
+  fuvaronként helyes; a napra szóló jármű a megfelelő napon jelenik meg.

@@ -1,0 +1,25 @@
+FUVARSZERVEZŐ V130
+
+EXCEL EXPORT
+- Az Excel-export most a képernyőn megnyitott naptól előrefelé minden már
+  ütemezett fuvarnapot bevesz.
+- A megnyitott napnál korábbi fuvarok nem kerülnek bele.
+- Minden adatsor dátuma a fuvar saját ütemezési dátuma.
+- A felrakósorszám naponta és sofőrönként újraindul.
+- A „Cég” oszlop a teljes exporttáblázat utolsó oszlopa, értéke Stand 98
+  vagy Stand Future. A régi fuvarok alapértelmezése továbbra is Stand 98;
+  az áthelyezett fuvar a forrásfuvar cégét örökli.
+- A napra szóló jármű az exportban is csak a saját ütemezési napján aktív.
+- Kiosztatlan vagy az adott napon inaktív járműhöz rendelt fuvar is bekerül.
+
+A V129 működése megmaradt: a fuvarok szétosztása, optimalizálása és ezek
+online mentése kizárólag a képernyőn megnyitott napot módosítja.
+
+ELLENŐRZÉS
+A TEST_V130.js a V129-es elfogadási csomagra épül, az Excel-export új
+viselkedésére célzott ellenőrzéssel kibővítve.
+Futtatás:
+  node --check app.js
+  node --check planner-v44.js
+  node --check TEST_V130.js
+  node TEST_V130.js

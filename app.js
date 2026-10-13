@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V128Planner?.version||window.V123Planner?.version||window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V130Planner?.version||window.V128Planner?.version||window.V123Planner?.version||window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 
 /* ===== V126 – KÉT CÉG: STAND 98 ÉS STAND FUTURE =====================
@@ -2393,26 +2393,32 @@ function buildDriverWorkbook(rows){const wb=XLSX.utils.book_new(),main=[['Járm�
    minden rendelése ugyanazt a számot kapja, sofőrönként 1-től indulva.
    A sorok a felületen látható sofőr- és felrakósorrendet követik. */
 const EXPORT_HEADERS_V63 = ['Dátum','Sorrend',' ','Felrakó','Felrakó címe','Rendelésszám',
-  'mj1','Projekt neve','mj2','Projekt címe','mj3','Megjegyzés','Átvevő'];
+  'mj1','Projekt neve','mj2','Projekt címe','mj3','Megjegyzés','Átvevő','Cég'];
 
 function exportNumberedOrdersV69(date){
-  const orders = state.orders.filter(order => order.scheduleDate === date);
-  const vehicles = activeVehicles();
-  const activeIds = new Set(vehicles.map(vehicle => vehicle.id));
+  // Az Excel a megnyitott naptól indul, és az összes későbbre ütemezett
+  // fuvarral együtt készül. A sorszámozás sofőrönként és naponként indul újra.
+  const orders = state.orders.filter(order => order.scheduleDate && order.scheduleDate >= date);
+  const dates = [...new Set(orders.map(order => order.scheduleDate))].sort();
   const numbered = [];
-  for(const vehicle of vehicles){
-    const list = orders.filter(order => order.vehicleId === vehicle.id)
-      .sort((a,b) => (+a.sequence || 999) - (+b.sequence || 999));
-    // Ugyanaz a csoportosítás adja a főoldal és a Nézet sorszámait is.
-    const units = window.V37Planner.focusPickupUnits(list);
-    units.forEach((unit,index) => unit.allPickupOrders.forEach(order => {
-      numbered.push({ order, driver: vehicle.driverName, sequence: index + 1 });
-    }));
-  }
-  // A kiosztatlan / inaktív járműhöz tartozó fuvarok is megmaradnak az
-  // exportban; alkalmazásbeli felrakósorszámuk még nincs.
-  for(const order of orders.filter(order => !activeIds.has(order.vehicleId))){
-    numbered.push({ order, driver: '', sequence: '' });
+  for(const day of dates){
+    const dayOrders = orders.filter(order => order.scheduleDate === day);
+    const vehicles = activeVehicles(day);
+    const activeIds = new Set(vehicles.map(vehicle => vehicle.id));
+    for(const vehicle of vehicles){
+      const list = dayOrders.filter(order => order.vehicleId === vehicle.id)
+        .sort((a,b) => (+a.sequence || 999) - (+b.sequence || 999));
+      // Ugyanaz a csoportosítás adja a főoldal és a Nézet sorszámait is.
+      const units = window.V37Planner.focusPickupUnits(list);
+      units.forEach((unit,index) => unit.allPickupOrders.forEach(order => {
+        numbered.push({ order, driver: vehicle.driverName, sequence: index + 1 });
+      }));
+    }
+    // A kiosztatlan / inaktív járműhöz tartozó fuvarok is megmaradnak az
+    // exportban; alkalmazásbeli felrakósorszámuk még nincs.
+    for(const order of dayOrders.filter(order => !activeIds.has(order.vehicleId))){
+      numbered.push({ order, driver: '', sequence: '' });
+    }
   }
   return numbered;
 }
@@ -2420,6 +2426,7 @@ function exportNumberedOrdersV69(date){
 function exportRowsV63(date){
   return exportNumberedOrdersV69(date)
     .map(({order:o,driver,sequence}) => ({
+      date: o.scheduleDate || date,
       driver,
       sequence,
       pickup: o.pickupName || '',
@@ -2428,24 +2435,25 @@ function exportRowsV63(date){
       project: o.projectName || '',
       dropAddress: o.dropAddress || '',
       note: o.note || '',
-      recipient: [o.recipientName, o.recipientPhone].filter(Boolean).join(' ')
+      recipient: [o.recipientName, o.recipientPhone].filter(Boolean).join(' '),
+      company: companyLabelV126(o)
     }));
 }
 
 function exportExcel(){
   const date = selectedDate();
   const rows = exportRowsV63(date);
-  if(!rows.length) return alert('Az aktuális napon nincs exportálható fuvar.');
+  if(!rows.length) return alert('A megnyitott naptól nincs exportálható fuvar.');
   const dateValue = new Date(`${date}T00:00:00`);
   const aoa = [
-    [dateValue, '', '', '', '', '', '', '', '', '', '', '', ''],
+    [dateValue, '', '', '', '', '', '', '', '', '', '', '', '', ''],
     [], [],
     EXPORT_HEADERS_V63,
-    ...rows.map(r => [dateValue, r.sequence, r.driver, r.pickup, r.pickupAddress, r.orderNo,
-      'Projekt:', r.project, 'Cím:', r.dropAddress, 'Megjegyzés:', r.note, r.recipient])
+    ...rows.map(r => [new Date(`${r.date}T00:00:00`), r.sequence, r.driver, r.pickup, r.pickupAddress, r.orderNo,
+      'Projekt:', r.project, 'Cím:', r.dropAddress, 'Megjegyzés:', r.note, r.recipient, r.company])
   ];
   const sheet = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
-  sheet['!cols'] = [{wch:11},{wch:8},{wch:9},{wch:20},{wch:32},{wch:13},{wch:9},{wch:22},{wch:6},{wch:32},{wch:12},{wch:34},{wch:26}];
+  sheet['!cols'] = [{wch:11},{wch:8},{wch:9},{wch:20},{wch:32},{wch:13},{wch:9},{wch:22},{wch:6},{wch:32},{wch:12},{wch:34},{wch:26},{wch:18}];
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, sheet, 'Fuvarok');
   XLSX.writeFile(book, `Szallitasok_${date}.xlsx`);
