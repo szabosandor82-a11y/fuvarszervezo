@@ -1,4 +1,4 @@
-/* Fuvarszervező V127
+/* Fuvarszervező V129
    Sáv-alapú szétosztás és lánc-optimalizált felrakási sorrend.
 
    Kemény szabályok:
@@ -23,7 +23,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '127';
+  const VERSION = '129';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   // Alapértelmezett indulási pontok. A törzsadat (SEED_DATA.vehicles) felülírja
   // őket, ha ott meg van adva a sofőr lakóhelye.
@@ -752,9 +752,9 @@
     return project?.address || '';
   }
 
-  function dropCentroidV53(vehicleId) {
+  function dropCentroidV53(vehicleId, date = selectedDate()) {
     const points = [];
-    const orders = (state.orders || []).filter(order => order.scheduleDate === selectedDate()
+    const orders = (state.orders || []).filter(order => order.scheduleDate === date
       && (!vehicleId || order.vehicleId === vehicleId));
     if (!orders.length) return null;
     for (const order of orders) {
@@ -976,15 +976,16 @@
 
   let lastRouteWarningsV60 = [];
 
-  async function buildVehicleRouteV49(vehicle, profiles) {
-    const allOrders = (typeof dayOrders === 'function' ? dayOrders(vehicle.id) : []).slice().sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
+  async function buildVehicleRouteV49(vehicle, profiles, date = selectedDate()) {
+    const allOrders = (state.orders || []).filter(order => order.scheduleDate === date && order.vehicleId === vehicle.id)
+      .slice().sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
     const isResolved = order => global.V37Planner?.isResolvedBacklogOrder ? global.V37Planner.isResolvedBacklogOrder(order) : false;
     const activeOrders = allOrders.filter(order => !isResolved(order));
     if (!activeOrders.length) return [];
 
     let baseEvents = [];
-    if (global.V37Planner?.v37BuildRoutePlan) baseEvents = await global.V37Planner.v37BuildRoutePlan(vehicle.id, profiles);
-    else if (global.V35Planner?.v35BuildRoutePlan) baseEvents = await global.V35Planner.v35BuildRoutePlan(vehicle.id, profiles);
+    if (global.V37Planner?.v37BuildRoutePlan) baseEvents = await global.V37Planner.v37BuildRoutePlan(vehicle.id, profiles, date);
+    else if (global.V35Planner?.v35BuildRoutePlan) baseEvents = await global.V35Planner.v35BuildRoutePlan(vehicle.id, profiles, date);
     // V50-ben az útvonalterv kizárólag a felrakási sorrend. Lerakó soha nem
     // kerül az optimalizálási események közé, teljes autós tételnél sem.
     const normalPickupsOriginal = baseEvents.filter(event => event.type === 'pickup')
@@ -994,7 +995,7 @@
         return aSeq - bSeq;
       });
     const chainStart = await vehicleHomeV44(vehicle);
-    const chainEnd = dropCentroidV53(vehicle.id);
+    const chainEnd = dropCentroidV53(vehicle.id, date);
     // V60: ha egy felrakónak nincs koordinátája, a lánc-optimalizáló kihagyja.
     // Korábban ez csendben történt, és az útvonal optimalizálatlan maradt.
     // Most megpróbáljuk pótolni, és ha marad hiány, jelezzük.
@@ -1025,8 +1026,8 @@
     }
 
     const events = orderedNormal;
-    state.routePlans = state.routePlans || {}; state.routePlans[selectedDate()] = state.routePlans[selectedDate()] || {};
-    state.routePlans[selectedDate()][vehicle.id] = events;
+    state.routePlans = state.routePlans || {}; state.routePlans[date] = state.routePlans[date] || {};
+    state.routePlans[date][vehicle.id] = events;
     return events;
   }
 
@@ -1161,53 +1162,61 @@
     }
   }
 
-  async function buildRoutePlansV44(profiles = null) {
-    const vehicles = typeof activeVehicles === 'function' ? activeVehicles() : [];
-    const before = new Map((state.orders || []).filter(order => order.scheduleDate === selectedDate()).map(order => [order.id, order.vehicleId]));
-    const routeProfiles = profiles || await buildProfiles((state.orders || []).filter(order => order.scheduleDate === selectedDate()));
+  async function buildRoutePlansV44(profiles = null, date = selectedDate()) {
+    const vehicles = typeof activeVehicles === 'function' ? activeVehicles(date) : [];
+    const orders = (state.orders || []).filter(order => order.scheduleDate === date);
+    const before = new Map(orders.map(order => [order.id, order.vehicleId]));
+    const routeProfiles = profiles || await buildProfiles(orders);
     lastRouteWarningsV60 = [];
-    for (const vehicle of vehicles) await buildVehicleRouteV49(vehicle, routeProfiles);
+    for (const vehicle of vehicles) await buildVehicleRouteV49(vehicle, routeProfiles, date);
     if (lastRouteWarningsV60.length && typeof alert === 'function') {
       const list = [...new Set(lastRouteWarningsV60)];
       alert('Ezeknek a felrakóknak nincs koordinátája, ezért kimaradtak az útvonal-optimalizálásból:\n\n'
         + list.slice(0, 10).join('\n') + (list.length > 10 ? `\n… és további ${list.length - 10}` : '')
         + '\n\nEllenőrizd a címüket a Törzs menüben.');
     }
-    const changed = (state.orders || []).filter(order => order.scheduleDate === selectedDate() && before.has(order.id) && before.get(order.id) !== order.vehicleId);
+    const changed = (state.orders || []).filter(order => order.scheduleDate === date && before.has(order.id) && before.get(order.id) !== order.vehicleId);
     if (changed.length) {
       changed.forEach(order => { order.vehicleId = before.get(order.id); });
       throw new Error('Az útvonal-optimalizálás sofőrt próbált változtatni, ezért visszaállítottam.');
     }
   }
 
-  async function persistOnlineV49() {
-    if (typeof save === 'function') save();
+  async function persistOnlineV49(date) {
+    if (typeof global.saveLocalOnlyV129 === 'function') global.saveLocalOnlyV129();
+    else if (typeof save === 'function') save(false);
     const online = global.V44Online;
     const onlineProfile = online?.getProfile?.();
     const onlineSession = online?.getSession?.();
-    if (online?.configured?.() && onlineProfile?.role === 'admin' && onlineSession?.access_token) {
-      await online.syncOrders(state.orders || [], onlineProfile);
+    if (online?.configured?.() && onlineProfile && onlineSession?.access_token) {
+      if (typeof online.syncOrdersForDate !== 'function') {
+        throw new Error('A napi mentési funkció nem érhető el. Frissítsd az alkalmazás fájljait, majd próbáld újra.');
+      }
+      const orders = (state.orders || []).filter(order => order.scheduleDate === date);
+      await online.syncOrdersForDate(date, orders, onlineProfile);
     }
   }
 
   async function balanceActionV44() {
     try {
-      const orders = (state.orders || []).filter(order => order.scheduleDate === selectedDate());
+      // A művelet teljes idejére rögzítjük a gombnyomáskor megnyitott napot.
+      const date = selectedDate();
+      const orders = (state.orders || []).filter(order => order.scheduleDate === date);
       if (!orders.length) throw new Error('Nincs szétosztható fuvar az adott napon.');
-      const drivers = typeof activeVehicles === 'function' ? activeVehicles() : [];
+      const drivers = typeof activeVehicles === 'function' ? activeVehicles(date) : [];
       const fixedBefore = new Map(orders.map(order => [order.id, fixedVehicleForOrder(order, drivers)?.id || '']).filter(([, value]) => value));
       const result = await distributeOrderSetV44(orders, { drivers });
       for (const [orderId, vehicleId] of fixedBefore.entries()) {
         const order = orders.find(item => item.id === orderId);
         if (order && order.vehicleId !== vehicleId) throw new Error(`A(z) ${order.orderNo || orderId} névre rögzített fuvar elmozdult.`);
       }
-      state.routePlans = state.routePlans || {}; state.routePlans[selectedDate()] = {};
-      state.routeStats = state.routeStats || {}; state.routeStats[selectedDate()] = {};
-      await buildRoutePlansV44(result.profiles);
-      await persistOnlineV49();
+      state.routePlans = state.routePlans || {}; state.routePlans[date] = {};
+      state.routeStats = state.routeStats || {}; state.routeStats[date] = {};
+      await buildRoutePlansV44(result.profiles, date);
+      await persistOnlineV49(date);
       if (typeof render === 'function') render();
       const conflictText = result.conflicts.length ? `\nFigyelem: ${result.conflicts.length} felrakóhelyen egymással ütköző fix sofőrjelölés maradt.` : '';
-      alert(`Fuvarok V127 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
+      alert(`Fuvarok V129 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
       return result;
     } catch (error) {
       console.error('[V121] Szétosztási hiba', error);
@@ -1218,15 +1227,17 @@
 
   async function optimizeActionV44() {
     try {
-      const before = new Map((state.orders || []).filter(order => order.scheduleDate === selectedDate()).map(order => [order.id, order.vehicleId]));
-      const orders = (state.orders || []).filter(order => order.scheduleDate === selectedDate());
+      // A teljes optimalizálás a gombnyomás pillanatában látható naphoz kötött.
+      const date = selectedDate();
+      const orders = (state.orders || []).filter(order => order.scheduleDate === date);
+      const before = new Map(orders.map(order => [order.id, order.vehicleId]));
       const profiles = await buildProfiles(orders);
-      await buildRoutePlansV44(profiles);
+      await buildRoutePlansV44(profiles, date);
       const changed = orders.filter(order => before.get(order.id) !== order.vehicleId);
       if (changed.length) throw new Error('Az optimalizálás sofőrt változtatott.');
-      await persistOnlineV49();
+      await persistOnlineV49(date);
       if (typeof render === 'function') render();
-      alert('V127 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
+      alert('V129 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
       return true;
     } catch (error) {
       console.error('[V121] Optimalizálási hiba', error);
@@ -1467,12 +1478,12 @@
     if (balanceButton) {
       balanceButton.onclick = event => { event.preventDefault(); return balanceActionV44(); };
       balanceButton.dataset.algorithmVersion = VERSION;
-      balanceButton.title = 'V127: sáv-alapú szétosztás; Márió=észak/kelet Pest, Patrik=közép/dél Pest és Buda, Martin=5-6 m szálanyag';
+      balanceButton.title = 'V129: csak a megnyitott nap szétosztása; a többi nap nem módosul';
     }
     if (optimizeButton) {
       optimizeButton.onclick = event => { event.preventDefault(); return optimizeActionV44(); };
       optimizeButton.dataset.algorithmVersion = VERSION;
-      optimizeButton.title = 'V127: lakhely -> felrakók -> lerakók lánc optimalizálása, sofőrváltás nélkül';
+      optimizeButton.title = 'V129: csak a megnyitott nap optimalizálása; a többi nap nem módosul';
     }
     document.getElementById('clearAllMastersBtn')?.addEventListener('click', clearAllMasterDataV44);
     document.getElementById('loadBuiltInMastersBtn')?.addEventListener('click', loadBuiltInMasterDataV44);
@@ -1483,6 +1494,8 @@
       version: VERSION,
       balanceHandler: balanceButton?.dataset.algorithmVersion || VERSION,
       optimizeHandler: optimizeButton?.dataset.algorithmVersion || VERSION,
+      dayScopedActions: true,
+      dayScopedOnlineSave: typeof global.V44Online?.syncOrdersForDate === 'function',
       assignmentUnit: 'azonos napi felrakóhely; a központi raktár projektenként bontható',
       territoryRule: 'Márió=észak/kelet Pest; Patrik=közép/dél Pest és Buda; Martin=szálanyag és nyugati folyosó',
       longMaterialRule: '5-6 méteres szálanyag kizárólag Martinhoz, kiegyenlítés nem mozdítja',
@@ -1549,7 +1562,8 @@
     clearAllMasterDataV44,
     loadBuiltInMasterDataV44
   };
-  global.V127Planner = global.V121Planner;
+  global.V129Planner = global.V121Planner;
+  global.V128Planner = global.V121Planner;
   global.V123Planner = global.V121Planner;
   global.V122Planner = global.V121Planner;
   global.V120Planner = global.V121Planner;

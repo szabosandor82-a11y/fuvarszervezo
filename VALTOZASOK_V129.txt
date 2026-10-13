@@ -1,0 +1,67 @@
+FUVARSZERVEZO V129
+==================
+
+JAVITAS: a fuvarszétosztás, az optimalizálás és az online mentés csak a
+kepernyon megnyitott napra ervenyes.
+
+MODOSITOTT FAJLOK
+-----------------
+planner-v37.js   a rogzitett napot hasznalja az utvonalepites teljes ideje alatt
+planner-v44.js   a szetosztas es optimalizalas indulaskor rogziti a megnyitott napot
+online-v44-2.js  csak az adott nap rendelesit menti, teljes listat nem torol vagy ir ujra
+auth-v44-2.js    helyi mentesnel nem indit teljes-listas szinkront
+index.html       V129 verzio es gyorsitotar-frissites
+manifest.webmanifest, sw.js  V129 alkalmazas- es cache-verzio
+TEST_V129.js     448 elfogadasi teszt
+
+
+1. NAPI MUVELETEK
+-----------------
+A „Fuvar szétosztása” vagy „Útvonal optimalizálása” gomb megnyomásakor a
+program elmenti a datummezoben lathato napot. A hosszabb terkepes es
+geokodolo lepesek alatt sem valt at masik nap adataira, akkor sem, ha kozben
+a felhasznalo masik napra lep.
+
+A korábbi és későbbi napok sofőrbeosztása, sorrendje és útvonalterve nem
+változik. Csak a megnyitott nap rendelései és útvonalterve frissül.
+
+
+2. ONLINE MENTES
+----------------
+A V128 teljes listás szinkronja a napi művelet után minden helyi fuvart
+felküldött. Adminnál ez a hiányzó távoli rekordok törlését is elindíthatta;
+más napok újabb adatai pedig egy korábbi helyi állapottal felülíródhattak.
+
+A V129 a napi művelet után külön, célzott mentést használ:
+- adminnál csak a megnyitott nap rekordjait írja, távoli rekordot nem töröl;
+- sofőri belépésnél csak az adott nap rendeléseit adja át a saját fuvarokat
+  kezelő eljárásnak;
+- a napi szétosztás és optimalizálás nem indít teljes listás vagy
+  hátralék szinkront.
+
+A megnyitott nap kezelésén kívül a többi online mentési folyamat változatlan.
+Supabase SQL-frissítés nem kell.
+
+
+3. ELLENORZES
+-------------
+Futtatas: node TEST_V129.js
+
+Eredmény: 448/448 teszt sikeres.
+Külön regressziós tesztek ellenőrzik, hogy a dátumváltás közben futtatott
+szétosztás és optimalizálás a megnyitott napnál marad, és a Supabase-re csak
+ennek a napnak a rendelései mennek fel, törlés nélkül.
+
+
+4. TELEPITES
+------------
+1. Készíts biztonsági másolatot a jelenlegi GitHub Pages fájlokról.
+2. Bontsd ki a Fuvarszervezo_V129_Mobile_PWA_GitHub_Pages.zip fájlt.
+3. A csomag gyökérkönyvtárának tartalmát másold az alkalmazás gyökérkönyvtárába
+   a korábbi azonos nevű fájlok felülírásával. Az index.html közvetlenül az
+   alkalmazás gyökerében legyen.
+4. Várj a GitHub Pages közzétételére. Ha réginek tűnik, laptopon Ctrl+F5,
+   telefonon az alkalmazás teljes bezárása és újranyitása frissíti a fájlokat.
+
+========================================================================
+Korábbi funkciók részletei: VALTOZASOK_V128.txt.

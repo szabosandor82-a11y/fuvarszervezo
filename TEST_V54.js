@@ -79,7 +79,7 @@ function whose(c, no) {
   }
 
   await test('A motor verziója V121', async () => {
-    assert.match(fs.readFileSync(__dirname + '/planner-v44.js', 'utf8'), /const VERSION = '127'/);
+    assert.match(fs.readFileSync(__dirname + '/planner-v44.js', 'utf8'), /const VERSION = '128'/);
   });
 
   await test('A törzsadat betöltődik: projektek, telephelyek, átvevők, autók', async () => {
@@ -192,8 +192,8 @@ function whose(c, no) {
     const nodes = [{ textContent: 'régi' }, { textContent: 'régi' }];
     c.document = { title: 'Fuvarszervező V0', querySelectorAll: () => nodes, querySelector: () => null };
     c.V54Planner.applyVersionLabelV54();
-    assert.equal(c.document.title, 'Fuvarszervező V127');
-    for (const n of nodes) assert.equal(n.textContent, 'Fuvarszervező V127');
+    assert.equal(c.document.title, 'Fuvarszervező V128');
+    for (const n of nodes) assert.equal(n.textContent, 'Fuvarszervező V128');
   });
 
   await test('A felületen sehol nem maradt régi verziószám', async () => {

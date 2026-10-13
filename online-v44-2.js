@@ -316,6 +316,34 @@
     emit('online', 'Fuvarok és hátralékok szinkronizálva.');
   }
 
+  /* V129 – egyetlen nap műveletének mentése.
+     A teljes syncOrders adminnál hiányzó rekordokat is törölhet, sofőrnél
+     pedig minden látható fuvar payloadját újraküldi. Szétosztás és
+     optimalizálás ezért csak a megnyitott nap fuvarait küldi fel, és nem
+     szinkronizálja vagy törli a többi napot, illetve a hátraléklistát. */
+  async function syncOrdersForDate(date, orders, currentProfile = profile) {
+    const targetDate = String(date || '').trim();
+    if (!targetDate) throw new Error('A napi mentéshez hiányzik a dátum.');
+    if (!currentProfile) currentProfile = await fetchProfile();
+    const submitted = Array.isArray(orders) ? orders : [];
+    const scoped = submitted.filter(order => String(order?.scheduleDate || '') === targetDate);
+    if (scoped.length !== submitted.length) {
+      throw new Error('A napi mentés más dátumú fuvart is tartalmazna; a műveletet megszakítottam.');
+    }
+    emit('syncing', `${targetDate} fuvarjainak mentése…`);
+    if (currentProfile.role === 'admin') {
+      const rows = scoped.map(orderToRow);
+      if (rows.length) await dbRequest('orders?on_conflict=id', {
+        method: 'POST', body: rows,
+        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }
+      });
+    } else if (scoped.length) {
+      await dbRequest('rpc/sync_own_orders', { method: 'POST', body: { p_orders: scoped } });
+    }
+    emit('online', `${targetDate} fuvarjai szinkronizálva.`);
+    return { date: targetDate, count: scoped.length };
+  }
+
   async function loadOrdersIntoState({ preserveLocalIfRemoteEmpty = false } = {}) {
     emit('syncing', 'Fuvarok betöltése…');
     const [orders, backlog] = await Promise.all([fetchOrders(), fetchBacklog()]);
@@ -537,7 +565,7 @@
     getProfile: () => profile,
     setStatusListener: listener => { statusListener = listener; },
     signInWithPassword, signOut, refreshSession, ensureSession, fetchProfile, listUsers,
-    fetchOrders, fetchBacklog, syncOrders, syncBacklog, loadOrdersIntoState, fetchMasterData, syncMasterData, loadMasterIntoState, masterSnapshot, requestTransfer, acceptTransfer, rejectTransfer, cancelTransfer, listTransfers,
+    fetchOrders, fetchBacklog, syncOrders, syncOrdersForDate, syncBacklog, loadOrdersIntoState, fetchMasterData, syncMasterData, loadMasterIntoState, masterSnapshot, requestTransfer, acceptTransfer, rejectTransfer, cancelTransfer, listTransfers,
     createDeliveryReport, listDeliveryFiles, relinkDeliveryFiles,
     deleteDeliveryFile, deleteDeliveryFiles, listAllDeliveryFiles, updateOwnOrder, syncOrderThread,
     startPolling, stopPolling, driverKeyFromOrder, DRIVER_VEHICLES

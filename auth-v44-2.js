@@ -141,7 +141,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V127Planner?.version||global.V123Planner?.version||global.V122Planner?.version||global.V121Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V128Planner?.version||global.V123Planner?.version||global.V122Planner?.version||global.V121Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -1300,6 +1300,20 @@
         return result;
       };
     }
+
+    /* V129: fuvarszétosztás és optimalizálás után a helyi mentés ne indítsa
+       el a régi teljes-listás online szinkront. A planner a rögzített napot
+       külön, célzottan menti a syncOrdersForDate eljárással. */
+    global.saveLocalOnlyV129 = function () {
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+      const wasSuppressed = suppressOnlineSave;
+      suppressOnlineSave = true;
+      try {
+        if (typeof global.save === 'function') global.save(false);
+      } finally {
+        suppressOnlineSave = wasSuppressed;
+      }
+    };
 
     byId('itemsDialog')?.addEventListener('close', () => { if (isRestrictedUser()) renderDriverPortal(); });
     const cameraForm = byId('cameraForm');

@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V127Planner?.version||window.V123Planner?.version||window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V128Planner?.version||window.V123Planner?.version||window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 
 /* ===== V126 – KÉT CÉG: STAND 98 ÉS STAND FUTURE =====================
@@ -36,9 +36,24 @@ function bindOrderCompanyV126(){
 window.setOrderCompanyV126=setOrderCompanyV126;
 window.bindOrderCompanyV126=bindOrderCompanyV126;
 
-function orderCompanyV126(order){
+function orderCompanyV126(order, melyseg = 0){
   const ertek = String(order?.companyV126 || '').trim();
-  return COMPANIES_V126[ertek] ? ertek : 'stand98';   // alapértelmezés
+  if (COMPANIES_V126[ertek]) return ertek;
+
+  /* V128: ha a fuvar ÁTHOZOTT – hátralék vagy visszáru –, és nincs saját
+     cég-értéke, az EREDETI fuvarból örököljük. Ez a már létrejött fuvarokat
+     is rendbe teszi, nem csak az ezutániakat.
+
+     A melyseg a láncot zárja le: ha valaki kört csinálna a hivatkozásokkal,
+     ne akadjunk el benne. */
+  if (melyseg < 3 && order) {
+    const forrasId = order.movedFromOrderId || order.sourceOrderId || order.failedMovedFrom;
+    if (forrasId && typeof state !== 'undefined') {
+      const forras = (state.orders || []).find(x => String(x.id) === String(forrasId));
+      if (forras) return orderCompanyV126(forras, melyseg + 1);
+    }
+  }
+  return 'stand98';   // alapértelmezés
 }
 function companyLabelV126(order){ return COMPANIES_V126[orderCompanyV126(order)].name; }
 function isFutureOrderV126(order){ return orderCompanyV126(order) === 'future'; }

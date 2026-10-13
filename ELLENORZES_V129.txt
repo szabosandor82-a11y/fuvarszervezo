@@ -1,0 +1,18 @@
+FUVARSZERVEZO V129 – HELYI ELLENŐRZÉS
+=====================================
+
+Futtatott parancsok:
+  node --check planner-v37.js
+  node --check planner-v44.js
+  node --check online-v44-2.js
+  node --check auth-v44-2.js
+  node --check TEST_V129.js
+  node TEST_V129.js
+
+Eredmény:
+  JavaScript szintaxisellenőrzés: sikeres
+  Elfogadási/regressziós tesztek: 448/448 sikeres
+
+Az új tesztek a dátumváltás közbeni naprögzítést, a korábbi és későbbi
+napok adatainak változatlanságát, valamint a napra szűrt, törlés nélküli
+online mentési utat ellenőrzik.

@@ -269,14 +269,17 @@
     return slots.filter(Boolean);
   }
 
-  async function v37BuildRoutePlan(vehicleId, suppliedProfiles = null) {
+  async function v37BuildRoutePlan(vehicleId, suppliedProfiles = null, targetDate = selectedDate()) {
     const vehicle = state.vehicles.find(item => item.id === vehicleId);
-    const allOrders = dayOrders(vehicleId).slice().sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
+    // A dátumot a hívó rögzítheti. Az útvonalépítés közben ne a dátummező
+    // esetleges megváltozásától függjön, melyik napi rendelést módosítjuk.
+    const allOrders = (state.orders || []).filter(order => order.scheduleDate === targetDate && order.vehicleId === vehicleId)
+      .slice().sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
     const activeOrders = allOrders.filter(order => !isResolvedBacklogOrder(order));
     state.routePlans = state.routePlans || {};
-    state.routePlans[selectedDate()] = state.routePlans[selectedDate()] || {};
+    state.routePlans[targetDate] = state.routePlans[targetDate] || {};
     if (!activeOrders.length) {
-      state.routePlans[selectedDate()][vehicleId] = [];
+      state.routePlans[targetDate][vehicleId] = [];
       return [];
     }
 
@@ -315,16 +318,17 @@
         });
       }
     }
-    state.routePlans[selectedDate()][vehicleId] = events;
+    state.routePlans[targetDate][vehicleId] = events;
     return events;
   }
 
   async function v37OptimizeAction() {
     try {
-      const before = new Map(state.orders.filter(order => order.scheduleDate === selectedDate()).map(order => [order.id, order.vehicleId]));
+      const targetDate = selectedDate();
+      const before = new Map(state.orders.filter(order => order.scheduleDate === targetDate).map(order => [order.id, order.vehicleId]));
       syncAllBacklogStatuses();
-      for (const vehicle of activeVehicles()) await v37BuildRoutePlan(vehicle.id);
-      const changed = state.orders.filter(order => order.scheduleDate === selectedDate() && before.get(order.id) !== order.vehicleId);
+      for (const vehicle of activeVehicles(targetDate)) await v37BuildRoutePlan(vehicle.id, null, targetDate);
+      const changed = state.orders.filter(order => order.scheduleDate === targetDate && before.get(order.id) !== order.vehicleId);
       if (changed.length) throw new Error('Az optimalizálás sofőrt változtatott, ezért a művelet vissza lett utasítva.');
       save();
       alert('Felrakási sorrend optimalizálva a sofőr indulási iránya alapján. A szürke, elintézett hátralékok és a rögzített buborékok a helyükön maradtak.');
@@ -526,7 +530,7 @@
         <div class="bubble-control-row">
           <button type="button" class="pin-button ${pinned ? 'active' : ''}" onclick="event.stopPropagation();v37TogglePin('${escHtml(ids)}','${escHtml(vehicleId)}')" title="${pinned ? 'Rögzítés feloldása' : 'Pozíció rögzítése'}">⚑</button>
           <button type="button" class="full-load-button ${fullLoad ? 'active' : ''}" onclick="event.stopPropagation();v33ToggleFullLoad('${escHtml(ids)}')" title="Teljes autós rakomány">🚚</button>
-          ${regroupButton}${cegJelzes}${mozgatasJelzes}
+          ${regroupButton}${mozgatasJelzes}${cegJelzes}
         </div>
         <h3>${escHtml(displayNumber)}. ${escHtml(group.pickupName)}</h3>
         ${warnings}

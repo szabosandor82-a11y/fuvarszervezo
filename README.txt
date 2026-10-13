@@ -1,8 +1,8 @@
-FUVARSZERVEZŐ V127
+FUVARSZERVEZŐ V129
 
 FRISSÍTÉS
 1. Készíts biztonsági másolatot a jelenlegi GitHub Pages fájlokról.
-2. Bontsd ki a Fuvarszervezo_V127_Mobile_PWA_GitHub_Pages.zip fájlt.
+2. Bontsd ki a Fuvarszervezo_V129_Mobile_PWA_GitHub_Pages.zip fájlt.
 3. A csomag gyökérkönyvtárának tartalmát másold a meglévő alkalmazás
    gyökérkönyvtárába a korábbi azonos nevű fájlok felülírásával.
    Az index.html közvetlenül az alkalmazás gyökerében legyen.
@@ -22,8 +22,8 @@ VÁLTOZÁSOK
 - A sofőr korábbi fuvarjainak SQL-szabálya valódi DATE típusú összehasonlítást
   használ.
 
-A változtatások részletei: VALTOZASOK_V127.txt.
-A helyi ellenőrzések eredménye: ELLENORZES_V127.txt.
+A változtatások részletei: VALTOZASOK_V129.txt.
+A helyi ellenőrzések eredménye: ELLENORZES_V129.txt.
 
 SUPABASE
 Ha a sofőr korábbi fuvarjainak visszanézése már működik, a SQL-fájlt nem kell
@@ -45,4 +45,6 @@ A ZIP ellenőrzése után az „Archiváltak törlése” gombbal, a kért fájl
 beírásával törölhetők a legalább két napos fájlok.
 
 
-A V127 verzió a sofőr által átmozgatott fuvarok és hátralékok céldátumát az admin és a sofőr buborékjában is megjeleníti. Részletek: VALTOZASOK_V127.txt.
+A V129-ben a fuvarszétosztás és az optimalizálás kizárólag a képernyőn megnyitott napot módosítja. A mentés is csak ennek a napnak a fuvarjait küldi fel, a korábbi és későbbi napokhoz nem nyúl.
+
+A V128-ban a sofőr által átmozgatott fuvarok és hátralékok céldátuma az admin és a sofőr buborékjában is megjelenik. A funkció a V129-ben is megmaradt; részletek: VALTOZASOK_V128.txt.
