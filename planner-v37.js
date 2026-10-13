@@ -477,6 +477,12 @@
   }
 
   function renderGroupBubble(group, index, vehicleId, options = {}) {
+    /* V126: a Stand Future fuvarok világos türkiz hátteret kapnak, hogy egy
+       pillantásra elkülönüljenek. A színt NEM bízzuk magára: a címke
+       nyomtatásban és színtévesztéssel is olvasható marad. */
+    const cegKulcs = global.orderCompanyV126?.(group.orders?.[0]) || 'stand98';
+    const cegJelzes = cegKulcs === 'future'
+      ? '<span class="v126-badge">Future</span>' : '';
     /* V121: ha a sofőr mozgatta át a fuvart vagy a hátralékot, az a
        zászlósorban látszik – nevével és napjával együtt. */
     const mozgatas = (group.orders || []).map(order => order.movedByDriverV121).filter(Boolean)[0];
@@ -515,12 +521,12 @@
       warnings, displayNumber, vehicleId, pickupOrderIds, regroupButton, options
     });
     return `<div class="route-block ${deliveryPhotoCount(group) ? 'has-delivery' : ''} ${options.insidePickupGroup ? 'inside-pickup-group' : ''} ${pinned ? 'pinned-block' : ''} ${fullLoad ? 'full-load-block' : ''} ${resolved ? 'resolved-backlog-block' : ''}" data-group-key="${escHtml(group.key)}" data-pickup-move-key="${escHtml(pickupMoveKey(group))}" data-order-ids="${escHtml(ids)}" data-vehicle-id="${escHtml(vehicleId)}">
-      <article class="bubble grouped-bubble ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''}${unreadComment ? ' user-comment-unread' : ''}" data-id="${escHtml(first.id)}" data-order-ids="${escHtml(ids)}">
+      <article class="bubble grouped-bubble v126-${cegKulcs} ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''}${unreadComment ? ' user-comment-unread' : ''}" data-id="${escHtml(first.id)}" data-order-ids="${escHtml(ids)}">
         <span class="drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : options.insidePickupGroup ? 'Az egész felrakási blokk húzása' : 'Húzás'}">${resolved ? '✓' : '☷'}</span>
         <div class="bubble-control-row">
           <button type="button" class="pin-button ${pinned ? 'active' : ''}" onclick="event.stopPropagation();v37TogglePin('${escHtml(ids)}','${escHtml(vehicleId)}')" title="${pinned ? 'Rögzítés feloldása' : 'Pozíció rögzítése'}">⚑</button>
           <button type="button" class="full-load-button ${fullLoad ? 'active' : ''}" onclick="event.stopPropagation();v33ToggleFullLoad('${escHtml(ids)}')" title="Teljes autós rakomány">🚚</button>
-          ${regroupButton}${mozgatasJelzes}
+          ${regroupButton}${cegJelzes}${mozgatasJelzes}
         </div>
         <h3>${escHtml(displayNumber)}. ${escHtml(group.pickupName)}</h3>
         ${warnings}

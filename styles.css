@@ -1322,3 +1322,36 @@ body.v119-camera-open{overflow:hidden}
 .v121-cal-cell[data-szin="vegyes"].v121-cal-today{border:2px solid var(--blue)}
 .v125-cal-marks{display:flex;align-items:center;gap:5px;margin-top:auto;flex-wrap:wrap}
 .v125-cal-note{font-style:normal;font-size:12px;color:#7a4d06}
+
+/* V126 – Stand Future megkülönböztetése */
+.v126-badge{display:inline-flex;align-items:center;height:22px;padding:0 9px;margin-right:6px;
+  border-radius:7px;background:#19a8a8;color:#fff;font-size:10.5px;font-weight:800;
+  letter-spacing:.6px;text-transform:uppercase;white-space:nowrap;vertical-align:middle}
+.bubble-control-row .v126-badge{height:32px;padding:0 11px;font-size:11.5px}
+
+/* a buborék és a sofőri sor háttere */
+.bubble.v126-future{background:#e3f7f7!important;border-color:#8fd3d3!important}
+.bubble.v126-future.done{background:#d5f0ef!important}
+.mobile-user-row.v126-future{background:#e3f7f7;border-color:#8fd3d3}
+.mobile-user-row.v126-future.done{background:#d5f0ef}
+
+/* a naptárban csak pont, hogy ne ütközzön a zöld-piros színezéssel */
+.v126-cal-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#19a8a8;
+  border:1px solid #0f7f7f}
+
+/* V126 – kimutatás cégenként */
+.v126-report-head td{background:#eef2f6;font-size:12px;font-weight:800;letter-spacing:.6px;
+  text-transform:uppercase;color:#47606e;padding:9px 12px}
+tr.v126-report-grand td{background:#dbeafd;font-weight:800}
+.v126-company{margin:12px 0;padding:11px 13px;border:1px solid var(--border);border-radius:11px;background:#fbfcfd}
+.v126-company-label{display:block;font-size:12.5px;font-weight:700;margin-bottom:7px}
+.v126-company-buttons,.v126-entry-company{display:flex;gap:8px}
+.v126-company-btn,.v126-entry-btn{flex:1 1 0;height:42px;border:1px solid #a9b8cf;border-radius:10px;
+  background:#fff;font-size:13.5px;font-weight:600;cursor:pointer;color:var(--ink)}
+.v126-company-btn.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+.v126-entry-company{margin:8px 0}
+.v126-entry-btn{height:34px;font-size:12px}
+.v126-entry-btn.active[data-entry-company="stand98"]{background:var(--blue);color:#fff;border-color:var(--blue)}
+.v126-entry-btn.active[data-entry-company="future"]{background:#19a8a8;color:#fff;border-color:#19a8a8}
+.v126-company-btn.active[data-company="future"]{background:#19a8a8;border-color:#19a8a8}
+.v126-th-note{display:block;font-size:10px;font-weight:500;color:var(--muted);text-transform:none;letter-spacing:0}

@@ -1,4 +1,4 @@
-const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V125Planner?.version||window.V123Planner?.version||window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY='fuvarszervezo_v11';const APP_VERSION=(()=>{const v=window.V126Planner?.version||window.V123Planner?.version||window.V122Planner?.version||window.V121Planner?.version||window.V55Planner?.version||window.V54Planner?.version||window.V53Planner?.version||'';return v?('V'+v):'V55'})();const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const VEHICLE_TYPES=['3.5 T dobozos autó','3.5 T plató autó','7.5 tonnás dobozos autó','7.5 tonnás platós autó','7.5 tonnás emelőhátfalas autó','7.5 tonnás KCR-es autó','12 tonnás dobozos autó','12 tonnás platós autó','12 tonnás emelőhátfalas autó','12 tonnás KCR-es autó','24 tonnás kamion'];
 let state={projects:[],suppliers:[],recipients:[],vehicles:[],orders:[],backlog:[],settings:{baseAddress:'2310 Szigetszentmiklós, Kereskedő utca 2.'},aliases:{projects:{},suppliers:{}},geo:{}};
 Object.defineProperty(window,'state',{configurable:true,get:()=>state,set:value=>{state=value}});
@@ -1451,6 +1451,7 @@ function returnOrder(id){
   const draft={
     scheduleDate:selectedDate(),
     vehicleId:source.vehicleId||'',
+    companyV126:(typeof orderCompanyV126==='function'?orderCompanyV126(source):'stand98'),      // V126: a visszáru ugyanahhoz a céghez tartozik
     orderNo:'000000',                                   // visszárunál nincs valódi rendelésszám
     // az irány megfordul
     pickupName:source.projectName||'',
@@ -1475,6 +1476,8 @@ window.returnOrder=returnOrder;
 function openOrder(o={}){
   /* V110: a csatolmány-mező bekötése és a meglévő fájlok kiírása. */
   orderAttachPendingV110=[];
+  /* V126: a cég beállítása az űrlapon. Új fuvarnál Stand 98. */
+  setTimeout(()=>{ bindOrderCompanyV126(); setOrderCompanyV126(orderCompanyV126(o)); },0);
   setTimeout(()=>{ bindOrderAttachV110(); renderOrderAttachListV110(o.id||''); },0);
   /* V87: a cél-követő kulcsokat minden űrlapnyitáskor nullázzuk. Enélkül az
      ELŐZŐ fuvarnál választott cél megmaradt, a program változatlannak látta a
@@ -1488,6 +1491,8 @@ $('#orderForm').onsubmit=e=>{e.preventDefault();if(!syncScheduleDate())return al
      ("ÁTÍRT szöveg · régi importált szöveg"), és úgy tűnne, mintha nem
      lehetne szerkeszteni. */
   manualItems:$('#orderNote').value.trim(),
+  /* V126: a cég – alapértelmezés Stand 98. */
+  companyV126:($('#orderCompanyV126')?.value)||orderCompanyV126(old||{}),
   items:old?.items||[],completed:old?.completed||false,sequence:old?.sequence||999};const i=state.orders.findIndex(x=>x.id===o.id);if(i>=0)state.orders[i]=o;else state.orders.push(o);$('#orderDialog').close();save()}
 /* V83: a felrakó oldalon UGYANEZ a szabály – a cím csak akkor frissül, ha
    MÁSIK céget vagy projektet választasz, nem minden billentyűleütésnél. */
@@ -1539,7 +1544,7 @@ function deleteAll(){const date=selectedDate(),count=state.orders.filter(o=>o.sc
 function ensureItemId(it){if(!it._id)it._id=uid();return it._id}
 function openItems(id){const o=state.orders.find(x=>x.id===id);if(!o)return;currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);$('#itemsTitle').textContent=`${o.orderNo} · Tételek`;$('#itemMovePanel').innerHTML=`<p><b>Nem kipipált tételek áthelyezése másik napra</b><br>A teljes dátum megadása után a program megerősítést kér, majd automatikusan áthelyezi a tételeket.</p><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Áthelyezés éve"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div>`;$('#itemsBody').innerHTML=(o.items||[]).map((it,i)=>`<div class="item-row ${it.received?'done':''}"><input type="checkbox" ${it.received?'checked':''} onchange="toggleItem('${id}',${i},this.checked)"><div><b class="item-name">${esc(it.name)}</b><br>${esc(it.code)} · ${esc(it.qty)} ${esc(it.unit)} ${it.longMaterial?'· hosszú szál':''}<label class="item-note-edit">Tétel megjegyzés<textarea placeholder="Nincs megjegyzés" oninput="updateItemNote('${id}',${i},this.value)">${esc(itemNoteValue(it))}</textarea></label></div></div>`).join('')||'<div class="notice">Nincs tétel.</div>';bindMoveDateParts();if(!$('#itemsDialog').open)$('#itemsDialog').showModal()}
 function bindMoveDateParts(){const y=$('#moveYear'),m=$('#moveMonth'),d=$('#moveDay');[[y,4,m],[m,2,d],[d,2,null]].forEach(([el,max,next])=>{el.addEventListener('input',()=>{el.value=el.value.replace(/\D/g,'').slice(0,max);if(el.value.length===max&&next){next.focus();next.select()}if(y.value.length===4&&m.value.length===2&&d.value.length===2)setTimeout(moveUncheckedItemsFromDialog,0)});el.addEventListener('change',()=>{if(y.value&&m.value&&d.value)moveUncheckedItemsFromDialog()})})}
-function moveUncheckedItemsFromDialog(){const o=state.orders.find(x=>x.id===currentItemsOrderId);if(!o)return;const y=$('#moveYear')?.value,m=$('#moveMonth')?.value,d=$('#moveDay')?.value;if(!y||!m||!d)return;const target=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`,dt=new Date(target+'T12:00:00');if(isNaN(dt)||localISO(dt)!==target)return alert('Érvénytelen dátum.');if(target===o.scheduleDate)return alert('Az új dátum nem lehet az eredeti nappal azonos.');const moving=(o.items||[]).filter(i=>!i.received);if(!moving.length)return alert('Nincs áthelyezhető, kipipálatlan tétel.');if(!confirm(`${moving.length} kipipálatlan tétel áthelyezése erre a napra: ${target}?`))return;let targetOrder=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===o.orderNo&&x.vehicleId===o.vehicleId&&x.projectName===o.projectName&&x.pickupName===o.pickupName);if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id};state.orders.push(targetOrder)}moving.forEach(it=>{ensureItemId(it);it.received=false;targetOrder.items.push(it);state.backlog.push({id:uid(),sourceOrderId:o.id,targetOrderId:targetOrder.id,itemId:it._id,orderNo:o.orderNo,supplier:o.pickupName,projectName:o.projectName,code:it.code,name:it.name,itemNote:itemNoteValue(it),movedToDate:target,movedAt:new Date().toISOString()})});o.items=(o.items||[]).filter(i=>i.received);o.completed=o.items.length>0&&o.items.every(i=>i.received);$('#itemsDialog').close();save();alert(`Az áthelyezés elkészült: ${moving.length} tétel → ${target}.`)}
+function moveUncheckedItemsFromDialog(){const o=state.orders.find(x=>x.id===currentItemsOrderId);if(!o)return;const y=$('#moveYear')?.value,m=$('#moveMonth')?.value,d=$('#moveDay')?.value;if(!y||!m||!d)return;const target=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`,dt=new Date(target+'T12:00:00');if(isNaN(dt)||localISO(dt)!==target)return alert('Érvénytelen dátum.');if(target===o.scheduleDate)return alert('Az új dátum nem lehet az eredeti nappal azonos.');const moving=(o.items||[]).filter(i=>!i.received);if(!moving.length)return alert('Nincs áthelyezhető, kipipálatlan tétel.');if(!confirm(`${moving.length} kipipálatlan tétel áthelyezése erre a napra: ${target}?`))return;let targetOrder=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===o.orderNo&&x.vehicleId===o.vehicleId&&x.projectName===o.projectName&&x.pickupName===o.pickupName);if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id,companyV126:(typeof orderCompanyV126==='function'?orderCompanyV126(o):'stand98')};state.orders.push(targetOrder)}moving.forEach(it=>{ensureItemId(it);it.received=false;targetOrder.items.push(it);state.backlog.push({id:uid(),sourceOrderId:o.id,targetOrderId:targetOrder.id,itemId:it._id,orderNo:o.orderNo,supplier:o.pickupName,projectName:o.projectName,code:it.code,name:it.name,itemNote:itemNoteValue(it),movedToDate:target,movedAt:new Date().toISOString()})});o.items=(o.items||[]).filter(i=>i.received);o.completed=o.items.length>0&&o.items.every(i=>i.received);$('#itemsDialog').close();save();alert(`Az áthelyezés elkészült: ${moving.length} tétel → ${target}.`)}
 window.openItems=openItems;window.toggleItem=(id,i,val)=>{const o=state.orders.find(x=>x.id===id);if(!o||!o.items?.[i])return;o.items[i].received=val;o.completed=(o.items||[]).length>0&&o.items.every(x=>x.received);save(false);openItems(id);renderRoutes();renderDriver()};window.updateItemNote=(id,i,val)=>{const o=state.orders.find(x=>x.id===id);if(!o||!o.items?.[i])return;const note=String(val??'');const item=o.items[i];item.itemNote=note;const fromUser=isUserCommentSession();if(note.trim()){item.itemNoteAuthorRole=fromUser?'driver':'admin';item.itemNoteUpdatedByRole=item.itemNoteAuthorRole;item.itemNoteUpdatedAt=new Date().toISOString();item.itemNoteCommentAt=item.itemNoteUpdatedAt}else{delete item.itemNoteAuthorRole;delete item.itemNoteUpdatedByRole;delete item.itemNoteUpdatedAt;delete item.itemNoteCommentAt}const itemId=ensureItemId(item);state.backlog.filter(b=>b.itemId===itemId).forEach(b=>b.itemNote=note);save(false);renderRoutes();renderOrders();renderBacklog()};
 function backlogRecordData(b){const o=state.orders.find(x=>x.id===b.targetOrderId),it=o?.items?.find(i=>i._id===b.itemId);return{...b,orderNo:o?.orderNo||b.orderNo,supplier:o?.pickupName||b.supplier,projectName:o?.projectName||b.projectName,code:it?.code||b.code,name:it?.name||b.name,itemNote:it?itemNoteValue(it):b.itemNote,movedToDate:o?.scheduleDate||b.movedToDate,targetOrderId:o?.id||b.targetOrderId}}
 function renderBacklog(){const q=norm($('#backlogSearch')?.value||''),rows=(state.backlog||[]).map(backlogRecordData).filter(b=>!q||norm(Object.values(b).join(' ')).includes(q));if($('#backlogBody'))$('#backlogBody').innerHTML=rows.map(b=>`<tr class="backlog-row" onclick="openBacklogResult('${b.targetOrderId}','${b.movedToDate}')"><td>${esc(b.orderNo)}</td><td>${esc(b.supplier)}</td><td>${esc(b.projectName)}</td><td>${esc(b.code)}</td><td>${esc(b.name)}</td><td>${esc(b.itemNote)}</td><td>${esc(b.movedToDate)}</td></tr>`).join('')||'<tr><td colspan="7">Nincs találat.</td></tr>'}
@@ -2463,7 +2468,7 @@ function moveUncheckedItemsFromDialog(){
   for(const it of moving){const total=numericQty(it.qty),missing=it.missingQty===''||it.missingQty==null?total:numericQty(it.missingQty);if(missing<=0)return alert(`A(z) ${it.name} hiányzó mennyisége legyen nagyobb nullánál.`);if(total>0&&missing>total)return alert(`A(z) ${it.name} hiányzó mennyisége nem lehet több a rendelt mennyiségnél (${it.qty}).`)}
   if(!confirm(`${moving.length} kipipálatlan tétel hiányzó mennyiségének áthelyezése erre a napra: ${target}?`))return;
   let targetOrder=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===o.orderNo&&x.vehicleId===o.vehicleId&&x.projectName===o.projectName&&x.pickupName===o.pickupName);
-  if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id};state.orders.push(targetOrder)}
+  if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id,companyV126:(typeof orderCompanyV126==='function'?orderCompanyV126(o):'stand98')};state.orders.push(targetOrder)}
   const keep=[];
   (o.items||[]).forEach(it=>{
     if(it.received){keep.push(it);return}
@@ -3143,6 +3148,58 @@ function calMonthStartV121(){
   return alap.slice(0,7) + '-01';
 }
 
+/* ===== V126 – KÉT CÉG: STAND 98 ÉS STAND FUTURE =====================
+
+   A fuvarok két céghez tartozhatnak. Az alapértelmezés MINDIG a Stand 98 –
+   így a meglévő több száz fuvar és minden új felvitel változatlan marad,
+   amíg valaki kifejezetten át nem állítja.
+
+   A cég a fuvar tulajdonsága, nem a sofőré: ugyanaz a sofőr viszi mindkettőt.
+   A visszáru és a hátralék örökli az eredeti fuvar cégét. */
+const COMPANIES_V126 = {
+  stand98: { id: 'stand98', name: 'Stand 98', short: 'Stand 98' },
+  future:  { id: 'future',  name: 'Stand Future', short: 'Future' }
+};
+
+/* Az űrlap cégválasztója. Két gomb, mert egy kattintás legyen. */
+function setOrderCompanyV126(ertek){
+  const mezo=$('#orderCompanyV126');
+  const vegleges=COMPANIES_V126[ertek]?ertek:'stand98';
+  if(mezo)mezo.value=vegleges;
+  for(const gomb of $$('.v126-company-btn'))
+    gomb.classList.toggle('active',gomb.dataset.company===vegleges);
+}
+function bindOrderCompanyV126(){
+  for(const gomb of $$('.v126-company-btn')){
+    if(gomb.dataset.v126==='1')continue;
+    gomb.dataset.v126='1';
+    gomb.onclick=()=>setOrderCompanyV126(gomb.dataset.company);
+  }
+}
+window.setOrderCompanyV126=setOrderCompanyV126;
+window.bindOrderCompanyV126=bindOrderCompanyV126;
+
+function orderCompanyV126(order){
+  const ertek = String(order?.companyV126 || '').trim();
+  return COMPANIES_V126[ertek] ? ertek : 'stand98';   // alapértelmezés
+}
+function companyLabelV126(order){ return COMPANIES_V126[orderCompanyV126(order)].name; }
+function isFutureOrderV126(order){ return orderCompanyV126(order) === 'future'; }
+
+/* Örökítés: a visszáru és a hátralék ugyanahhoz a céghez tartozik, mint az
+   eredeti fuvar. Enélkül a másolatok csendben visszaesnének Stand 98-ra. */
+function inheritCompanyV126(forras, cel){
+  if (!forras || !cel) return cel;
+  cel.companyV126 = orderCompanyV126(forras);
+  return cel;
+}
+
+window.COMPANIES_V126 = COMPANIES_V126;
+window.orderCompanyV126 = orderCompanyV126;
+window.companyLabelV126 = companyLabelV126;
+window.isFutureOrderV126 = isFutureOrderV126;
+window.inheritCompanyV126 = inheritCompanyV126;
+
 /* ===== V125 – A NAPTÁR A NAPOKAT SZÍNEZI =============================
 
    A havi nézetben nem a fuvarok felsorolása a lényeg – az olvashatatlan egy
@@ -3235,7 +3292,7 @@ function renderCalendarV121(){
       data-szin="${esc(szin)}" onclick="openCalendarDayV121('${datum}')" role="button" tabindex="0"
       title="${fuvarok.length ? `${fuvarok.length} fuvar · ${szin === 'bp' ? 'budapesti' : szin === 'videk' ? 'vidéki' : szin === 'vegyes' ? 'budapesti és vidéki' : 'hiányos cím'}` : 'Nincs fuvar'}">
       <div class="v121-cal-date">${nap}${fuvarok.length ? `<em>${fuvarok.length}</em>` : ''}</div>
-      ${fuvarok.length ? `<div class="v125-cal-marks">${pontok}${megjegyzeses ? `<i class="v125-cal-note" title="${megjegyzeses} megjegyzés">✎</i>` : ''}</div>` : ''}
+      ${fuvarok.length ? `<div class="v125-cal-marks">${pontok}${fuvarok.some(o => isFutureOrderV126(o)) ? '<i class="v126-cal-dot" title="Stand Future fuvar is van ezen a napon"></i>' : ''}${megjegyzeses ? `<i class="v125-cal-note" title="${megjegyzeses} megjegyzés">✎</i>` : ''}</div>` : ''}
     </div>`);
   }
 
@@ -3435,7 +3492,7 @@ function moveSingleItemToDate(o,it,target){
   if(moveQty<=0)return{error:`A(z) ${it.name} hiányzó mennyisége legyen nagyobb nullánál.`};
   if(total>0&&moveQty>total)return{error:`A(z) ${it.name} hiányzó mennyisége nem lehet több a rendelt mennyiségnél (${it.qty}).`};
   let targetOrder=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===o.orderNo&&x.vehicleId===o.vehicleId&&x.projectName===o.projectName&&x.pickupName===o.pickupName&&x.movedFromOrderId===o.id);
-  if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id};state.orders.push(targetOrder)}
+  if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id,companyV126:(typeof orderCompanyV126==='function'?orderCompanyV126(o):'stand98')};state.orders.push(targetOrder)}
   const moved={...it,_id:uid(),qty:formatQty(moveQty),received:false,missingQty:'',moveTargetDate:''};
   targetOrder.items.push(moved);
   state.backlog=state.backlog||[];
@@ -3486,7 +3543,7 @@ function moveUncheckedItemsFromDialog(){
   const keep=[],movedIds=new Set();
   for(const target of dates){
     let targetOrder=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===o.orderNo&&x.vehicleId===o.vehicleId&&x.projectName===o.projectName&&x.pickupName===o.pickupName&&x.movedFromOrderId===o.id);
-    if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id};state.orders.push(targetOrder)}
+    if(!targetOrder){targetOrder={...o,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:o.id,companyV126:(typeof orderCompanyV126==='function'?orderCompanyV126(o):'stand98')};state.orders.push(targetOrder)}
     if(typeof markMovedByDriverV121==='function')markMovedByDriverV121(targetOrder,'hátralék',target,o.scheduleDate);
     for(const p of plan.filter(x=>x.target===target)){
       const it=p.it;
@@ -3818,10 +3875,59 @@ async function optimizeAll(){
 }
 
 function renderReports(){
+  /* ===== V126 – A KIMUTATÁS CÉGENKÉNT BONTVA =======================
+
+     Ugyanazok az oszlopok, mint eddig – kilométer, teljesült fuvar,
+     felrakók, lerakók, meghiúsultak –, csak cégenként külön, és a végén
+     mindösszesen.
+
+     A KILOMÉTER külön gondolat: a napi útvonalstatisztika sofőrönként áll
+     rendelkezésre, nem fuvaronként, ezért a két cég között a teljesült
+     fuvarok ARÁNYÁBAN osztjuk szét. Ez becslés, és a fejlécben jelezzük is,
+     hogy ne tűnjön pontosabbnak, mint amilyen. */
   const month=$('#reportMonth')?.value||today().slice(0,7),vehicles=state.vehicles;
-  const rows=vehicles.map(v=>{const completed=(state.orders||[]).filter(o=>o.vehicleId===v.id&&o.scheduleDate?.startsWith(month)&&o.completed);const pickupKeys=new Set(completed.map(o=>`${o.scheduleDate}|${norm(o.pickupAddress||o.pickupName)}`).filter(x=>x.split('|')[1]));const dropKeys=new Set(completed.map(o=>`${o.scheduleDate}|${norm(o.dropAddress||o.projectName)}`).filter(x=>x.split('|')[1]));const km=Object.entries(state.routeStats||{}).filter(([date])=>date.startsWith(month)).reduce((sum,[,byVehicle])=>sum+(+byVehicle?.[v.id]?.km||0),0);const failed=(state.failedTrips||[]).filter(f=>f.vehicleId===v.id&&f.originalDate?.startsWith(month)).length;return{driver:v.driverName,km:Math.round(km*10)/10,completed:completed.length,pickups:pickupKeys.size,drops:dropKeys.size,failed}});
-  const total=rows.reduce((a,r)=>({driver:'Havi összesen',km:a.km+r.km,completed:a.completed+r.completed,pickups:a.pickups+r.pickups,drops:a.drops+r.drops,failed:a.failed+r.failed}),{km:0,completed:0,pickups:0,drops:0,failed:0});
-  $('#reportBody').innerHTML=[...rows,total].map((r,i)=>`<tr ${i===rows.length?'class="report-total"':''}><td><b>${esc(r.driver)}</b></td><td>${formatQty(Math.round(r.km*10)/10)} km</td><td>${r.completed}</td><td>${r.pickups}</td><td>${r.drops}</td><td>${r.failed}</td></tr>`).join('');
+  const havi=(state.orders||[]).filter(o=>o.scheduleDate?.startsWith(month));
+
+  const cegSor=(v,cegKulcs)=>{
+    const sajat=havi.filter(o=>o.vehicleId===v.id&&orderCompanyV126(o)===cegKulcs);
+    const completed=sajat.filter(o=>o.completed);
+    const pickupKeys=new Set(completed.map(o=>`${o.scheduleDate}|${norm(o.pickupAddress||o.pickupName)}`).filter(x=>x.split('|')[1]));
+    const dropKeys=new Set(completed.map(o=>`${o.scheduleDate}|${norm(o.dropAddress||o.projectName)}`).filter(x=>x.split('|')[1]));
+    const failed=sajat.filter(o=>!o.completed&&o.scheduleDate<today()).length;
+
+    // a sofőr havi kilométere, a teljesült fuvarok arányában megosztva
+    const osszKm=Object.entries(state.routeStats||{})
+      .filter(([date])=>date.startsWith(month))
+      .reduce((sum,[,byVehicle])=>sum+(+byVehicle?.[v.id]?.km||0),0);
+    const mindenTeljesult=havi.filter(o=>o.vehicleId===v.id&&o.completed).length;
+    const km=mindenTeljesult?osszKm*(completed.length/mindenTeljesult):0;
+
+    return {driver:v.driverName||v.name||'Sofőr',km,completed:completed.length,
+            pickups:pickupKeys.size,drops:dropKeys.size,failed};
+  };
+
+  const osszeg=(sorok,cimke)=>sorok.reduce((a,r)=>({driver:cimke,km:a.km+r.km,
+    completed:a.completed+r.completed,pickups:a.pickups+r.pickups,
+    drops:a.drops+r.drops,failed:a.failed+r.failed}),
+    {driver:cimke,km:0,completed:0,pickups:0,drops:0,failed:0});
+
+  const sorHtml=(r,osztaly='')=>`<tr${osztaly?` class="${osztaly}"`:''}><td><b>${esc(r.driver)}</b></td>`
+    +`<td>${formatQty(Math.round(r.km*10)/10)} km</td><td>${r.completed}</td>`
+    +`<td>${r.pickups}</td><td>${r.drops}</td><td>${r.failed}</td></tr>`;
+
+  const blokkok=[];
+  const mindenSor=[];
+  for (const cegKulcs of ['stand98','future']) {
+    const sorok=vehicles.map(v=>cegSor(v,cegKulcs)).filter(r=>r.completed||r.failed||r.km>0);
+    if (!sorok.length) continue;
+    mindenSor.push(...sorok);
+    blokkok.push(`<tr class="v126-report-head"><td colspan="6">${esc(COMPANIES_V126[cegKulcs].name)}</td></tr>`);
+    blokkok.push(...sorok.map(r=>sorHtml(r)));
+    blokkok.push(sorHtml(osszeg(sorok,'összesen'),'report-total'));
+  }
+  if (!blokkok.length) blokkok.push('<tr><td colspan="6">Ebben a hónapban nincs adat.</td></tr>');
+  else blokkok.push(sorHtml(osszeg(mindenSor,'MINDÖSSZESEN'),'report-total v126-report-grand'));
+  $('#reportBody').innerHTML=blokkok.join('');
 }
 
 async function importMasterDataExcelV23(file){

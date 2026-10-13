@@ -1652,7 +1652,7 @@
 
   function entryCard(entry, index) {
     const categoryLabel = entry.category === 'martin' ? 'Martin / Platós' : 'Dobozos';
-    return `<article class="v38-preview-card ${entry.approved ? '' : 'disabled'}" data-entry-id="${htmlEsc(entry._id)}">
+    return `<article class="v38-preview-card ${entry.approved ? '' : 'disabled'}" data-entry-id="${htmlEsc(entry._id)}">${(() => { const ceg = entry.companyV126 || 'stand98'; return `<div class="v126-entry-company"><button type="button" class="v126-entry-btn${ceg === 'stand98' ? ' active' : ''}" data-entry-company="stand98" data-id="${htmlEsc(entry._id)}">Stand 98</button><button type="button" class="v126-entry-btn${ceg === 'future' ? ' active' : ''}" data-entry-company="future" data-id="${htmlEsc(entry._id)}">Stand Future</button></div>`; })()}
       <header><label class="check"><input class="v38-approved" type="checkbox" ${entry.approved ? 'checked' : ''}> Importálás</label><span class="v38-category ${entry.category}">${categoryLabel}</span><button class="v38-remove" type="button" title="Eltávolítás">×</button></header>
       <div class="v38-source"><b>${htmlEsc(entry.sourceName)}</b><span>${htmlEsc(entry.orderType || 'SR0')}${entry.isReturn ? ' · visszáru' : ''}</span>${entry.pdfName && entry.pdfName !== entry.sourceName ? `<span>PDF: ${htmlEsc(entry.pdfName)}</span>` : ''}<span class="v38-status ${entry.warnings.length ? 'warn' : 'ok'}">${htmlEsc(statusText(entry))}</span></div>
       ${entry.sourceMail?.attachmentsUnreadable ? `<div class="v72-attach-warn">A levél mellékletét nem sikerült kibontani (${htmlEsc((entry.sourceMail.attachmentNames || []).join(', '))}). A fuvar importálható, de a Csatolmány üres marad. Továbbított levélnél mentsd el az eredetit, és azt húzd be.</div>` : ''}
@@ -1684,6 +1684,37 @@
     return `<div class="v41-empty-preview">Még nincs ${category === 'martin' ? 'Martin / Platós' : 'Dobozos'} rendelés feldolgozva.</div>`;
   }
 
+
+  /* ===== V126 – CÉGVÁLASZTÓ AZ IMPORT ELŐNÉZETÉN ====================
+
+     Minden kártyán két gomb: Stand 98 (alapértelmezés) vagy Stand Future.
+     A fejlécben egy gomb mindet átállítja, ha egy levélben csak az egyik
+     cég rendelései jönnek.
+
+     A rajzoló neve renderPending – a renderPreview NEM létezik, ez a V89-ben
+     már okozott egy hibát. */
+  function bindEntryCompanyV126(root) {
+    for (const gomb of (root || document).querySelectorAll('[data-entry-company]')) {
+      if (gomb.dataset.v126 === '1') continue;
+      gomb.dataset.v126 = '1';
+      gomb.onclick = event => {
+        event.stopPropagation();
+        const entry = pending.find(item => item._id === gomb.dataset.id);
+        if (!entry) return;
+        entry.companyV126 = gomb.dataset.entryCompany === 'future' ? 'future' : 'stand98';
+        renderPending();
+      };
+    }
+  }
+
+  function setAllEntriesCompanyV126(ertek) {
+    const vegleges = ertek === 'future' ? 'future' : 'stand98';
+    if (!pending.length) return;
+    for (const entry of pending) entry.companyV126 = vegleges;
+    renderPending();
+  }
+  global.setAllEntriesCompanyV126 = setAllEntriesCompanyV126;
+
   function renderPending() {
     if (typeof document === 'undefined') return;
     const boxContainer = document.getElementById('v41BoxPreview');
@@ -1698,6 +1729,7 @@
     const warnings = pending.filter(entry => entry.warnings.length).length;
     const reimports = pending.filter(entry => entry.existingOrderNos?.length).length;
     if (summary) summary.textContent = `${pending.length} rendelés az előnézetben · Dobozos: ${boxEntries.length} · Martin / Platós: ${martinEntries.length} · Jóváhagyva: ${approved} · Ellenőrzendő: ${warnings}${reimports ? ` · Újraimportálás: ${reimports}` : ''}`;
+    bindEntryCompanyV126(document.getElementById('outlookPreview') || document);
     if (commit) commit.disabled = processing || !approved;
     bindPreviewEditors();
   }
@@ -1907,6 +1939,8 @@ ${entry.subject || ''}`) || project;
       // V65: a kézzel felvitt tételszöveg. Akkor kell, ha a bizonylatról nem
       // sikerült tételt felismerni; az admin és a sofőri felületen is látszik.
       manualItems: String(entry.manualItems || '').trim(),
+      /* V126: az importált fuvar cége – alapértelmezés Stand 98. */
+      companyV126: entry.companyV126 === 'future' ? 'future' : 'stand98',
       sourceMail: entry.sourceMail ? {
         subject: entry.sourceMail.subject || entry.subject || '',
         from: entry.sourceMail.from || '',

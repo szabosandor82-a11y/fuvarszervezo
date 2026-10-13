@@ -141,7 +141,7 @@
   // Korábban itt beégetett szöveg állt, ezért a belépés után a fejléc
   // visszaugrott a régi verzióra.
   function appVersionLabel() {
-    const version = global.V125Planner?.version||global.V123Planner?.version||global.V122Planner?.version||global.V121Planner?.version||global.V55Planner?.version || global.V54Planner?.version
+    const version = global.V126Planner?.version||global.V123Planner?.version||global.V122Planner?.version||global.V121Planner?.version||global.V55Planner?.version || global.V54Planner?.version
       || global.V53Planner?.version || global.V50Planner?.version || '';
     return version ? `Fuvarszervező V${version}` : 'Fuvarszervező';
   }
@@ -290,11 +290,11 @@
     const drop = order.projectName || 'Egyedi úticél';
     const detailId = `v57d-${safe(order.id)}`;
     const locked = isReadOnlyDate(order.scheduleDate) && !isAdmin();
-    return `<article class="mobile-user-row ${order.completed ? 'done' : ''}${commentClass} ${locked ? 'locked-day' : ''}" data-id="${safe(order.id)}">
+    return `<article class="mobile-user-row v126-${global.orderCompanyV126?.(order) || 'stand98'} ${order.completed ? 'done' : ''}${commentClass} ${locked ? 'locked-day' : ''}" data-id="${safe(order.id)}">
       ${locked ? `<div class="locked-note">${order.scheduleDate < currentWorkday() ? 'Lezárt nap' : 'Következő nap – előnézet'} – csak megtekinthető</div>` : ''}
       <div class="v57-row-head">
         <span class="mobile-sequence">${index + 1}</span>
-        <div class="v57-row-title">${safe(order.orderNo)} — ${safe(pickup)} — ${safe(drop)}</div>
+        <div class="v57-row-title">${global.isFutureOrderV126?.(order) ? '<span class="v126-badge">Future</span>' : ''}${safe(order.orderNo)} — ${safe(pickup)} — ${safe(drop)}</div>
         <button type="button" class="v57-detail-toggle" aria-expanded="false" title="Címek és megjegyzések"
           onclick="v57ToggleDriverDetail('${detailId}',this)">▾</button>
       </div>
