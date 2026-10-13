@@ -246,6 +246,94 @@
     };
   }
 
+  /* V131: egy régi adminoldal teljes payloadot küldhetett vissza, és ezzel
+     letörölhette a sofőr közben feltöltött szállítólevelét vagy pipáit.
+     Admin mentés előtt most beolvassuk az érintett szerverrekordokat, és
+     csak a sofőri mezőket fésüljük vissza az admin által szerkesztett fuvarba. */
+  function mergeAdminDriverFieldsV131(order, remote) {
+    if (!order || !remote) return order;
+    const merged = { ...order };
+
+    const reports = new Map();
+    for (const report of [...(remote.deliveryReports || []), ...(order.deliveryReports || [])]) {
+      const key = String(report?.id || report?.at || JSON.stringify(report));
+      reports.set(key, report);
+    }
+    if (reports.size) merged.deliveryReports = [...reports.values()]
+      .sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
+
+    const itemKey = (item, index) => String(item?._id || item?.code || `${item?.name || item?.description || ''}#${index}`);
+    if (Array.isArray(order.items) && Array.isArray(remote.items)) {
+      const remoteItems = new Map(remote.items.map((item, index) => [itemKey(item, index), item]));
+      merged.items = order.items.map((item, index) => {
+        const previous = remoteItems.get(itemKey(item, index));
+        if (!previous) return item;
+        const nonempty = value => String(value ?? '').trim() !== '';
+        return {
+          ...item,
+          received: !!(item.received || previous.received),
+          missingQty: nonempty(item.missingQty) ? item.missingQty : previous.missingQty,
+          note: nonempty(item.note) ? item.note : previous.note,
+          itemNote: nonempty(item.itemNote) ? item.itemNote : previous.itemNote,
+          itemNoteAuthorRole: item.itemNoteAuthorRole || previous.itemNoteAuthorRole,
+          itemNoteUpdatedByRole: item.itemNoteUpdatedByRole || previous.itemNoteUpdatedByRole,
+          itemNoteUpdatedAt: item.itemNoteUpdatedAt || previous.itemNoteUpdatedAt,
+          itemNoteCommentAt: item.itemNoteCommentAt || previous.itemNoteCommentAt
+        };
+      });
+    }
+
+    if (remote.completed) {
+      merged.completed = true;
+      const completedAt = remote.completedAt || remote.completedAtV111 || '';
+      if (completedAt) {
+        merged.completedAt = completedAt;
+        merged.completedAtV111 = remote.completedAtV111 || completedAt;
+      }
+    }
+
+    const driverNotes = [remote, order].filter(value => String(value.driverNoteV111 || '').trim());
+    if (driverNotes.length) {
+      driverNotes.sort((a, b) => String(b.driverNoteAtV111 || '').localeCompare(String(a.driverNoteAtV111 || '')));
+      const newest = driverNotes[0];
+      merged.driverNoteV111 = newest.driverNoteV111;
+      merged.driverNoteAtV111 = newest.driverNoteAtV111;
+      merged.driverNoteByV111 = newest.driverNoteByV111;
+    }
+
+    const deleted = new Set([...(remote.threadDeletedV115 || []), ...(order.threadDeletedV115 || [])].map(String));
+    const messages = new Map();
+    for (const message of [...(remote.threadV115 || []), ...(order.threadV115 || [])]) {
+      if (!message?.id || deleted.has(String(message.id))) continue;
+      messages.set(String(message.id), message);
+    }
+    if (messages.size || deleted.size) {
+      merged.threadV115 = [...messages.values()].sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
+      if (deleted.size) merged.threadDeletedV115 = [...deleted];
+    }
+    return merged;
+  }
+
+  async function mergeFreshAdminDriverFieldsV131(orders) {
+    const list = Array.isArray(orders) ? orders : [];
+    const ids = [...new Set(list.map(order => String(order?.id || '')).filter(Boolean))];
+    if (!ids.length) return list;
+    const remoteById = new Map();
+    for (let start = 0; start < ids.length; start += 50) {
+      const chunk = ids.slice(start, start + 50);
+      const values = chunk.map(id => `"${id.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',');
+      const rows = await dbRequest(`orders?${qs({ select: 'id,payload,updated_at', id: `in.(${values})` })}`);
+      for (const row of rows || []) remoteById.set(String(row.id), row);
+    }
+    return list.map(order => {
+      const row = remoteById.get(String(order.id));
+      if (!row) return order;
+      const merged = mergeAdminDriverFieldsV131(order, row.payload || {});
+      Object.assign(order, merged, { onlineUpdatedAt: row.updated_at });
+      return order;
+    });
+  }
+
   async function fetchOrders() {
     const rows = await dbRequest(`orders?${qs({ select: 'id,schedule_date,vehicle_id,driver_key,order_no,project_name,sequence,payload,updated_at', order: 'schedule_date.asc,sequence.asc' })}`);
     remoteLoaded = true;
@@ -271,7 +359,8 @@
   }
 
   async function upsertAdminOrders(orders) {
-    const rows = (orders || []).map(orderToRow);
+    const latestOrders = await mergeFreshAdminDriverFieldsV131(orders || []);
+    const rows = latestOrders.map(orderToRow);
     if (rows.length) {
       await dbRequest('orders?on_conflict=id', {
         method: 'POST', body: rows,
@@ -290,7 +379,15 @@
   }
 
   async function updateOwnOrder(order) {
-    return dbRequest('rpc/update_own_order_payload', { method: 'POST', body: { p_order_id: String(order.id), p_payload: order } });
+    const payload = { ...order };
+    /* A sofőri felület completedAtV111 mezőt használ, a szerveroldali
+       restricted_payload_update viszont a régi completedAt nevet menti. */
+    if (typeof payload.completed === 'boolean') {
+      payload.completedAt = payload.completed
+        ? (payload.completedAtV111 || payload.completedAt || '')
+        : '';
+    }
+    return dbRequest('rpc/update_own_order_payload', { method: 'POST', body: { p_order_id: String(order.id), p_payload: payload } });
   }
 
   /* V116: szűk célú út CSAK az üzenetszálra. Akkor hasznos, ha a teljes
@@ -332,7 +429,8 @@
     }
     emit('syncing', `${targetDate} fuvarjainak mentése…`);
     if (currentProfile.role === 'admin') {
-      const rows = scoped.map(orderToRow);
+      const latestOrders = await mergeFreshAdminDriverFieldsV131(scoped);
+      const rows = latestOrders.map(orderToRow);
       if (rows.length) await dbRequest('orders?on_conflict=id', {
         method: 'POST', body: rows,
         headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }

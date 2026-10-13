@@ -1,0 +1,29 @@
+FUVARSZERVEZŐ V131
+
+SZÁLLÍTÓLEVÉL-FELTÖLTÉS
+- A felület csak a fájlok és a fuvarhoz tartozó jelölés online mentése után
+  mutat sikeres feltöltést.
+- Ha a fájl már felkerült, de a fuvar buborékadatának mentése sikertelen,
+  a felület újrapróbálást kínál. Az újrapróbálás csak a fuvaradatot küldi el,
+  nem tölti fel ismét a fájlokat.
+- A helyi mentésbélyeg a szállítólevél-lista változását is figyeli, így a
+  fotófeltöltés nem marad ki a változáskövetésből.
+
+FUVAR TELJESÍTÉSE
+- A sofőr zöld pipája közvetlenül megvárja a Supabase mentést.
+- completedAtV111 értéke a szerveren használt completedAt mezőbe is bekerül;
+  a teljesítés visszavonásakor ez a mező kiürül.
+
+ADMIN ÉS SOFŐR PÁRHUZAMOS MENTÉSE
+- Admin fuvarmentés előtt a program frissen beolvassa az érintett fuvarok
+  szerveroldali sofőri adatait.
+- A szállítólevelek, átvételek, hiányjelzések, sofőrmegjegyzések, üzenetek és
+  befejezett állapot megmarad akkor is, ha az admin oldala régebbi fuvaradatot
+  tartalmaz.
+- A napi admin mentés továbbra is csak a megnyitott nap fuvarjait írja.
+
+TELEPÍTÉS
+A V131 a meglévő Supabase függvényeket használja, SQL-frissítés nem szükséges.
+GitHub Pages-en a V131 ZIP fájljainak gyökerét kell feltölteni a meglévő
+alkalmazás gyökerébe, a korábbi fájlokat felülírva. Részletes lépések:
+README.txt.

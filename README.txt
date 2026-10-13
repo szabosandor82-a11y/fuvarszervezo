@@ -1,8 +1,8 @@
-FUVARSZERVEZŐ V130
+FUVARSZERVEZŐ V131
 
 FRISSÍTÉS
 1. Készíts biztonsági másolatot a jelenlegi GitHub Pages fájlokról.
-2. Bontsd ki a Fuvarszervezo_V130_Mobile_PWA_GitHub_Pages.zip fájlt.
+2. Bontsd ki a Fuvarszervezo_V131_Mobile_PWA_GitHub_Pages.zip fájlt.
 3. A csomag gyökérkönyvtárának tartalmát másold a meglévő alkalmazás
    gyökérkönyvtárába a korábbi azonos nevű fájlok felülírásával.
    Az index.html közvetlenül az alkalmazás gyökerében legyen.
@@ -22,8 +22,8 @@ VÁLTOZÁSOK
 - A sofőr korábbi fuvarjainak SQL-szabálya valódi DATE típusú összehasonlítást
   használ.
 
-A változtatások részletei: VALTOZASOK_V130.txt.
-A helyi ellenőrzések eredménye: ELLENORZES_V130.txt.
+A változtatások részletei: VALTOZASOK_V131.txt.
+A helyi ellenőrzések eredménye: ELLENORZES_V131.txt.
 
 SUPABASE
 Ha a sofőr korábbi fuvarjainak visszanézése már működik, a SQL-fájlt nem kell
@@ -45,9 +45,18 @@ A ZIP ellenőrzése után az „Archiváltak törlése” gombbal, a kért fájl
 beírásával törölhetők a legalább két napos fájlok.
 
 
-A V130-ben a fuvarszétosztás és az optimalizálás kizárólag a képernyőn megnyitott napot módosítja. A mentés is csak ennek a napnak a fuvarjait küldi fel, a korábbi és későbbi napokhoz nem nyúl.
+A V131-ben a fuvarszétosztás és az optimalizálás kizárólag a képernyőn megnyitott napot módosítja. A mentés is csak ennek a napnak a fuvarjait küldi fel, a korábbi és későbbi napokhoz nem nyúl.
 
-A V128-ban a sofőr által átmozgatott fuvarok és hátralékok céldátuma az admin és a sofőr buborékjában is megjelenik. A funkció a V130-ben is megmaradt; részletek: VALTOZASOK_V128.txt.
+A V128-ban a sofőr által átmozgatott fuvarok és hátralékok céldátuma az admin és a sofőr buborékjában is megjelenik. A funkció a V131-ben is megmaradt; részletek: VALTOZASOK_V128.txt.
+
+SZÁLLÍTÓLEVÉL ÉS TELJESÍTÉS
+A feltöltés csak azután jelez sikert, hogy a fájlok és a fuvar buborékadatai is
+elmentődtek. Ha a fájlok feltöltődtek, de a fuvaradat mentése hálózati hiba miatt
+nem sikerült, a felület újrapróbálást kínál. Ilyenkor ne töltsd fel újra a
+fájlokat; az újrapróbálás csak a fuvar adatát menti.
+A sofőr zöld pipája közvetlen online mentést kap. Admin mentés előtt a program
+frissen beolvassa és megőrzi a sofőr közben elmentett szállítóleveleit,
+átvételeit, hiányjelzéseit, megjegyzéseit és teljesítési állapotát.
 
 
 EXCEL EXPORT

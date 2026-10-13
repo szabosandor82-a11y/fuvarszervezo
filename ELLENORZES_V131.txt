@@ -1,0 +1,17 @@
+FUVARSZERVEZŐ V131 – HELYI ELLENŐRZÉS
+
+Futtatott parancsok:
+  node --check app.js
+  node --check planner-v44.js
+  node --check online-v44-2.js
+  node --check auth-v44-2.js
+  node --check TEST_V131.js
+  node TEST_V131.js
+
+Eredmény:
+  Szintaktikai ellenőrzés: sikeres.
+  Elfogadási tesztek: 451/451 sikeres.
+  Új ellenőrzések: a sofőr completedAtV111 ideje a szerveren is megmarad;
+  a visszavonás kiüríti; régi admin mentés megőrzi a sofőri fotókat,
+  pipákat és hiányjelzéseket; a feltöltési sikerjelzés csak a fuvaradat
+  közvetlen mentése után jelenik meg.

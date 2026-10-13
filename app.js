@@ -224,7 +224,7 @@ function stampLocalChanges(){
        a megjegyzés beírása nem frissítette az időbélyeget, ezért az
        összefésülésnél elveszhetett. */
     const atvett=(o.items||[]).filter(it=>it.received).length;
-    const key=`${o.scheduleDate}|${o.vehicleId}|${o.sequence}|${o.completed?1:0}|${(o.items||[]).length}|${atvett}|${String(o.driverNoteV111||'').length}|${o.driverNoteAtV111||''}|${(o.threadV115||[]).length}|${(o.threadV115||[]).map(m=>m.id).join(',')}`;
+    const key=`${o.scheduleDate}|${o.vehicleId}|${o.sequence}|${o.completed?1:0}|${(o.items||[]).length}|${atvett}|${String(o.driverNoteV111||'').length}|${o.driverNoteAtV111||''}|${(o.threadV115||[]).length}|${(o.threadV115||[]).map(m=>m.id).join(',')}|${JSON.stringify(o.deliveryReports||[])}`;
     next[o.id]=key;
     if(prev[o.id]!==key)o.localUpdatedAt=now;
   }

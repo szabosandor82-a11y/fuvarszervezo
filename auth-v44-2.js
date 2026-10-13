@@ -1019,7 +1019,7 @@
      A megjegyzés pedig arra való, hogy a sofőr visszajelezzen: "felvettem,
      de már nem tudtam az építkezésen lerakni". Ez a főoldalon pirossal
      kiemelve jelenik meg, hogy az admin azonnal lássa. */
-  function toggleOrderDoneV111(orderId) {
+  async function toggleOrderDoneV111(orderId) {
     const order = (state.orders || []).find(item => String(item.id) === String(orderId));
     if (!order) return;
     if (!canEditOrder(order.id)) return alert('Csak az aktuális munkanap szerkeszthető.');
@@ -1030,9 +1030,11 @@
       for (const item of order.items || []) if (!item.received) item.received = true;
       order.completed = true;
       order.completedAtV111 = new Date().toISOString();
+      order.completedAt = order.completedAtV111;
     } else {
       if (!confirm('Visszavonjuk a teljesítést?')) return;
       order.completed = false;
+      order.completedAt = '';
       delete order.completedAtV111;
     }
     /* V114: a módosítás idejét közvetlenül jelöljük. Korábban egy nem létező
@@ -1040,6 +1042,14 @@
        változás sem mentődött el – az adminnál semmi nem látszott. */
     order.localUpdatedAt = new Date().toISOString();
     save();
+    try {
+      if (global.V44Online?.configured?.()) {
+        if (currentProfile?.role === 'admin') await global.V44Online.syncOrdersForDate(order.scheduleDate, [order], currentProfile);
+        else await global.V44Online.updateOwnOrder(order);
+      }
+    } catch (error) {
+      alert(`A teljesítés helyben megmaradt, de az online mentés nem sikerült: ${error.message}`);
+    }
   }
 
   function openDriverNoteV111(orderId) {
@@ -1323,6 +1333,25 @@
       if (!canAccessOrder(orderId)) return alert('Ehhez a fuvarhoz nincs jogosultságod.');
       const order = (state.orders || []).find(item => String(item.id) === String(orderId));
       if (!order) return;
+      if (cameraForm.__pendingDeliveryMetadataV131) {
+        const pending = cameraForm.__pendingDeliveryMetadataV131;
+        if (String(pending.orderId) !== String(order.id)) return alert('Előbb az előző szállítólevél fuvaradatát kell elmenteni. Nyisd meg annak a fuvarnak a fotóablakát, és nyomd meg az újrapróbálás gombot.');
+        const retryButton = cameraForm.querySelector('button[type="submit"]');
+        if (retryButton) { retryButton.disabled = true; retryButton.textContent = 'Fuvaradat mentése…'; }
+        try {
+          if (currentProfile?.role === 'admin') await global.V44Online.syncOrdersForDate(order.scheduleDate, [order], currentProfile);
+          else await global.V44Online.updateOwnOrder(order);
+          cameraForm.__pendingDeliveryMetadataV131 = null;
+          if (typeof audioBlob !== 'undefined') audioBlob = null;
+          cameraForm.closest('dialog')?.close();
+          alert('A korábban feltöltött szállítólevél fuvaradata is elmentve.');
+        } catch (error) {
+          alert(`A fájlok már feltöltődtek, de a fuvaradat mentése még nem sikerült: ${error.message}`);
+        } finally {
+          if (retryButton) { retryButton.disabled = false; retryButton.textContent = cameraForm.__pendingDeliveryMetadataV131 ? 'Fuvaradat mentésének újrapróbálása' : 'Mentés a rendeléshez'; }
+        }
+        return;
+      }
       const files = global.V69DeliveryCamera?.files() || [...(byId('cameraInput')?.files || [])];
       if (!files.length && !(typeof audioBlob !== 'undefined' && audioBlob)) return alert('Készíts legalább egy fotót vagy hangjegyzetet.');
       const submit = cameraForm.querySelector('button[type="submit"]');
@@ -1332,12 +1361,21 @@
         order.deliveryReports = order.deliveryReports || [];
         const deliveryNote = byId('cameraNote')?.value || '';
         order.deliveryReports.push({ id: result.report.id, at: result.report.created_at || new Date().toISOString(), note: deliveryNote, photoCount: files.length, fileCount: result.report.fileCount, hasAudio: typeof audioBlob !== 'undefined' && !!audioBlob, createdBy: currentSession?.user?.email, createdRole: currentProfile?.role || 'driver', userComment: !!deliveryNote.trim(), commentAt: deliveryNote.trim() ? new Date().toISOString() : '' });
+        if (typeof save === 'function') save();
+        try {
+          if (currentProfile?.role === 'admin') await global.V44Online.syncOrdersForDate(order.scheduleDate, [order], currentProfile);
+          else await global.V44Online.updateOwnOrder(order);
+        } catch (error) {
+          cameraForm.__pendingDeliveryMetadataV131 = { orderId: String(order.id) };
+          alert(`A fájlok feltöltődtek, de a fuvar buborékának mentése nem sikerült: ${error.message}\n\nNe töltsd fel újra a fájlokat. A gomb újrapróbálása csak a fuvaradatot menti.`);
+          return;
+        }
+        cameraForm.__pendingDeliveryMetadataV131 = null;
         cameraForm.closest('dialog')?.close();
         if (typeof audioBlob !== 'undefined') audioBlob = null;
-        if (typeof save === 'function') save();
         alert('A szállítólevél fotói a rendeléshez elmentve.');
       } catch (error) { alert(`Szállítólevél-mentési hiba: ${error.message}`); }
-      finally { if (submit) { submit.disabled = false; submit.textContent = 'Mentés a rendeléshez'; } }
+      finally { if (submit) { submit.disabled = false; submit.textContent = cameraForm.__pendingDeliveryMetadataV131 ? 'Fuvaradat mentésének újrapróbálása' : 'Mentés a rendeléshez'; } }
     };
   }
 
