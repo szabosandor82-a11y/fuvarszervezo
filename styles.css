@@ -1517,3 +1517,39 @@ tr.v126-report-grand td{background:#dbeafd;font-weight:800}
 .cv-panel-head .cv-mute{border:0;background:#ffffff26;color:#fff;width:34px;height:34px;border-radius:50%;font-size:17px;cursor:pointer}
 .cv-head.cv-mute-head{width:40px;height:40px;align-self:center;background:#fff;color:#2563c9;border:2px solid #c9d6e3;font-size:17px}
 .cv-head.cv-mute-head[aria-pressed=true]{background:#eef1f4;color:#6b7f93}
+
+/* ===== V143 – CSEVEGŐ MOBILRA ========================================= */
+/* iPhone: 16 képpont alatti beviteli mezőnél a Safari ránagyít az oldalra,
+   és a szöveg „kilóg” a képernyőről. */
+.cv-compose textarea{font-size:16px;line-height:1.35}
+.cv-root,.cv-root *{box-sizing:border-box}
+.cv-list{overscroll-behavior:contain}
+.cv-msg{max-width:min(82%,560px);min-width:0}
+.cv-bubble{max-width:100%;min-width:0;word-break:break-word;overflow-wrap:anywhere}
+.cv-text,.cv-bubble a,.cv-file{overflow-wrap:anywhere;word-break:break-word}
+.cv-img{max-width:min(220px,100%)}
+.cv-meta{max-width:100%;overflow-wrap:anywhere}
+.cv-panel{height:100dvh;max-height:100dvh}
+.cv-panel-head b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cv-more{left:-26px}
+.cv-msg.mine .cv-more{left:-26px}
+@media (max-width:760px){
+  .cv-msg{max-width:86%}
+  .cv-msg.mine{margin-left:26px}
+  .cv-list{padding:10px 10px 12px}
+  .cv-compose{padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px))}
+  /* admin: nyitott ablak = teljes képernyő, a buborékok elbújnak */
+  .cv-admin.has-open{inset:0;right:0;bottom:0;display:block;pointer-events:auto}
+  .cv-admin.has-open .cv-heads,.cv-admin.has-open .cv-picker{display:none!important}
+  .cv-admin.has-open .cv-windows{position:fixed;inset:0;display:block;z-index:5600}
+  .cv-admin.has-open .cv-win{position:fixed;inset:0;width:100%;height:100dvh;max-height:100dvh;border-radius:0;border:0;padding-top:env(safe-area-inset-top,0px)}
+  .cv-admin.has-open .cv-win-head{padding:12px 14px}
+  .cv-admin.has-open .cv-win-head b{font-size:16px}
+  .cv-admin.has-open .cv-close{font-size:28px;padding:0 6px}
+  /* sok buborék: görgethető oszlop, ne lógjon a fejlécre */
+  .cv-heads.many{max-height:calc(100dvh - 180px);overflow-y:auto;overflow-x:visible;padding:8px 6px 4px 8px;scrollbar-width:none}
+  .cv-heads.many::-webkit-scrollbar{display:none}
+  .cv-head{width:48px;height:48px;font-size:15px}
+  .cv-head.cv-plus{font-size:24px}
+  .cv-picker{right:56px;bottom:0;width:min(280px,calc(100vw - 80px))}
+}

@@ -613,6 +613,10 @@
     const total = active.reduce((sum, item) => sum + item.unread, 0);
     updateTitle(total);
     renderMuteButtons();
+    /* V143: mobilon a nyitott ablak teljes képernyős, a buborékok közben
+       elbújnak – különben rálógtak a küldés gombra. */
+    st.root.classList.toggle('has-open', st.openWins.length > 0);
+    heads.classList.toggle('many', active.length > 6);
   }
 
   /* ===== közös rajzolás ================================================ */
