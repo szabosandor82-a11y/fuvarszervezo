@@ -1,0 +1,26 @@
+FUVARSZERVEZŐ V136 – HELYI ELLENŐRZÉS
+
+Futtatott parancsok:
+  node --check (minden .js fájl)
+  node TEST_V136.js   (a V132–V136 funkciótesztekkel együtt)
+
+Eredmény:
+  Szintaktikai ellenőrzés: sikeres.
+  Elfogadási tesztek: 489/489 sikeres (483 korábbi + 6 új).
+  Régebbi tesztek: TEST_V33–V49 sikeres. A TEST_V52/V53/V54 1–2 hibája
+  változatlan a V131 óta (nem a V136 okozza).
+
+Új tesztek (a 06935-ös eset pontos utánzásával: 2 PDF + 1 .msg, a tároló
+a .msg-t elutasítja):
+  - a két PDF nyilvántartásba kerül, a .msg kimaradtként jelölődik, és a
+    .msg a pontos típusával (application/vnd.ms-outlook) megy fel;
+  - ha egy fájl sem megy fel, az üres bejegyzés törlődik;
+  - ha a nyilvántartás beírása bukik, a feltöltött fájlok törlődnek;
+  - a takarítás csak a régi, üres bejegyzést és fájljait törli;
+  - részleges feltöltés után csak a kimaradt fájl megy fel újra;
+  - a sofőri Csatolmány a .msg mellékletet is mutatja.
+
+SQL: a SUPABASE_TAROLO_V136.sql PostgreSQL-motoron (PGlite) tesztelve,
+kétszeri futtatással: 10/10 eset sikeres (új típusok, meglévők megmaradnak,
+nincs ismétlődés, 50 MB, korlát nélküli tároló érintetlen, nagyobb határ
+nem csökken).

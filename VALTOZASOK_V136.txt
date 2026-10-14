@@ -1,0 +1,29 @@
+FUVARSZERVEZŐ V136
+
+A HIBA OKA (Supabase-lekérdezésekkel igazolva)
+A „delivery-docs” tároló csak megadott fájltípusokat enged (JPEG, PNG, HEIC,
+HEIF, PDF, hang; 15 MB). A levelekhez csatolt Outlook-levél (.msg), Word,
+Excel és CSV mellékletet elutasította. A feltöltő minden fájlt feltöltött, és
+csak a VÉGÉN írta be a nyilvántartó sorokat – így egyetlen elutasított fájl
+miatt a már feltöltött PDF-ek sem kerültek nyilvántartásba, és a sofőr a
+levél egyik mellékletét sem látta. (06935: a két PDF hatszor felment, a .msg
+egyszer sem, nyilvántartó sor egy sem.)
+
+JAVÍTÁS
+- SUPABASE_TAROLO_V136.sql: a tároló a meglévő típusok mellett elfogadja az
+  Outlook-levelet (.msg, .eml), a Word, Excel, CSV, szöveg, GIF, WebP és az
+  ismeretlen típusú fájlt is; a mérethatár 50 MB. Ha nincs típuskorlát, az
+  úgy marad; a nagyobb mérethatár nem csökken.
+- Fájlonkénti feltöltés: ami felment, az nyilvántartásba kerül és a sofőr
+  látja; amit a tároló elutasít, azt név szerint jelezzük („Melléklet részben
+  jutott fel”, Csatolmány ablak: „Kimaradtak feltöltése” gomb).
+- A fájlok a pontos típusukkal mennek fel (.msg → application/vnd.ms-outlook,
+  Word/Excel a saját típusával), nem „ismeretlenként”.
+- Ha egy fájl sem megy fel, nem marad üres bejegyzés; ha a nyilvántartás
+  beírása bukna, a feltöltött fájlok sem maradnak a tárhelyen.
+- A sofőri Csatolmány a csatolt levelet (.msg, .eml) és a szöveges fájlt is
+  mutatja.
+- A „Hiányzó mellékletek feltöltése a sofőröknek” gomb előbb kitakarítja a
+  korábbi sikertelen próbálkozások maradványait (nyilvántartás nélküli,
+  10 percnél régebbi bejegyzések és fájljaik), majd feltölti a hiányzókat –
+  részleges feltöltés után csak a kimaradt fájlokat.

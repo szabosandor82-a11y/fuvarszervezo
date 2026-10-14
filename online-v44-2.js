@@ -712,6 +712,35 @@
     return dbRequest(`transfer_requests?${qs({ select: 'id,order_id,order_no,project_name,schedule_date,from_driver_key,to_driver_key,status,requested_by,created_at,responded_at,response_by,note', order: 'created_at.desc' })}`);
   }
 
+  /* ===== V136 – A FÁJL PONTOS TÍPUSSAL MEGY FEL ======================
+
+     A tároló (delivery-docs) csak megadott fájltípusokat enged. A levélből
+     érkező .msg, Word, Excel melléklet eddig „application/octet-stream”
+     típussal ment, ezt a tároló elutasította. A típust most a kiterjesztésből
+     is meghatározzuk, ha a böngésző nem adott pontosat. */
+  const MIME_BY_EXT_V136 = {
+    pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp',
+    heic: 'image/heic', heif: 'image/heif', msg: 'application/vnd.ms-outlook', eml: 'message/rfc822',
+    doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel', xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', csv: 'text/csv', txt: 'text/plain',
+    webm: 'audio/webm', m4a: 'audio/mp4', mp3: 'audio/mpeg', ogg: 'audio/ogg'
+  };
+  function mimeForFileV136(file) {
+    const given = String(file?.type || '').toLowerCase();
+    if (given && given !== 'application/octet-stream') return given;
+    const ext = String(file?.name || '').toLowerCase().split('.').pop();
+    return MIME_BY_EXT_V136[ext] || given || 'application/octet-stream';
+  }
+
+  /* V136 – EGY ELUTASÍTOTT FÁJL NE VIGYE EL A TÖBBIT
+
+     Eddig minden fájlt feltöltöttünk, és csak a végén írtuk be a
+     nyilvántartó sorokat. Ha egyetlen fájlt elutasított a tároló, a művelet
+     hibára futott, és a már feltöltött fájlok sem kerültek nyilvántartásba –
+     a sofőr semmit nem látott. Most fájlonként haladunk: ami felment, az
+     bekerül; ami nem, azt név szerint visszaadjuk (skipped). Ha egy sem
+     ment fel, a bejegyzést eltakarítjuk, és hibát adunk. */
   async function createDeliveryReport(order, files, note = '', audio = null) {
     if (!order?.id) throw new Error('Hiányzó fuvarazonosító.');
     const reports = await dbRequest('delivery_reports?select=*', {
@@ -729,19 +758,88 @@
     const uploadFiles = [...(files || [])];
     if (audio) uploadFiles.push(new File([audio], 'hangjegyzet.webm', { type: audio.type || 'audio/webm' }));
     const fileRows = [];
+    const uploadedPaths = [];
+    const skipped = [];
     for (let index = 0; index < uploadFiles.length; index++) {
       const file = uploadFiles[index];
+      const mime = mimeForFileV136(file);
       const filename = `${String(index + 1).padStart(2, '0')}-${safeName(file.name || `foto-${index + 1}.jpg`)}`;
       const storagePath = `${String(order.id)}/${report.id}/${filename}`;
-      await rawRequest(`${baseUrl()}/storage/v1/object/delivery-docs/${pathEncode(storagePath)}`, {
-        method: 'POST', body: file,
-        headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'false' }
-      });
-      fileRows.push({ report_id: report.id, order_id: String(order.id), storage_path: storagePath, file_name: file.name || filename, mime_type: file.type || 'application/octet-stream', file_size: +file.size || 0 });
+      try {
+        await rawRequest(`${baseUrl()}/storage/v1/object/delivery-docs/${pathEncode(storagePath)}`, {
+          method: 'POST', body: file,
+          headers: { 'Content-Type': mime, 'x-upsert': 'false' }
+        });
+      } catch (error) {
+        skipped.push({ name: file.name || filename, error: String(error?.message || error) });
+        continue;
+      }
+      uploadedPaths.push(storagePath);
+      fileRows.push({ report_id: report.id, order_id: String(order.id), storage_path: storagePath, file_name: file.name || filename, mime_type: mime, file_size: +file.size || 0 });
     }
-    if (fileRows.length) await dbRequest('delivery_report_files', { method: 'POST', body: fileRows, headers: { Prefer: 'return=minimal' } });
-    return { report: { ...report, fileCount: fileRows.length }, files: fileRows };
+    if (!fileRows.length && uploadFiles.length) {
+      try { await dbRequest(`delivery_reports?${qs({ id: `eq.${report.id}` })}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } }); }
+      catch (error) { console.warn('[V136] az üres bejegyzés törlése', error); }
+      throw new Error(`Egyik fájlt sem fogadta el a tároló: ${skipped.map(item => `${item.name} (${item.error})`).join('; ')}`);
+    }
+    if (fileRows.length) {
+      try {
+        await dbRequest('delivery_report_files', { method: 'POST', body: fileRows, headers: { Prefer: 'return=minimal' } });
+      } catch (error) {
+        /* A nyilvántartás nélkül maradt fájlokat ne hagyjuk a tárhelyen. */
+        await removeStoragePathsV136(uploadedPaths).catch(() => {});
+        try { await dbRequest(`delivery_reports?${qs({ id: `eq.${report.id}` })}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } }); } catch (_) {}
+        throw error;
+      }
+    }
+    return { report: { ...report, fileCount: fileRows.length }, files: fileRows, skipped };
   }
+
+  /* V136: több fájl törlése a tárolóból egy kéréssel. */
+  async function removeStoragePathsV136(paths) {
+    const list = (paths || []).filter(Boolean);
+    if (!list.length) return 0;
+    await rawRequest(`${baseUrl()}/storage/v1/object/delivery-docs`, { method: 'DELETE', body: { prefixes: list } });
+    return list.length;
+  }
+
+  /* V136: a sikertelen próbálkozások maradványai – nyilvántartás nélküli
+     „Outlook forrás” bejegyzések (10 percnél régebbiek) és a fájljaik. */
+  async function cleanupEmptySourceReportsV136(onProgress) {
+    const reports = [];
+    for (let offset = 0; offset < 200000; offset += 1000) {
+      const page = await dbRequest(`delivery_reports?${qs({ select: 'id,order_id,created_at', note: 'ilike.*outlook*forr*', order: 'id.asc', limit: '1000', offset: String(offset) })}`);
+      reports.push(...(page || []));
+      if (!page || page.length < 1000) break;
+    }
+    const withFiles = new Set();
+    for (let offset = 0; offset < 200000; offset += 1000) {
+      const page = await dbRequest(`delivery_report_files?${qs({ select: 'report_id', order: 'id.asc', limit: '1000', offset: String(offset) })}`);
+      for (const row of page || []) withFiles.add(String(row.report_id));
+      if (!page || page.length < 1000) break;
+    }
+    const limit = Date.now() - 10 * 60 * 1000;
+    const empty = reports.filter(report => !withFiles.has(String(report.id)) && (Date.parse(report.created_at) || 0) < limit);
+    let reportsRemoved = 0, filesRemoved = 0, failed = 0;
+    for (const report of empty) {
+      try {
+        /* A Supabase listázó a mappát perjel nélkül várja (mint a
+           supabase-js list('mappa') hívása), és a neveket ahhoz képest adja. */
+        const prefix = `${String(report.order_id)}/${String(report.id)}`;
+        const listed = await rawRequest(`${baseUrl()}/storage/v1/object/list/delivery-docs`, { method: 'POST', body: { prefix, limit: 100, offset: 0, sortBy: { column: 'name', order: 'asc' } } });
+        const paths = (Array.isArray(listed) ? listed : []).filter(item => item?.name && item.id !== null).map(item => `${prefix}/${item.name}`);
+        if (paths.length) filesRemoved += await removeStoragePathsV136(paths);
+        await dbRequest(`delivery_reports?${qs({ id: `eq.${report.id}` })}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+        reportsRemoved++;
+      } catch (error) {
+        failed++;
+        console.warn('[V136] maradvány törlése', report.id, error);
+      }
+      onProgress?.({ done: reportsRemoved + failed, total: empty.length });
+    }
+    return { reportsRemoved, filesRemoved, failed, total: empty.length };
+  }
+
 
   /* V107 – A RÉGI FUVAR MELLÉKLETEINEK ÁTKÖTÉSE
 
@@ -918,6 +1016,8 @@
     /* V134 */
     fetchDeliveryFileCountsForOrdersV134,
     /* V135 */
-    fetchSourceMailCoverageV135
+    fetchSourceMailCoverageV135,
+    /* V136 */
+    mimeForFileV136, cleanupEmptySourceReportsV136, removeStoragePathsV136
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -481,6 +481,15 @@
      sofőr nem tudja megnyitni – ezt a buborék maradandóan jelzi. */
   function sourceMissingChipV135(orders, compact = false) {
     const hibas = (orders || []).filter(order => order?.sourceUploadFailedV135);
+    /* V136: részleges feltöltés – a sofőr csak a mellékletek egy részét látja. */
+    const reszleges = (orders || []).filter(order => !order?.sourceUploadFailedV135 && order?.sourceUploadPartialV136?.skipped?.length);
+    if (!hibas.length && reszleges.length) {
+      const nevek = reszleges.flatMap(order => order.sourceUploadPartialV136.skipped);
+      const cim = `A tároló nem fogadta el: ${nevek.join(', ')}. Pótlás: Csatolmány → Kimaradtak feltöltése, vagy Beállítások.`;
+      return compact
+        ? `<span class="v56-chip v135-chip-missing" title="${escHtml(cim)}">melléklet részben fent</span>`
+        : `<span class="tag v135-source-missing" title="${escHtml(cim)}">⚠ Melléklet részben jutott fel (${nevek.length} kimaradt)</span>`;
+    }
     if (!hibas.length) return '';
     const cim = `A levél melléklete nem jutott fel a szerverre, a sofőr nem tudja megnyitni (${hibas.map(order => order.orderNo).filter(Boolean).join(', ')}). Pótlás: Csatolmány → Feltöltés a sofőrnek, vagy Beállítások.`;
     return compact

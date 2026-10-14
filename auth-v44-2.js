@@ -1126,7 +1126,7 @@
          tartalék ág, ami minden fájlt megmutatott, ha nem találtunk
          forrásmellékletet – így a sofőr saját szállítólevél-fotói kerültek
          ide. Azokat a Mentett fotók gomb mutatja, ez a kettő nem keveredhet. */
-      const all = (list || []).filter(file => /\.(pdf|docx?|xlsx?|xlsm|csv)$/i.test(file.file_name || ''));
+      const all = (list || []).filter(file => /\.(pdf|docx?|xlsx?|xlsm|csv|msg|eml|txt)$/i.test(file.file_name || ''));
 
       /* V106 – A CSATOLMÁNY TÖBB JELRE TÁMASZKODIK
 
@@ -1203,7 +1203,10 @@
       if (isAdmin()) {
         const szerveren = sources.length;
         const vanHelyi = !!levelHtml || !!localHtml;
-        const allapot = szerveren
+        const kimaradtV136 = order.sourceUploadPartialV136?.skipped || [];
+        const allapot = szerveren && kimaradtV136.length
+          ? `<div class="v135-source-status missing" id="v135SourceStatus">⚠ A sofőr ${szerveren} fájlt lát, de ezeket a tároló nem fogadta el: ${safe(kimaradtV136.join(', '))}<small>Futtasd le a SUPABASE_TAROLO_V136.sql fájlt, majd töltsd fel újra.</small><button type="button" class="v135-upload" onclick="uploadLocalSourceForOrderV135('${safe(order.id)}')">Kimaradtak feltöltése</button></div>`
+          : szerveren
           ? `<div class="v135-source-status ok" id="v135SourceStatus">✓ A sofőr is látja: ${szerveren} fájl a szerveren.</div>`
           : vanHelyi
             ? `<div class="v135-source-status missing" id="v135SourceStatus">⚠ A sofőr NEM látja ezt a mellékletet: nincs feltöltve a szerverre.${order.sourceUploadFailedV135?.error ? ` <small>Utolsó hiba: ${safe(order.sourceUploadFailedV135.error)}</small>` : ''}<button type="button" class="v135-upload" onclick="uploadLocalSourceForOrderV135('${safe(order.id)}')">Feltöltés a sofőrnek</button></div>`
@@ -1252,7 +1255,7 @@
         return;
       }
       const lists = await Promise.all(ids.map(id => global.V44Online?.listDeliveryFiles ? listDeliveryFilesEventually(id) : Promise.resolve([])));
-      const files = lists.flat().filter(file => /\.(pdf|docx?|xlsx?|xlsm|csv)$/i.test(file.file_name || '') && file.url);
+      const files = lists.flat().filter(file => /\.(pdf|docx?|xlsx?|xlsm|csv|msg|eml|txt)$/i.test(file.file_name || '') && file.url);
       host.innerHTML = files.length
         ? `<div class="item-attachments-title">Mellékletek (${files.length})</div>${files.map(attachmentLinkV71).join('')}`
         : '<small>Nincs elérhető melléklet ehhez a fuvarhoz.</small>';
@@ -1798,9 +1801,14 @@
         const result = await global.V44Online.createDeliveryReport(order, files, label || 'Outlook forrás');
         order.sourceMailReportIdsV135 = [...new Set([...(order.sourceMailReportIdsV135 || []), String(result.report.id)])];
         delete order.sourceUploadFailedV135;
+        /* V136: ha egy-egy fájlt a tároló elutasított, a többi akkor is
+           felkerül – a kimaradtakat név szerint megjegyezzük. */
+        const skipped = (result.skipped || []).map(item => item.name);
+        if (skipped.length) order.sourceUploadPartialV136 = { at: new Date().toISOString(), skipped, error: (result.skipped[0] || {}).error || '' };
+        else delete order.sourceUploadPartialV136;
         order.localUpdatedAt = new Date().toISOString();
         if (typeof save === 'function') save(false);
-        return { ok: true, count: result.report.fileCount || files.length };
+        return { ok: true, count: result.report.fileCount || files.length, skipped };
       } catch (error) {
         lastError = error;
         console.warn('[V135] a melléklet feltöltése', order.orderNo, attempt + 1, error);
@@ -1843,7 +1851,10 @@
     if (!isAdmin()) return alert('A mellékletet csak az admin töltheti fel.');
     const order = (state.orders || []).find(item => String(item.id) === String(orderId));
     if (!order) return;
-    const files = await localSourceFilesV135(orderId);
+    let files = await localSourceFilesV135(orderId);
+    /* V136: részleges feltöltés után csak a kimaradt fájlok mennek fel. */
+    const kimaradt = new Set((order.sourceUploadPartialV136?.skipped || []).map(String));
+    if (kimaradt.size && (order.sourceMailReportIdsV135 || []).length) files = files.filter(file => kimaradt.has(String(file.name)));
     if (!files.length) return alert('Ezen a gépen nincs meg a levél eredeti melléklete. Húzd be újra az eredeti .msg fájlt az importba.');
     const status = byId('v135SourceStatus');
     if (status) status.textContent = 'Feltöltés a sofőrnek…';
@@ -1851,6 +1862,7 @@
     const result = await uploadOrderSourceFilesV135(order, files, `Outlook forrás · ${order.sourceMail?.fileName || ''}`.trim());
     if (typeof global.render === 'function') global.render();
     if (!result.ok) return alert(`A melléklet feltöltése nem sikerült: ${result.error}`);
+    if (result.skipped?.length) alert(`A tároló ezeket a fájlokat nem fogadta el: ${result.skipped.join(', ')}\n\nFuttasd le a SUPABASE_TAROLO_V136.sql fájlt a Supabase-ben, majd próbáld újra.`);
     await openSourceMail(order.id);
   }
   global.uploadLocalSourceForOrderV135 = uploadLocalSourceForOrderV135;
@@ -1862,7 +1874,7 @@
      melyik fuvarnál nincs meg az eredeti (ott újra kell importálni). */
   function orderHasMailAttachmentV135(order) {
     const names = (Array.isArray(order?.sourceMail?.attachmentNames) ? order.sourceMail.attachmentNames : [])
-      .filter(name => /\.(pdf|docx?|xlsx?|xlsm|csv)$/i.test(String(name || '')));
+      .filter(name => /\.(pdf|docx?|xlsx?|xlsm|csv|msg|eml)$/i.test(String(name || '')));
     return !!(order?.sourceMail && (names.length || order.sourceUploadFailedV135));
   }
   async function backfillSourceMailV135() {
@@ -1872,29 +1884,43 @@
     const show = text => { if (host) { host.classList.remove('hidden'); host.textContent = text; } };
     if (button) button.disabled = true;
     try {
+      /* V136: előbb a sikertelen próbálkozások maradványai. */
+      let takaritas = null;
+      if (global.V44Online.cleanupEmptySourceReportsV136) {
+        show('Korábbi sikertelen feltöltések maradványainak takarítása…');
+        try {
+          takaritas = await global.V44Online.cleanupEmptySourceReportsV136(({ done, total }) => show(`Maradványok takarítása: ${done} / ${total}`));
+        } catch (error) { console.warn('[V136] takarítás', error); }
+      }
       show('A szerveren lévő mellékletek ellenőrzése…');
       const covered = await global.V44Online.fetchSourceMailCoverageV135();
       const candidates = [];
       for (const order of state.orders || []) {
-        if (covered.has(String(order.id))) continue;
-        const files = await localSourceFilesV135(order.id);
+        const kimaradt = new Set((order.sourceUploadPartialV136?.skipped || []).map(String));
+        if (covered.has(String(order.id)) && !kimaradt.size) continue;
+        let files = await localSourceFilesV135(order.id);
+        if (covered.has(String(order.id))) files = files.filter(file => kimaradt.has(String(file.name)));
         if (files.length) candidates.push({ order, files });
-        else if (orderHasMailAttachmentV135(order)) candidates.push({ order, files: [] });
+        else if (!covered.has(String(order.id)) && orderHasMailAttachmentV135(order)) candidates.push({ order, files: [] });
       }
       const fillable = candidates.filter(item => item.files.length);
       const missingOriginals = candidates.filter(item => !item.files.length).map(item => item.order);
-      if (!fillable.length && !missingOriginals.length) { show('Minden levélmelléklet elérhető a sofőröknek.'); return; }
+      if (!fillable.length && !missingOriginals.length) { show(`${takaritas?.total ? `Takarítás: ${takaritas.reportsRemoved} üres bejegyzés és ${takaritas.filesRemoved} fölösleges fájl törölve.\n` : ''}Minden levélmelléklet elérhető a sofőröknek.`); return; }
       if (fillable.length && !confirm(`${fillable.length} fuvar levélmelléklete hiányzik a szerverről, de megvan ezen a gépen. Feltöltsem őket, hogy a sofőrök is megnyithassák?`)) { show('A pótlás nem indult el.'); return; }
       let done = 0;
       const failed = [];
+      const reszleges = [];
       for (const { order, files } of fillable) {
         show(`Feltöltés: ${done + failed.length + 1} / ${fillable.length} · ${order.orderNo || order.id}`);
         await ensureOrdersOnServerV135([order.id]);
         const result = await uploadOrderSourceFilesV135(order, files, `Outlook forrás · ${order.sourceMail?.fileName || ''}`.trim());
         if (result.ok) done++; else failed.push(`${order.orderNo || order.id}: ${result.error}`);
+        if (result.ok && result.skipped?.length) reszleges.push(`${order.orderNo || order.id}: ${result.skipped.join(', ')}`);
       }
       if (typeof global.render === 'function') global.render();
       const lines = [`Kész: ${done} fuvar melléklete feltöltve.`];
+      if (takaritas?.total) lines.push(`Takarítás: ${takaritas.reportsRemoved} üres bejegyzés és ${takaritas.filesRemoved} fölösleges fájl törölve${takaritas.failed ? `, ${takaritas.failed} nem sikerült` : ''}.`);
+      if (reszleges.length) lines.push(`Egyes fájlokat a tároló nem fogadott el (${reszleges.length} fuvar) – futtasd le a SUPABASE_TAROLO_V136.sql fájlt, majd nyomd meg újra a gombot: ${reszleges.slice(0, 10).join(' · ')}`);
       if (failed.length) lines.push(`Sikertelen (${failed.length}): ${failed.slice(0, 10).join(' · ')}${failed.length > 10 ? ' …' : ''}`);
       if (missingOriginals.length) lines.push(`Ezen a gépen nincs meg az eredeti (${missingOriginals.length}) – ezeket újra kell importálni: ${missingOriginals.slice(0, 30).map(order => `${order.orderNo || '—'} (${order.scheduleDate || ''})`).join(', ')}${missingOriginals.length > 30 ? ' …' : ''}`);
       show(lines.join('\n'));
@@ -2065,7 +2091,8 @@
         cameraForm.__pendingDeliveryMetadataV131 = null;
         cameraForm.closest('dialog')?.close();
         if (typeof audioBlob !== 'undefined') audioBlob = null;
-        alert('A szállítólevél fotói a rendeléshez elmentve.');
+        if (result.skipped?.length) alert(`A szállítólevél elmentve, de ezeket a fájlokat a tároló nem fogadta el: ${result.skipped.map(item => item.name).join(', ')}`);
+        else alert('A szállítólevél fotói a rendeléshez elmentve.');
       } catch (error) { alert(`Szállítólevél-mentési hiba: ${error.message}`); }
       finally { if (submit) { submit.disabled = false; submit.textContent = cameraForm.__pendingDeliveryMetadataV131 ? 'Fuvaradat mentésének újrapróbálása' : 'Mentés a rendeléshez'; } }
     };

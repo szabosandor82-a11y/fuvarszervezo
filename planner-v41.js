@@ -1449,6 +1449,8 @@
             : /\.xlsx$/i.test(item.name) ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             : /\.xlsm?$/i.test(item.name) ? 'application/vnd.ms-excel'
             : /\.csv$/i.test(item.name) ? 'text/csv'
+            : /\.msg$/i.test(item.name) ? 'application/vnd.ms-outlook'
+            : /\.eml$/i.test(item.name) ? 'message/rfc822'
             : 'application/octet-stream';
           files.push(new File([bytes], item.name, { type: mime }));
         } catch (error) { /* egy melléklet kihagyható */ }
@@ -1459,6 +1461,7 @@
         /* V135: újrapróbálással; végleges hibánál a fuvar maradandó jelzést kap. */
         const result = await global.uploadOrderSourceFilesV135(order, files, label);
         if (!result.ok) failed.push(`${order.orderNo || order.id}: ${result.error}`);
+        else if (result.skipped?.length) failed.push(`${order.orderNo || order.id}: részben – a tároló nem fogadta el: ${result.skipped.join(', ')}`);
         continue;
       }
       try {
