@@ -677,6 +677,62 @@
     return covered;
   }
 
+  /* ===== V138 – CSEVEGŐ =================================================
+     Gyors üzenetek a sofőrökkel. A beszélgetés azonosítója a sofőr belépési
+     e-mail-címe (kisbetűvel), a csoportos üzeneteké „__all__”. Hogy ki mit
+     láthat és írhat, azt a SUPABASE_CSEVEGO_V138.sql szabályai döntik el. */
+  const CHAT_BUCKET_V138 = 'chat-files';
+  function chatMyEmailV138() {
+    return normalize(profile?.email || session?.user?.email || '');
+  }
+  async function chatFetchV138({ since = '', days = 30 } = {}) {
+    const params = { select: '*', limit: '1000' };
+    if (since) { params.updated_at = `gt.${since}`; params.order = 'updated_at.asc'; }
+    else { params.created_at = `gte.${new Date(Date.now() - days * 86400000).toISOString()}`; params.order = 'created_at.asc'; }
+    return (await dbRequest(`chat_messages?${qs(params)}`)) || [];
+  }
+  async function chatSendV138({ conversation, body = '', attachments = [], senderName = '' }) {
+    const rows = await dbRequest('chat_messages?select=*', {
+      method: 'POST',
+      body: { conversation: normalize(conversation), body: String(body || ''), attachments, sender_name: senderName || null, sender_email: chatMyEmailV138() },
+      headers: { Prefer: 'return=representation' }
+    });
+    if (!rows?.[0]) throw new Error('Az üzenet nem mentődött el.');
+    return rows[0];
+  }
+  async function chatUpdateV138(id, patch) {
+    const rows = await dbRequest(`chat_messages?${qs({ id: `eq.${id}`, select: '*' })}`, {
+      method: 'PATCH', body: patch, headers: { Prefer: 'return=representation' }
+    });
+    if (!rows?.[0]) throw new Error('Az üzenet nem módosítható (csak a saját üzeneted szerkesztheted).');
+    return rows[0];
+  }
+  async function chatReadsV138() {
+    return (await dbRequest(`chat_reads?${qs({ select: 'conversation,reader_email,last_read_at' })}`)) || [];
+  }
+  async function chatMarkReadV138(conversation) {
+    const row = { conversation: normalize(conversation), reader_email: chatMyEmailV138(), last_read_at: new Date().toISOString() };
+    await dbRequest('chat_reads?on_conflict=conversation,reader_email', {
+      method: 'POST', body: [row], headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }
+    });
+    return row;
+  }
+  async function chatUploadV138(conversation, file) {
+    const id = (global.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    const path = `${normalize(conversation)}/${id}/${safeName(file.name || 'fajl')}`;
+    const type = mimeForFileV136(file);
+    await rawRequest(`${baseUrl()}/storage/v1/object/${CHAT_BUCKET_V138}/${pathEncode(path)}`, {
+      method: 'POST', body: file, headers: { 'Content-Type': type, 'x-upsert': 'false' }
+    });
+    return { path, name: file.name || 'fájl', type, size: +file.size || 0 };
+  }
+  async function chatSignV138(path) {
+    const signed = await rawRequest(`${baseUrl()}/storage/v1/object/sign/${CHAT_BUCKET_V138}/${pathEncode(path)}`, { method: 'POST', body: { expiresIn: 3600 } });
+    const p = signed?.signedURL || signed?.signedUrl || '';
+    if (!p) return '';
+    return /^https?:/i.test(p) ? p : p.startsWith('/storage/v1') ? `${baseUrl()}${p}` : `${baseUrl()}/storage/v1${p.startsWith('/') ? '' : '/'}${p}`;
+  }
+
   async function loadOrdersIntoState({ preserveLocalIfRemoteEmpty = false } = {}) {
     emit('syncing', 'Fuvarok betöltése…');
     const [orders, backlog] = await Promise.all([fetchOrders(), fetchBacklog()]);
@@ -1024,6 +1080,8 @@
     /* V135 */
     fetchSourceMailCoverageV135,
     /* V136 */
-    mimeForFileV136, cleanupEmptySourceReportsV136, removeStoragePathsV136
+    mimeForFileV136, cleanupEmptySourceReportsV136, removeStoragePathsV136,
+    /* V138 */
+    chatMyEmailV138, chatFetchV138, chatSendV138, chatUpdateV138, chatReadsV138, chatMarkReadV138, chatUploadV138, chatSignV138
   };
 })(typeof window !== 'undefined' ? window : globalThis);

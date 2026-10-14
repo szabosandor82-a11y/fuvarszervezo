@@ -1407,3 +1407,107 @@ tr.v126-report-grand td{background:#dbeafd;font-weight:800}
 .v135-source-status .v135-upload{margin-left:auto;padding:7px 12px;border-radius:8px;border:0;background:#c62828;color:#fff;font-weight:800;cursor:pointer}
 .v135-progress{margin-top:10px;padding:10px 12px;border:1px solid #c9d6e3;border-radius:10px;background:#f4f8fc;color:#173048;font-size:13px;white-space:pre-wrap}
 .v135-progress.hidden{display:none}
+
+/* ===== V138 – MENTETT FOTÓK: KÜLÖN RÉSZ A MEGJEGYZÉSEKNEK ============= */
+.media-gallery>.v138-gallery-title,.media-gallery>.v138-gallery-grid,.media-gallery>.v138-notes,.media-gallery>.v133-archived-note,.media-gallery>.mobile-empty{grid-column:1/-1}
+.v138-gallery-title{margin:4px 0 0;font-size:13px;font-weight:900;letter-spacing:.03em;text-transform:uppercase;color:#1f3b57}
+.v138-gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px}
+.v138-file a{padding:18px 8px;border-radius:10px;background:#eef3f8;font-weight:700;color:#173048;text-decoration:none;overflow-wrap:anywhere}
+.v138-notes{display:flex;flex-direction:column;gap:10px}
+.media-gallery .v138-note{padding:12px 14px;border:1px solid #c9d6e3;border-left:4px solid #2563c9;border-radius:12px;background:#f4f8fd}
+.v138-note header{font-size:12px;color:#4a627a;margin-bottom:6px}
+.v138-note-text{margin:0 0 8px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;color:#14283c}
+.v138-audio{display:flex;align-items:center;gap:8px;margin-top:6px}
+.v138-audio audio{flex:1;min-width:0}
+
+/* ===== V138 – CSEVEGŐ ================================================= */
+.cv-root{font-family:inherit;color:#14283c}
+.cv-root .hidden{display:none!important}
+.cv-badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:#e0282e;color:#fff;font-size:11px;font-weight:900;line-height:20px;text-align:center;box-shadow:0 0 0 2px #fff}
+.cv-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--cv-color,#4a6b8a);margin-right:6px;flex:none}
+/* sofőr */
+.cv-fab{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:5000;width:58px;height:58px;border-radius:50%;border:0;background:#2563c9;color:#fff;font-size:26px;box-shadow:0 6px 18px #0b2a5266;cursor:pointer}
+.cv-fab.pulse{animation:cvPulse 1.6s ease-in-out infinite}
+@keyframes cvPulse{0%,100%{box-shadow:0 6px 18px #0b2a5266}50%{box-shadow:0 0 0 10px #2563c933}}
+.cv-panel{position:fixed;inset:0;z-index:5500;display:flex;flex-direction:column;background:#fff;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.cv-panel-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#2563c9;color:#fff}
+.cv-panel-head b{font-size:16px}
+.cv-close{border:0;background:transparent;color:inherit;font-size:26px;line-height:1;cursor:pointer;padding:0 4px}
+.cv-panel .cv-view{flex:1;min-height:0}
+/* nézet */
+.cv-view{display:flex;flex-direction:column;min-height:0;background:#f3f6fa}
+.cv-list{flex:1;min-height:0;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.cv-empty{margin:auto;color:#6b7f93;font-size:13px}
+.cv-msg{position:relative;max-width:82%;display:flex;flex-direction:column}
+.cv-msg.mine{align-self:flex-end;align-items:flex-end}
+.cv-msg.theirs{align-self:flex-start;align-items:flex-start}
+.cv-meta{font-size:11px;color:#6b7f93;margin:0 4px 2px}
+.cv-group-tag{display:inline-block;margin-right:6px;padding:1px 6px;border-radius:8px;background:#fff1c9;color:#7a5410;font-weight:800}
+.cv-bubble{padding:8px 12px;border-radius:16px;background:#fff;border:1px solid #dbe3ec;font-size:14px;line-height:1.4;overflow-wrap:anywhere}
+.cv-msg.mine .cv-bubble{background:#2563c9;border-color:#2563c9;color:#fff}
+.cv-msg.mine .cv-bubble a{color:#fff}
+.cv-msg.group.theirs .cv-bubble{background:#fff8e6;border-color:#e8cf8f}
+.cv-msg.deleted .cv-bubble{background:transparent!important;color:#7d8fa1!important;border-style:dashed!important}
+.cv-text{white-space:pre-wrap}
+.cv-img-btn{display:block;margin-top:6px;padding:0;border:0;background:none;cursor:pointer}
+.cv-img{display:block;max-width:220px;max-height:220px;border-radius:10px;background:#dfe7ef;min-width:60px;min-height:60px;object-fit:cover}
+.cv-file{display:block;margin-top:6px;padding:7px 10px;border-radius:10px;border:1px solid #c9d6e3;background:#f4f8fc;color:#173048;font-weight:700;text-align:left;cursor:pointer}
+.cv-msg.mine .cv-file{background:#ffffff26;border-color:#ffffff66;color:#fff}
+.cv-foot{font-size:10.5px;color:#6b7f93;margin:2px 6px 0}
+.cv-more{position:absolute;top:14px;left:-28px;width:24px;height:24px;border:0;border-radius:50%;background:#e4ebf3;color:#35506b;cursor:pointer;opacity:.75}
+.cv-actions{display:none;gap:6px;margin-top:4px}
+.cv-msg.show-actions .cv-actions{display:flex}
+.cv-actions button{padding:4px 10px;border-radius:8px;border:1px solid #c9d6e3;background:#fff;color:#173048;font-size:12px;font-weight:700;cursor:pointer}
+.cv-actions button[data-act=delete]{color:#b42318;border-color:#f0b4ae}
+.cv-editbar{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;background:#fff6dc;color:#7a5410;font-size:12px;font-weight:700}
+.cv-editbar button{border:0;background:none;color:#7a5410;text-decoration:underline;cursor:pointer}
+.cv-pending{display:flex;flex-wrap:wrap;gap:6px;padding:0 10px}
+.cv-pending:empty{display:none}
+.cv-chip{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:4px 8px;border-radius:12px;background:#e4ebf3;font-size:12px}
+.cv-chip button{border:0;background:none;font-size:15px;cursor:pointer;color:#35506b}
+.cv-compose{display:flex;align-items:flex-end;gap:6px;padding:8px 10px;background:#fff;border-top:1px solid #dbe3ec}
+.cv-compose textarea{flex:1;resize:none;min-height:38px;max-height:140px;padding:9px 12px;border:1px solid #c9d6e3;border-radius:19px;font:inherit;font-size:14px}
+.cv-attach,.cv-send{flex:none;width:38px;height:38px;border-radius:50%;border:0;cursor:pointer;font-size:17px}
+.cv-attach{background:#e4ebf3}
+.cv-send{background:#2563c9;color:#fff}
+.cv-compose.sending .cv-send{opacity:.5}
+/* admin */
+.cv-admin{position:fixed;right:16px;bottom:16px;z-index:5000;display:flex;align-items:flex-end;gap:12px;pointer-events:none}
+.cv-admin>*{pointer-events:auto}
+.cv-windows{display:flex;align-items:flex-end;gap:10px}
+.cv-win{width:330px;height:440px;display:flex;flex-direction:column;border-radius:14px 14px 10px 10px;overflow:hidden;background:#fff;box-shadow:0 10px 30px #0b2a5240;border:1px solid #c9d6e3}
+.cv-win-head{display:flex;align-items:center;gap:4px;padding:9px 12px;background:var(--cv-color,#2563c9);color:#fff}
+.cv-win-head .cv-dot{background:#fff}
+.cv-win-head b{flex:1;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cv-win .cv-view{flex:1;min-height:0}
+.cv-heads{display:flex;flex-direction:column-reverse;gap:10px}
+.cv-head{position:relative;width:52px;height:52px;border-radius:50%;border:3px solid #fff;background:var(--cv-color,#4a6b8a);color:#fff;font-weight:900;font-size:16px;box-shadow:0 4px 14px #0b2a5244;cursor:pointer}
+.cv-head.open{box-shadow:0 0 0 3px var(--cv-color,#4a6b8a),0 4px 14px #0b2a5244}
+.cv-head.unread{animation:cvPulse 1.6s ease-in-out infinite}
+.cv-head-x{position:absolute;top:-6px;left:-6px;width:18px;height:18px;border-radius:50%;background:#35506b;color:#fff;font-size:12px;line-height:18px;display:none}
+.cv-head:hover .cv-head-x{display:block}
+.cv-plus{background:#fff;color:#2563c9;border:2px dashed #2563c9;font-size:24px}
+.cv-picker{position:absolute;right:0;bottom:64px;width:240px;max-height:60vh;overflow-y:auto;padding:8px;border-radius:12px;background:#fff;border:1px solid #c9d6e3;box-shadow:0 10px 30px #0b2a5240}
+.cv-picker-title{padding:4px 8px 8px;font-size:12px;font-weight:900;color:#4a627a;text-transform:uppercase}
+.cv-picker button{display:flex;align-items:center;width:100%;padding:9px 10px;border:0;border-radius:8px;background:none;text-align:left;font:inherit;font-weight:700;color:#14283c;cursor:pointer}
+.cv-picker button:hover{background:#eef3f8}
+@media (max-width:1023px){.cv-admin{bottom:84px;right:10px}}
+@media (max-width:760px){.cv-win{position:fixed;inset:auto 8px 150px 8px;width:auto;height:min(70vh,520px)}}
+@media print{.cv-root{display:none!important}}
+.mode-driver .driver-portal{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+
+/* ===== V139 – DÁTUM NÉLKÜLI HÁTRALÉK ================================== */
+.v139-undated-btn{background:#fff6dc!important;color:#7a5410!important;border:1px solid #e2c27c!important}
+.v139-section{border:2px solid #e2c27c;border-radius:14px;background:#fffaf0}
+.v139-section>.bl-day-head{background:#fff1c9;color:#5e4413}
+.v139-item.v139-forgotten{border-left:4px solid #c26a00}
+.v139-item.v139-undated{border-left:4px solid #2563c9}
+.v139-tag{display:inline-block;padding:1px 7px;border-radius:8px;background:#fff1c9;color:#7a5410;font-weight:800;font-size:11px}
+.v139-forgotten .v139-tag{background:#fde4cf;color:#8a3d00}
+.v139-date{display:inline-flex;align-items:center;gap:3px}
+.v139-date input{width:3.2em;padding:6px 4px;text-align:center;border:1px solid #c9d6e3;border-radius:7px;font:inherit}
+.v139-date input:first-child{width:4.4em}
+.v139-editor{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.v139-editor button,.v139-group-all button{padding:6px 10px;border-radius:8px;font-weight:800}
+.v139-today{background:#2563c9!important;color:#fff!important;border-color:#2563c9!important}
+.v139-group-all{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0 2px;padding:8px 10px;border-radius:10px;background:#fff1c9;font-size:13px;font-weight:700;color:#5e4413}

@@ -1607,6 +1607,53 @@
   }
   global.archivedReportsV133 = archivedReportsV133;
 
+  /* ===== V138 – A MENTETT FOTÓK ABLAK TARTALMA ======================= */
+  function galleryDeleteButtonV138(file) {
+    return canDeleteGalleryFileV134(file)
+      ? `<button type="button" class="v119-del" title="Törlés a tárhelyről is" onclick="deleteGalleryFileV119('${safe(file.id)}')">🗑</button>`
+      : '';
+  }
+  function galleryNotesV138(orders, audioFiles) {
+    /* A megjegyzés forrása a fuvar saját jelölése (ezt a sofőr is mindig
+       látja), tartalékként a szerveri bejegyzés megjegyzése. */
+    const bejegyzesek = new Map();
+    for (const order of orders || []) {
+      const torolt = new Set((order.deliveryReportsDeletedV133 || []).map(String));
+      for (const report of order.deliveryReports || []) {
+        const kulcs = String(report?.id || report?.at || '');
+        if (!kulcs || torolt.has(kulcs)) continue;
+        const note = String(report.note || '').trim();
+        if (/^outlook\s*forr/i.test(note)) continue;
+        bejegyzesek.set(kulcs, { kulcs, note, at: report.at || '', orderNo: order.orderNo || '', fuvarNap: order.scheduleDate || '', audio: [] });
+      }
+    }
+    for (const file of audioFiles || []) {
+      const kulcs = String(file.report_id || file.id);
+      const meglevo = bejegyzesek.get(kulcs) || { kulcs, note: '', at: file.created_at || '', orderNo: file.orderNo || '', fuvarNap: file.fuvarNap || '', audio: [] };
+      if (!meglevo.note && file.report_note && !/^outlook\s*forr/i.test(file.report_note)) meglevo.note = String(file.report_note).trim();
+      meglevo.audio.push(file);
+      bejegyzesek.set(kulcs, meglevo);
+    }
+    return [...bejegyzesek.values()].filter(item => item.note || item.audio.length)
+      .sort((a, b) => String(b.at || b.fuvarNap).localeCompare(String(a.at || a.fuvarNap)));
+  }
+  function renderGalleryV138(orders, imageFiles, audioFiles, napja) {
+    const nap = value => { const t = String(value || '').slice(0, 10); return t ? t.replace(/-/g, '. ') + '.' : ''; };
+    const kepek = imageFiles.map(file => /^image\//i.test(file.mime_type || '') || /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(file.file_name || '')
+      ? `<article><a href="${safe(file.url)}" target="_blank" rel="noopener"><img src="${safe(file.url)}" alt="Szállítólevél"></a><small><b>${safe(napja(file))}</b> · ${safe(file.orderNo)} · ${safe(file.file_name || 'Fotó')}${galleryDeleteButtonV138(file)}</small></article>`
+      : `<article class="v138-file"><a href="${safe(file.url)}" target="_blank" rel="noopener">📎 ${safe(file.file_name || 'Fájl')}</a><small><b>${safe(napja(file))}</b> · ${safe(file.orderNo)}${galleryDeleteButtonV138(file)}</small></article>`).join('');
+    const jegyzetek = galleryNotesV138(orders, audioFiles).map(item => `
+      <article class="v138-note">
+        <header><b>${safe(nap(item.at || item.fuvarNap))}</b> · ${safe(item.orderNo)}</header>
+        ${item.note ? `<p class="v138-note-text">${safe(item.note)}</p>` : ''}
+        ${item.audio.map(file => `<div class="v138-audio"><audio controls preload="none" src="${safe(file.url)}"></audio>${galleryDeleteButtonV138(file)}</div>`).join('')}
+      </article>`).join('');
+    if (!kepek && !jegyzetek) return '';
+    return `${kepek ? `<h4 class="v138-gallery-title">Fotók és csatolmányok</h4><div class="v138-gallery-grid">${kepek}</div>` : ''}`
+      + `${jegyzetek ? `<h4 class="v138-gallery-title">Megjegyzések és hangjegyzetek</h4><div class="v138-notes">${jegyzetek}</div>` : ''}`;
+  }
+  global.renderGalleryV138 = renderGalleryV138;
+
   async function openMediaGallery(orderIds) {
     const ids = String(orderIds || '').split(',').map(id => id.trim()).filter(Boolean);
     if (!ids.length || ids.some(id => !canAccessOrder(id))) return alert('Ehhez a fuvarhoz nincs jogosultságod.');
@@ -1675,7 +1722,16 @@
       /* V133: az archiválás után törölt szállítólevelek nem tűnnek el
          nyomtalanul – a galéria jelzi, hogy archiválva vannak. */
       const archivedNoteV133 = archivedReportsNoteV133(orders);
-      if (host) host.innerHTML = (files.length ? files.map(file => file.mime_type?.startsWith('audio/') ? `<article><audio controls src="${safe(file.url)}"></audio><small>${safe(file.orderNo)} · ${safe(napja(file))} · ${safe(file.file_name || 'Hangjegyzet')}</small></article>` : `<article><a href="${safe(file.url)}" target="_blank" rel="noopener"><img src="${safe(file.url)}" alt="Szállítólevél"></a><small><b>${safe(napja(file))}</b> · ${safe(file.orderNo)} · ${safe(file.file_name || 'Fotó')}${canDeleteGalleryFileV134(file) ? `<button type="button" class="v119-del" title="Törlés a tárhelyről is" onclick="deleteGalleryFileV119('${safe(file.id)}')">🗑</button>` : ''}</small></article>`).join('') : (archivedNoteV133 ? '' : '<div class="mobile-empty">Ehhez a fuvarhoz még nincs elmentett fotó.</div>')) + archivedNoteV133;
+      /* V138 – MEGJEGYZÉSEK ÉS HANGJEGYZETEK KÜLÖN RÉSZBEN
+
+         Eddig a hangjegyzet a fotók közé keveredett, a szöveges megjegyzés
+         pedig sehol nem látszott. Most a galéria két részből áll: felül a
+         fotók és csatolmányok, alatta – szállítólevelenként csoportosítva –
+         a sofőr szöveges megjegyzése és hangjegyzete. */
+      const hangE = file => String(file.mime_type || '').startsWith('audio/') || /\.(webm|m4a|mp3|ogg|wav)$/i.test(file.file_name || '');
+      const kepek = files.filter(file => !hangE(file));
+      const tartalomV138 = renderGalleryV138(orders, kepek, files.filter(hangE), napja);
+      if (host) host.innerHTML = (tartalomV138 || (archivedNoteV133 ? '' : '<div class="mobile-empty">Ehhez a fuvarhoz még nincs elmentett fotó.</div>')) + archivedNoteV133;
     } catch (error) { if (host) host.innerHTML = `<div class="mobile-empty">Betöltési hiba: ${safe(error.message)}</div>`; }
   }
   global.openMediaGallery = openMediaGallery;
@@ -1720,6 +1776,36 @@
     const backlogTouched = changes.backlogChanged.length || changes.backlogDeletedIds.length;
     syncRunningV132 = (async () => {
       try {
+        /* V139: a sofőri hátralék-mentés a szerveren TÖRÖLNI fog minden
+           bejegyzést, ami a küldött listában nincs benne. Ha közben az admin
+           létrehozott egyet (pl. dátum nélküli hátralékot), a telefon régi
+           listája törölné. Ezért küldés előtt beolvassuk a szerver friss
+           hátralékait: ami ott új, és a telefon NEM maga törölte, megmarad. */
+        if (isDriver && backlogTouched) {
+          try {
+            const remoteBacklog = await global.V44Online.fetchBacklog();
+            const localIds = new Set((state.backlog || []).map(entry => String(entry.id)));
+            const fresh = (remoteBacklog || []).filter(entry => !localIds.has(String(entry.id)) && !syncedBacklogV132.has(String(entry.id)));
+            if (fresh.length) {
+              state.backlog = [...(state.backlog || []), ...fresh];
+              for (const entry of fresh) syncedBacklogV132.set(String(entry.id), backlogKeyV132(entry));
+            }
+            /* Fordítva is: amit az admin a szerveren már lezárt/törölt, és
+               a telefon azóta nem módosított, azt ne küldjük vissza. */
+            const remoteIds = new Set((remoteBacklog || []).map(entry => String(entry.id)));
+            const before = (state.backlog || []).length;
+            state.backlog = (state.backlog || []).filter(entry => {
+              const id = String(entry.id);
+              const clean = syncedBacklogV132.get(id) === backlogKeyV132(entry);
+              if (!remoteIds.has(id) && clean) { syncedBacklogV132.delete(id); return false; }
+              return true;
+            });
+            if (fresh.length || state.backlog.length !== before) {
+              loadingV132 = true;
+              try { if (typeof global.save === 'function') global.save(false); } finally { loadingV132 = false; }
+            }
+          } catch (error) { console.warn('[V139] a szerveri hátralék beolvasása mentés előtt', error); }
+        }
         await global.V44Online.syncChangedOrdersV132({
           orders: changes.orders,
           deletedIds: isDriver ? [] : changes.deletedIds,
@@ -2110,6 +2196,7 @@
     guardOrderFunction('setItemMoveDate', true, true);
     guardOrderFunction('rescheduleMovedItem', true, true);
     guardOrderFunction('undoBacklogMove', true, true);
+    guardOrderFunction('moveUncheckedToUndatedV139', true, true);
     guardOrderFunction('openTransferDialog', true, true);
     guardOrderFunction('editOrder', false);
     guardOrderFunction('deleteOne', false);

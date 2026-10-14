@@ -165,6 +165,14 @@ function reconcileState(reason = '') {
   //    ha csak a FORRÁS szűnt meg, a tétel még jön: megtartjuk, jelöljük.
   const keptBacklog = [];
   for (const b of st.backlog) {
+    /* V139: a dátum nélküli hátraléknak még nincs célfuvarja – ez nem hiba,
+       ütemezésre vár. Csak azt jelöljük, ha közben a forrásfuvart törölték. */
+    if (b.undatedV139) {
+      if (!orderIds.has(b.sourceOrderId)) { if (!b.orphanSource) { b.orphanSource = true; b.orphanAt = new Date().toISOString(); } }
+      else if (b.orphanSource) { delete b.orphanSource; delete b.orphanAt; }
+      keptBacklog.push(b);
+      continue;
+    }
     const targetAlive = orderIds.has(b.targetOrderId);
     const itemAlive = !b.itemId || itemIds.has(String(b.itemId));
     if (!targetAlive || !itemAlive) { report.clearedBacklog++; continue; }
@@ -3155,7 +3163,7 @@ function bindV21MoveDateParts(){
 function openItems(id){
   const o=state.orders.find(x=>x.id===id);if(!o)return;window.markUserCommentRead?.(id);currentItemsOrderId=id;(o.items||[]).forEach(ensureItemId);
   $('#itemsTitle').textContent=`${o.orderNo} · Tételek`;
-  $('#itemMovePanel').innerHTML=`<div class="move-controls"><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Alapértelmezett áthelyezési év"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div><button id="applyMoveDateAll" class="move-items-btn" type="button" title="Minden kipipálatlan tétel áthelyezése a fenti napra">Mindet erre a napra</button></div>`;
+  $('#itemMovePanel').innerHTML=`<div class="move-controls"><div class="date-parts"><input id="moveYear" inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Alapértelmezett áthelyezési év"><span>–</span><input id="moveMonth" inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Áthelyezés hónapja"><span>–</span><input id="moveDay" inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Áthelyezés napja"></div><button id="applyMoveDateAll" class="move-items-btn" type="button" title="Minden kipipálatlan tétel áthelyezése a fenti napra">Mindet erre a napra</button><button type="button" class="move-items-btn v139-undated-btn" onclick="moveUncheckedToUndatedV139('${o.id}')" title="A kipipálatlan tételek a Hátralékba kerülnek dátum nélkül – később ütemezhetők">Hátralékba dátum nélkül</button></div>`;
   const itemRowsHtml=((o.items||[]).length?`<div class="item-grid-head"><span></span><span>Tétel</span><span>Hiányzik</span><span>Hátralék napja</span></div>`:'')+(o.items||[]).map((it,i)=>{
     /* V58: az alapállapot a letisztult sor. A pipa azt jelenti, hogy a tételt
        HIÁNYTALANUL megkapta – nem kell minden sort végigpipálni ahhoz, hogy
@@ -3728,7 +3736,12 @@ function renderBacklog() {
   const rows = (state.backlog || []).map(backlogRecordData)
     .filter(b => !backlogReceived(b))
     .filter(b => !q || norm(Object.values(b).join(' ')).includes(q));
-  if (!rows.length) { host.innerHTML = '<div class="notice">Nincs nyitott hátralék.</div>'; return; }
+  /* V139: a dátum nélküli hátralék és az elmúlt 30 nap ottfelejtett,
+     kipipálatlan tételei külön, a lista tetején. */
+  const undatedHtml = renderUndatedSectionV139(q);
+  const dated = rows.filter(b => !b.undatedV139);
+  if (!dated.length && !undatedHtml) { host.innerHTML = '<div class="notice">Nincs nyitott hátralék.</div>'; return; }
+  rows.length = 0; rows.push(...dated);
 
   const overdue = rows.filter(b => ['overdue', 'orphan', 'undated'].includes(backlogStatus(b, today)));
   const rest = rows.filter(b => !overdue.includes(b));
@@ -3747,9 +3760,207 @@ function renderBacklog() {
       <header class="bl-day-head"><b>${esc(label)}</b><span>${byDate[date].length} tétel</span></header>
       ${backlogGroupHtml(byDate[date], today)}</section>`);
   }
-  host.innerHTML = sections.join('');
+  host.innerHTML = undatedHtml + sections.join('');
   rows.forEach(b => bindBacklogDateInputs(b.id));
+  host.querySelectorAll('[data-v139-date]').forEach(bindV139DateParts);
 }
+
+/* ===== V139 – DÁTUM NÉLKÜLI HÁTRALÉK ================================
+
+   Eddig a Hátralékba csak dátummal lehetett tételt tenni; ha a dátum nem
+   volt ismert, a tétel kipipálatlanul az elmúlt napi fuvaron maradt, és
+   elveszett a szem elől. Most:
+     - a Tételek ablakban „Hátralékba dátum nélkül”: a kipipálatlan tételek a
+       hiányzó mennyiséggel a Hátralékba kerülnek, egyik napra sem;
+     - a Hátralék menü tetején „Dátum nélkül – infóra vár” szakasz: üres
+       dátummező, Ütemezés és Mára gomb, rendelésenként „Mindet erre a napra”;
+     - ugyanitt az utolsó 30 nap nem teljesített fuvarjain ottfelejtett,
+       kipipálatlan tételek („Elmúlt napon kipipálatlan”).
+
+   A dátum nélküli bejegyzésnek nincs célfuvarja: a tétel adatait és a
+   forrásfuvar fejlécét magában hordozza, és ütemezéskor jön létre (vagy
+   bővül) a célnapi fuvar – ugyanúgy, mint a dátummal áthelyezett tételnél. */
+const UNDATED_LOOKBACK_DAYS_V139 = 30;
+const ORDER_HEADER_DROP_V139 = ['items','deliveryReports','deliveryReportsDeletedV133','sourceMailReportIdsV135','sourceUploadFailedV135','sourceUploadPartialV136','completedAtV111','completedUndoneAtV132','threadV115','movedByDriverV121','localUpdatedAt','onlineUpdatedAt'];
+function orderHeaderV139(o){
+  const h={...o};
+  for(const k of ORDER_HEADER_DROP_V139)delete h[k];
+  return h;
+}
+function currentWorkdayV139(){return typeof normalizeWorkday==='function'?normalizeWorkday(today()):today()}
+
+function moveUncheckedToUndatedV139(orderId){
+  const o=state.orders.find(x=>x.id===(orderId||currentItemsOrderId));if(!o)return;
+  const moving=(o.items||[]).filter(it=>!it.received);
+  if(!moving.length)return alert('Nincs kipipálatlan tétel.');
+  const plan=[];
+  for(const it of moving){
+    ensureItemId(it);
+    const total=numericQty(it.qty),missing=it.missingQty===''||it.missingQty==null?total:numericQty(it.missingQty);
+    if(missing<=0)return alert(`A(z) ${it.name} hiányzó mennyisége legyen nagyobb nullánál.`);
+    if(total>0&&missing>total)return alert(`A(z) ${it.name} hiányzó mennyisége nem lehet több a rendelt mennyiségnél (${it.qty}).`);
+    plan.push({it,total,moveQty:missing});
+  }
+  if(!confirm(`${plan.length} tétel hiányzó mennyisége a Hátralékba kerül DÁTUM NÉLKÜL.\nA Hátralék menüben adhatsz neki dátumot, amikor kiderül, mikor jön.`))return;
+  state.backlog=state.backlog||[];
+  const header=orderHeaderV139(o),now=new Date().toISOString(),keep=[],moved=new Set();
+  for(const p of plan){
+    const it=p.it;
+    const snapshot={...it,_id:uid(),qty:formatQty(p.moveQty),received:false,missingQty:'',moveTargetDate:'',shortageOpen:false};
+    state.backlog.push({id:uid(),undatedV139:true,sourceOrderId:o.id,targetOrderId:'',itemId:'',orderNo:o.orderNo,supplier:o.pickupName,projectName:o.projectName,
+      code:it.code,name:it.name,itemNote:itemNoteValue(it),quantity:formatQty(p.moveQty),unit:it.unit,movedToDate:'',movedAt:now,
+      sourceDateV139:o.scheduleDate||'',itemSnapshotV139:snapshot,orderHeaderV139:header});
+    moved.add(String(it._id));
+    if(p.total>0&&p.moveQty<p.total){it.qty=formatQty(p.total-p.moveQty);it.received=true;it.missingQty='';it.moveTargetDate='';it.shortageOpen=false;keep.push(it)}
+  }
+  (o.items||[]).forEach(it=>{if(it.received&&!moved.has(String(it._id))&&!keep.includes(it))keep.push(it)});
+  o.items=keep;o.completed=o.items.length>0&&o.items.every(i=>i.received);
+  $('#itemsDialog')?.close();save();
+  alert(`${plan.length} tétel a Hátralékba került dátum nélkül.\nA Hátralék menü tetején, a „Dátum nélkül – infóra vár” részben ütemezheted.`);
+}
+window.moveUncheckedToUndatedV139=moveUncheckedToUndatedV139;
+
+/* Az elmúlt 30 nap nem teljesített fuvarjain ottfelejtett tételek. */
+function forgottenItemsV139(){
+  const ma=today(),hatar=shiftDaysV139(ma,-UNDATED_LOOKBACK_DAYS_V139),out=[];
+  for(const o of state.orders||[]){
+    const d=String(o.scheduleDate||'');
+    if(!d||d>=ma||d<hatar||o.completed)continue;
+    for(const it of o.items||[]){
+      if(it.received)continue;
+      ensureItemId(it);
+      /* a már áthelyezett (dátumos hátralék) tétel a saját szakaszában látszik */
+      if(backlogRecordForItem(o.id,it._id))continue;
+      out.push({virtualV139:true,id:`v-${o.id}-${it._id}`,sourceOrderId:o.id,itemId:it._id,orderNo:o.orderNo,supplier:o.pickupName,projectName:o.projectName,
+        code:it.code,name:it.name,itemNote:itemNoteValue(it),quantity:(it.missingQty!==''&&it.missingQty!=null)?formatQty(numericQty(it.missingQty)):it.qty,unit:it.unit,sourceDateV139:d});
+    }
+  }
+  return out;
+}
+function shiftDaysV139(iso,days){const d=new Date(iso+'T12:00:00');d.setDate(d.getDate()+days);return localISO(d)}
+window.forgottenItemsV139=forgottenItemsV139;
+
+function undatedEntriesV139(q=''){
+  const saved=(state.backlog||[]).filter(b=>b.undatedV139);
+  const all=[...saved,...forgottenItemsV139()];
+  return q?all.filter(b=>norm([b.orderNo,b.supplier,b.projectName,b.code,b.name,b.itemNote,b.sourceDateV139].join(' ')).includes(q)):all;
+}
+window.undatedEntriesV139=undatedEntriesV139;
+
+function driverNameV139(orderId,b){
+  const o=state.orders.find(x=>x.id===orderId);
+  const vid=o?.vehicleId||b?.orderHeaderV139?.vehicleId;
+  const v=(state.vehicles||[]).find(x=>x.id===vid);
+  return v?.driverName||v?.name||'';
+}
+function v139DateParts(key){
+  return `<span class="v139-date" data-v139-date="${esc(key)}"><input inputmode="numeric" maxlength="4" placeholder="ÉÉÉÉ" aria-label="Év"><span>–</span><input inputmode="numeric" maxlength="2" placeholder="HH" aria-label="Hónap"><span>–</span><input inputmode="numeric" maxlength="2" placeholder="NN" aria-label="Nap"></span>`;
+}
+function bindV139DateParts(box){
+  const parts=[...box.querySelectorAll('input')];
+  parts.forEach((el,i)=>el.addEventListener('input',()=>{const max=i?2:4;el.value=el.value.replace(/\D/g,'').slice(0,max);if(el.value.length===max&&parts[i+1]){parts[i+1].focus();parts[i+1].select()}}));
+}
+function readV139Date(key){
+  const box=document.querySelector(`[data-v139-date="${CSS.escape(key)}"]`);if(!box)return'';
+  const [y,m,d]=[...box.querySelectorAll('input')].map(x=>x.value.trim());
+  const target=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`,dt=new Date(target+'T12:00:00');
+  if(y.length!==4||!m||!d||isNaN(dt)||localISO(dt)!==target)return'';
+  return target;
+}
+
+function renderUndatedSectionV139(q){
+  const entries=undatedEntriesV139(q);
+  if(!entries.length)return'';
+  const groups=new Map();
+  for(const b of entries){const k=`${b.orderNo||'—'}|${b.sourceOrderId}`;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(b)}
+  const html=[...groups.entries()].map(([k,list])=>{
+    const first=list[0],driver=driverNameV139(first.sourceOrderId,first);
+    const gkey=`g:${k}`;
+    return `<div class="bl-supplier v139-group">
+      <div class="bl-supplier-head"><b>${esc(first.orderNo||'—')} · ${esc(first.supplier||'Ismeretlen beszállító')}</b><span>${esc(first.projectName||'')}${driver?` · ${esc(driver)}`:''}${first.sourceDateV139?` · eredetileg: ${esc(first.sourceDateV139)}`:''}</span></div>
+      ${list.map(b=>`<div class="bl-item v139-item ${b.virtualV139?'v139-forgotten':'v139-undated'}">
+        <div class="bl-item-main">
+          <div class="bl-item-name">${esc(b.name)}${b.code?` <span class="bl-code">${esc(b.code)}</span>`:''}</div>
+          <div class="bl-item-sub">${esc(b.quantity)} ${esc(b.unit||'')}${b.itemNote?` · ${esc(b.itemNote)}`:''} · <span class="v139-tag">${b.virtualV139?`Elmúlt napon kipipálatlan · ${esc(b.sourceDateV139)}`:'Hátralékban, dátum nélkül'}</span>${b.orphanSource?' · <span class="bl-orphan">a forrásfuvart törölték</span>':''}</div>
+        </div>
+        <div class="backlog-date-editor v139-editor">${v139DateParts(b.id)}<button type="button" onclick="scheduleUndatedV139('${esc(b.id)}')">Ütemezés</button><button type="button" class="v139-today" onclick="scheduleUndatedV139('${esc(b.id)}',true)">Mára</button></div>
+        ${b.virtualV139
+          ?`<button type="button" class="bl-arrived" title="A tétel megvan – kipipálja az eredeti fuvarban" onclick="markForgottenReceivedV139('${esc(b.sourceOrderId)}','${esc(b.itemId)}')">Megvan</button>`
+          :`<button type="button" class="bl-undo" title="Visszakerül az eredeti fuvarba kipipálatlanul" onclick="undoUndatedV139('${esc(b.id)}')">Vissza</button>`}
+      </div>`).join('')}
+      ${list.length>1?`<div class="v139-group-all"><span>Mind a ${list.length} tétel:</span>${v139DateParts(gkey)}<button type="button" onclick="scheduleUndatedGroupV139('${esc(gkey)}')">Mindet erre a napra</button><button type="button" class="v139-today" onclick="scheduleUndatedGroupV139('${esc(gkey)}',true)">Mindet mára</button></div>`:''}
+    </div>`;
+  }).join('');
+  return `<section class="bl-day v139-section">
+    <header class="bl-day-head"><b>Dátum nélkül – infóra vár · ${entries.length} tétel</b><span>adj meg dátumot, amikor kiderül, mikor jön</span></header>
+    ${html}</section>`;
+}
+
+/* Egy tétel ütemezése. A virtuális (ottfelejtett) tétel a meglévő, dátumos
+   áthelyezéssel megy; a mentett dátum nélküli bejegyzésből a célnapi fuvar
+   most jön létre. */
+function scheduleUndatedEntryV139(entry,target){
+  if(entry.virtualV139){
+    const o=state.orders.find(x=>x.id===entry.sourceOrderId);
+    const it=o?.items?.find(x=>String(x._id)===String(entry.itemId));
+    if(!o||!it)return{error:'A tétel már nincs meg az eredeti fuvarban.'};
+    if(target===o.scheduleDate)return{error:'A tétel már ezen a napon szerepel – pipáld ki, ha megvan.'};
+    return moveSingleItemToDate(o,it,target);
+  }
+  const b=(state.backlog||[]).find(x=>x.id===entry.id);if(!b)return{error:'A hátralék-bejegyzés már nincs meg.'};
+  const source=state.orders.find(x=>x.id===b.sourceOrderId);
+  const header=source?orderHeaderV139(source):(b.orderHeaderV139||null);
+  if(!header)return{error:'A tételhez tartozó fuvar adatai nem találhatók.'};
+  let dest=state.orders.find(x=>x.scheduleDate===target&&x.orderNo===header.orderNo&&x.vehicleId===header.vehicleId&&x.projectName===header.projectName&&x.pickupName===header.pickupName&&x.movedFromOrderId===b.sourceOrderId);
+  if(!dest){dest={...header,id:uid(),scheduleDate:target,items:[],completed:false,completedAt:'',sequence:999,movedFromOrderId:b.sourceOrderId,companyV126:(typeof orderCompanyV126==='function'?orderCompanyV126(header):'stand98')};state.orders.push(dest)}
+  const item={...(b.itemSnapshotV139||{name:b.name,code:b.code,qty:b.quantity,unit:b.unit}),_id:uid(),received:false,missingQty:'',moveTargetDate:''};
+  dest.items=dest.items||[];dest.items.push(item);dest.completed=false;
+  b.targetOrderId=dest.id;b.itemId=item._id;b.movedToDate=target;b.scheduledAtV139=new Date().toISOString();
+  delete b.undatedV139;
+  const forras={scheduleDate:source?.scheduleDate||b.sourceDateV139||''};
+  if(typeof markMovedByDriverV121==='function')markMovedByDriverV121(dest,'hátralék',target,forras.scheduleDate);
+  return{qty:b.quantity};
+}
+window.scheduleUndatedV139=(id,toToday=false)=>{
+  const entry=undatedEntriesV139().find(x=>x.id===id);if(!entry)return;
+  const target=toToday?currentWorkdayV139():readV139Date(id);
+  if(!target)return alert('Adj meg érvényes dátumot ÉÉÉÉ–HH–NN formában.');
+  const r=scheduleUndatedEntryV139(entry,target);
+  if(r.error)return alert(r.error);
+  save();renderBacklog();
+  alert(`${entry.name}: ${r.qty||entry.quantity} ${entry.unit||''} ütemezve erre a napra: ${target}.`);
+};
+window.scheduleUndatedGroupV139=(gkey,toToday=false)=>{
+  const k=gkey.replace(/^g:/,'');
+  const list=undatedEntriesV139().filter(b=>`${b.orderNo||'—'}|${b.sourceOrderId}`===k);
+  if(!list.length)return;
+  const target=toToday?currentWorkdayV139():readV139Date(gkey);
+  if(!target)return alert('Adj meg érvényes dátumot ÉÉÉÉ–HH–NN formában.');
+  if(!confirm(`${list.length} tétel ütemezése erre a napra: ${target}?`))return;
+  const hibak=[];
+  for(const entry of list){const r=scheduleUndatedEntryV139(entry,target);if(r.error)hibak.push(`${entry.name}: ${r.error}`)}
+  save();renderBacklog();
+  alert(hibak.length?`Ütemezve, kivéve:\n${hibak.join('\n')}`:`${list.length} tétel ütemezve erre a napra: ${target}.`);
+};
+window.markForgottenReceivedV139=(orderId,itemId)=>{
+  const o=state.orders.find(x=>x.id===orderId);const it=o?.items?.find(x=>String(x._id)===String(itemId));if(!it)return;
+  it.received=true;it.missingQty='';it.shortageOpen=false;
+  o.completed=(o.items||[]).length>0&&o.items.every(x=>x.received);
+  save();renderBacklog();
+};
+window.undoUndatedV139=id=>{
+  const b=(state.backlog||[]).find(x=>x.id===id&&x.undatedV139);if(!b)return;
+  const source=state.orders.find(x=>x.id===b.sourceOrderId);
+  if(!source)return alert('Az eredeti fuvar már nincs meg, ezért nem lehet visszatenni. Ütemezd egy napra.');
+  if(!confirm(`Visszakerül az eredeti fuvarba (${source.scheduleDate}) kipipálatlanul: ${b.name} ${b.quantity} ${b.unit||''}?`))return;
+  const snap=b.itemSnapshotV139||{name:b.name,code:b.code,qty:b.quantity,unit:b.unit};
+  const twin=(source.items||[]).find(x=>x.code&&x.code===snap.code&&x.name===snap.name);
+  if(twin){twin.qty=formatQty(numericQty(twin.qty)+numericQty(snap.qty));twin.received=false;twin.missingQty='';twin.moveTargetDate=''}
+  else{source.items=source.items||[];source.items.push({...snap,_id:uid(),received:false,missingQty:'',moveTargetDate:''})}
+  source.completed=false;
+  state.backlog=state.backlog.filter(x=>x.id!==id);
+  save();renderBacklog();
+};
 
 function bindBacklogDateInputs(id){
   const y=$(`#by-${id}`),m=$(`#bm-${id}`),d=$(`#bd-${id}`);if(!y||!m||!d)return;
