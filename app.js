@@ -213,6 +213,34 @@ function reconcileState(reason = '') {
 }
 window.reconcileState = reconcileState;
 
+/* V132 – A SZÁLLÍTÓLEVÉL-SZÁM KÉT FORRÁSBÓL
+
+   A fuvar saját jelölése (deliveryReports) mellett a feltöltött fájlok
+   táblájából számolt értéket is figyeljük. A kettő közül a nagyobb
+   számít, így a gomb akkor is bezöldül, ha a jelölés valahol elveszett,
+   de a fájl megvan – és akkor is zöld marad, ha a fájlt archiválás után
+   törölték, de a jelölés megvan. */
+function deliveryPhotoCountV132(order){
+  if(!order)return 0;
+  const jeloles=(order.deliveryReports||[]).reduce((n,r)=>n+(+r.photoCount||+r.fileCount||1),0);
+  const fajl=+(window.deliveryFileCountsV132?.get?.(String(order.id))||0);
+  return Math.max(jeloles,fajl);
+}
+window.deliveryPhotoCountV132=deliveryPhotoCountV132;
+
+/* V132: az Outlook-újraimport új azonosítóval hozza létre a fuvart. A
+   fájlok átkötése mellett a sofőr szállítólevél-jelölése is átkerül a
+   lecserélt fuvarról az újra (rendelésszám + felrakó egyezése alapján). */
+function carryDeliveryMarksV132(oldOrders,newOrders){
+  const key=o=>`${String(o?.orderNo||'').trim()}|${norm(o?.pickupName||'')}`;
+  const marks=new Map();
+  for(const o of oldOrders||[]){if(!(o.deliveryReports||[]).length)continue;marks.set(key(o),[...(marks.get(key(o))||[]),...o.deliveryReports])}
+  let carried=0;
+  for(const o of newOrders||[]){const m=marks.get(key(o));if(m?.length){o.deliveryReports=[...(o.deliveryReports||[]),...m];carried++}}
+  return carried;
+}
+window.carryDeliveryMarksV132=carryDeliveryMarksV132;
+
 /* V70: minden mentés bélyeget tesz a fuvarokra. Ebből derül ki betöltéskor,
    hogy a helyi vagy a szerveroldali változat frissebb. */
 function stampLocalChanges(){
@@ -1053,7 +1081,7 @@ function searchableOrderText(o){return norm(JSON.stringify(o)+' '+(o.items||[]).
     }
     const uj={...o,_fuvarok:[o]};osszevont.set(no,uj);rows.push(uj);
   }
-  const foto=sor=>(sor._fuvarok||[]).reduce((sum,x)=>sum+(x.deliveryReports||[]).reduce((n,r)=>n+(+r.photoCount||+r.fileCount||1),0),0);
+  const foto=sor=>(sor._fuvarok||[]).reduce((sum,x)=>sum+deliveryPhotoCountV132(x),0);
   const napok=sor=>[...new Set((sor._fuvarok||[]).map(x=>x.scheduleDate).filter(Boolean))].sort();$('#orderList').innerHTML=rows.map(o=>`<article class="card search-result" onclick="openSearchResult('${o.id}')"><h3>${esc(o.orderNo)} · ${esc(o.projectName||'Egyedi úticél')}</h3><p>${o.scheduleDate} · ${esc(state.vehicles.find(v=>v.id===o.vehicleId)?.driverName||'Nincs kiosztva')}${napok(o).length>1?` · ${napok(o).length} napon át`:''}${foto(o)?` · ${foto(o)} szállítólevél`:''}</p><p>${esc(o.pickupName||'')} → ${esc(o.dropAddress||'')}</p><div class="card-actions"><button onclick="event.stopPropagation();openSearchResult('${o.id}')">Megnyitás</button><button onclick="event.stopPropagation();editOrder('${o.id}')">Szerkesztés</button><button onclick="event.stopPropagation();openItems('${o.id}')">Tételek</button><button class="secondary" onclick="event.stopPropagation();openMediaGallery('${o.id}')">📎 Mentett fotók</button><button onclick="event.stopPropagation();deleteOne('${o.id}')">Törlés</button></div></article>`).join('')||'<div class="notice">Nincs találat.</div>'}window.openSearchResult=id=>{const o=state.orders.find(x=>x.id===id);if(!o)return;$('#workDate').value=o.scheduleDate;showPage('planner');render();setTimeout(()=>{const el=document.querySelector(`.bubble[data-id="${id}"]`);if(el){el.classList.add('search-highlight');el.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>el.classList.remove('search-highlight'),7000)}},180)}
 /* V102 – EGY KATTINTÁSSAL ÁLLÍTHATÓ, HOGY A JÁRMŰ ÁLLANDÓ-E
 
@@ -2069,7 +2097,7 @@ async function pushOrderPayloadV116(order){
   const profil=window.V44Online?.getProfile?.();
   if(!profil||String(profil.role||'')==='admin')return;
   setTimeout(async()=>{
-    try{ await window.V44Online?.updateOwnOrder?.(order); }
+    try{ if(window.directOrderWriteV132) await window.directOrderWriteV132(order); else await window.V44Online?.updateOwnOrder?.(order); }
     catch(error){
       try{ await window.V44Online?.syncOrderThread?.(order); }
       catch(masodik){

@@ -385,9 +385,7 @@
     const manualNotes = [...new Set(orders.flatMap(order => [order.note, order.manualItems])
       .map(value => String(value || '').trim())
       .filter(value => value && !/^outlook import/i.test(value)))];
-    const deliveryPhotos = orders.reduce((sum, order) =>
-      sum + (order.deliveryReports || []).reduce((inner, report) =>
-        inner + (+report.photoCount || +report.fileCount || 1), 0), 0);
+    const deliveryPhotos = orders.reduce((sum, order) => sum + photoCountOfOrderV132(order), 0);
     const projects = [...new Set(groups.map(group => group.projectName).filter(Boolean))];
     const dropCount = projects.length || 1;
 
@@ -464,10 +462,14 @@
 
      A deliveryReports mezőt CSAK a sofőr fotófeltöltése tölti (az
      Outlook-mellékletek nem), ezért ez megbízható jel. */
+  /* V132: a fuvar jelölése mellett a feltöltött fájlok táblájából számolt
+     érték is számít (deliveryPhotoCountV132, app.js). */
+  function photoCountOfOrderV132(order) {
+    if (typeof global.deliveryPhotoCountV132 === 'function') return global.deliveryPhotoCountV132(order);
+    return (order?.deliveryReports || []).reduce((inner, report) => inner + (+report.photoCount || +report.fileCount || 1), 0);
+  }
   function deliveryPhotoCount(group) {
-    return (group.orders || []).reduce((sum, order) =>
-      sum + (order.deliveryReports || []).reduce((inner, report) =>
-        inner + (+report.photoCount || +report.fileCount || 1), 0), 0);
+    return (group.orders || []).reduce((sum, order) => sum + photoCountOfOrderV132(order), 0);
   }
 
   /* V73: a megjegyzés a fuvar note mezőjéből jön, mert azt az űrlapon

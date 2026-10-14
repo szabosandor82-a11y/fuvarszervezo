@@ -1,0 +1,49 @@
+FUVARSZERVEZŐ V132
+
+A HIBA OKA
+A sofőri adat (a teljesítés pipája és a szállítólevél jelölése) a fuvar
+payload mezőjében él, amit több helyről írunk: a sofőr telefonjáról és az
+admin gépéről. Mindegyik a TELJES fuvart küldte fel, és a frissítés vakon
+lecserélte a helyi adatot a szerverről jöttre. Ezért időzítésen múlt, hogy
+egy változás megmarad-e – ezért jelentkezett a hiba csak egyes fuvaroknál.
+
+FUVAR TELJESÍTÉSE (a zöld pipa eltűnése)
+- A frissítés (60 mp-es automatikus, előtérbe visszatérés, Frissítés gomb)
+  összefésül, nem cserél: a még fel nem jutott vagy épp most elmentett
+  fuvar helyi változata megmarad.
+- A 900 ms-os késleltetett mentés csak a ténylegesen módosított fuvarokat
+  küldi fel, a teljes listát nem. A közvetlen mentés alatt álló fuvart
+  kihagyja, frissítés közben pedig elhalasztja magát.
+- A teljesítés visszavonása időbélyeget kap (completedUndoneAtV132), a
+  tételenkénti pipálással teljesült fuvar pedig teljesítési időt. Az
+  összefésülés az időrend szerint dönt: régi, pipa nélküli adatpéldány nem
+  törölheti a friss pipát, a tudatos visszavonás viszont átmegy.
+
+ADMIN MENTÉS
+- Az admin csak a módosított fuvarokat menti, a sofőri mezőket előtte
+  frissen beolvasva (V131).
+- Csak a ténylegesen kitörölt fuvar törlődik a szerverről. A sofőr által
+  közben létrehozott fuvarok nem törlődnek többé. A „Minden fuvar online
+  mentése” gomb sem töröl.
+- A napi szétosztás/optimalizálás mentése után az érintett fuvarok
+  egyeztetettnek számítanak, nem mennek fel még egyszer.
+
+MENTETT FOTÓK GOMB
+- A gomb a fuvar jelölése mellett a feltöltött fájlok táblájából
+  (delivery_report_files) számolt értéket is figyeli, a nagyobbat veszi.
+  Így ugyanazt mutatja, mint a galéria. Az Outlook-forrásmellékletek nem
+  számítanak bele.
+- Az admin felület percenként átveszi a sofőri jelzéseket (pipa, átvétel,
+  szállítólevél, megjegyzés, üzenet) és a sofőr által létrehozott fuvart.
+  A sorrendet és a kiosztást nem írja felül; húzás közben és nyitott
+  ablaknál nem frissít.
+- Az Outlook-újraimport a régi fuvar szállítólevél-jelölését is átviszi
+  az újra.
+
+SZERVEROLDALI VÉDELEM – SUPABASE_SOFOR_MEZOK_V132.sql
+- set_driver_fields_v132: a pipa és a szállítólevél atomi írása.
+- orders_keep_driver_fields_v132 trigger: bármilyen írásnál megőrzi a
+  szállítólevél-jelölést, a pipát pedig csak későbbi, tudatos visszavonás
+  veheti le.
+- Ha a függvény nincs létrehozva, a program visszaolvasással ellenőrzi a
+  mentést, és ha a szerver nem tárolta el, egyszer figyelmeztet.

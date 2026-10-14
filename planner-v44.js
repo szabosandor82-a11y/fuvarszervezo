@@ -1,4 +1,4 @@
-/* Fuvarszervező V131
+/* Fuvarszervező V132
    Sáv-alapú szétosztás és lánc-optimalizált felrakási sorrend.
 
    Kemény szabályok:
@@ -23,7 +23,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '131';
+  const VERSION = '132';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   // Alapértelmezett indulási pontok. A törzsadat (SEED_DATA.vehicles) felülírja
   // őket, ha ott meg van adva a sofőr lakóhelye.
@@ -1194,6 +1194,9 @@
       }
       const orders = (state.orders || []).filter(order => order.scheduleDate === date);
       await online.syncOrdersForDate(date, orders, onlineProfile);
+      /* V132: a napi mentéssel felküldött fuvarok egyeztetettnek számítanak;
+         a többi, közben módosított fuvar a célzott mentéssel megy fel. */
+      global.markOrdersSyncedV132?.(orders);
     }
   }
 
@@ -1216,7 +1219,7 @@
       await persistOnlineV49(date);
       if (typeof render === 'function') render();
       const conflictText = result.conflicts.length ? `\nFigyelem: ${result.conflicts.length} felrakóhelyen egymással ütköző fix sofőrjelölés maradt.` : '';
-      alert(`Fuvarok V131 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
+      alert(`Fuvarok V132 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
       return result;
     } catch (error) {
       console.error('[V121] Szétosztási hiba', error);
@@ -1237,7 +1240,7 @@
       if (changed.length) throw new Error('Az optimalizálás sofőrt változtatott.');
       await persistOnlineV49(date);
       if (typeof render === 'function') render();
-      alert('V131 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
+      alert('V132 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
       return true;
     } catch (error) {
       console.error('[V121] Optimalizálási hiba', error);
@@ -1478,12 +1481,12 @@
     if (balanceButton) {
       balanceButton.onclick = event => { event.preventDefault(); return balanceActionV44(); };
       balanceButton.dataset.algorithmVersion = VERSION;
-      balanceButton.title = 'V131: csak a megnyitott nap szétosztása; a többi nap nem módosul';
+      balanceButton.title = 'V132: csak a megnyitott nap szétosztása; a többi nap nem módosul';
     }
     if (optimizeButton) {
       optimizeButton.onclick = event => { event.preventDefault(); return optimizeActionV44(); };
       optimizeButton.dataset.algorithmVersion = VERSION;
-      optimizeButton.title = 'V131: csak a megnyitott nap optimalizálása; a többi nap nem módosul';
+      optimizeButton.title = 'V132: csak a megnyitott nap optimalizálása; a többi nap nem módosul';
     }
     document.getElementById('clearAllMastersBtn')?.addEventListener('click', clearAllMasterDataV44);
     document.getElementById('loadBuiltInMastersBtn')?.addEventListener('click', loadBuiltInMasterDataV44);

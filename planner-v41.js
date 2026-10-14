@@ -2044,6 +2044,10 @@ ${entry.subject || ''}`) || project;
     }
 
     const accepted = acceptedEntries.map(entryToOrder);
+    /* V132: a lecserélt fuvar sofőri szállítólevél-jelölése is átkerül az
+       újra – eddig csak a fájlok kötődtek át, a Mentett fotók gomb szürke
+       maradt. Az Outlook-mellékletből ez nem keletkezik. */
+    if (lecsereltek.length && typeof global.carryDeliveryMarksV132 === 'function') global.carryDeliveryMarksV132(lecsereltek, accepted);
     state.orders = state.orders || [];
     state.orders.push(...accepted);
     if (global.V47MasterLearning?.learnFromOrder) accepted.forEach(order => global.V47MasterLearning.learnFromOrder(order, null, {}));

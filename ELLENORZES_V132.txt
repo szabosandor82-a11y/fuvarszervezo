@@ -1,0 +1,29 @@
+FUVARSZERVEZŐ V132 – HELYI ELLENŐRZÉS
+
+Futtatott parancsok:
+  node --check app.js planner-v37.js planner-v41.js planner-v44.js
+  node --check online-v44-2.js auth-v44-2.js sw.js
+  node TEST_V132.js        (a TEST_V132_SYNC.js-t is futtatja)
+  node TEST_V132_SYNC.js
+
+Eredmény:
+  Szintaktikai ellenőrzés: sikeres.
+  Elfogadási tesztek: 463/463 sikeres (451 korábbi + 12 új).
+  Régebbi tesztek: TEST_V33–V49 sikeres. A TEST_V52/V53/V54 1–2 hibája
+  változatlan a V131-hez képest (nem a V132 okozza).
+
+Új viselkedési tesztek (a versenyhelyzetek szimulálása):
+  - régi frissítési válasz pipa közben nem tünteti el a pipát;
+  - a mentés közben induló frissítés sem írja vissza a régi állapotot;
+  - a sofőr csak a módosított fuvart küldi fel;
+  - a szállítólevél-jelölés frissítés után is megmarad;
+  - a visszavonás időbélyeget kap és érvényesül;
+  - régi admin-példány nem törli a pipát és a szállítólevelet;
+  - az admin csak a ténylegesen törölt fuvart törli;
+  - az admin háttérfrissítése átveszi a pipát, a sorrendet nem írja felül;
+  - a Mentett fotók gomb a fájltáblából is bezöldül;
+  - az újraimport átviszi a jelölést.
+
+SQL: a SUPABASE_SOFOR_MEZOK_V132.sql PostgreSQL-motoron (PGlite) tesztelve,
+11/11 eset sikeres (sofőri írás, régi admin felülírás, upsert, visszavonás,
+régebbi visszavonás, jogosultság).

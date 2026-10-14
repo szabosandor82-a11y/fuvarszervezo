@@ -250,6 +250,42 @@
      letörölhette a sofőr közben feltöltött szállítólevelét vagy pipáit.
      Admin mentés előtt most beolvassuk az érintett szerverrekordokat, és
      csak a sofőri mezőket fésüljük vissza az admin által szerkesztett fuvarba. */
+  /* ===== V132 – A TELJESÍTÉS ESEMÉNYEK SORRENDJE SZERINT DŐL EL ========
+
+     Eddig a teljesítés összefésülése vagy egyszerű VAGY-kapcsolat volt (a
+     visszavonás soha nem ment át), vagy az utolsó író nyert (a régi
+     adatpéldány letörölte a pipát). Most két eseményt ismerünk:
+       - teljesítés: completed=true, ideje completedAt / completedAtV111
+       - visszavonás: completedUndoneAtV132
+     A legkésőbbi esemény dönt. A pipa nélküli, időbélyeg nélküli állapot
+     nem esemény – így egy régi példány nem írhatja felül a friss pipát. */
+  function completionStateV132(a, b) {
+    const events = [];
+    let undoneAt = '';
+    for (const order of [a, b]) {
+      if (!order) continue;
+      if (order.completed) events.push({ at: String(order.completedAt || order.completedAtV111 || ''), done: true, order });
+      const undo = String(order.completedUndoneAtV132 || '');
+      if (undo) { events.push({ at: undo, done: false, order }); if (undo > undoneAt) undoneAt = undo; }
+    }
+    if (!events.length) return { completed: false, completedAt: '', completedAtV111: '', completedUndoneAtV132: '' };
+    events.sort((x, y) => x.at.localeCompare(y.at) || (x.done === y.done ? 0 : x.done ? 1 : -1));
+    const last = events[events.length - 1];
+    if (last.done) {
+      const at = last.at;
+      return { completed: true, completedAt: at, completedAtV111: last.order.completedAtV111 || at, completedUndoneAtV132: undoneAt };
+    }
+    return { completed: false, completedAt: '', completedAtV111: '', completedUndoneAtV132: undoneAt };
+  }
+  function applyCompletionV132(target, result) {
+    if (!target || !result) return target;
+    target.completed = !!result.completed;
+    target.completedAt = result.completedAt || '';
+    if (result.completedAtV111) target.completedAtV111 = result.completedAtV111; else delete target.completedAtV111;
+    if (result.completedUndoneAtV132) target.completedUndoneAtV132 = result.completedUndoneAtV132; else delete target.completedUndoneAtV132;
+    return target;
+  }
+
   function mergeAdminDriverFieldsV131(order, remote) {
     if (!order || !remote) return order;
     const merged = { ...order };
@@ -283,14 +319,10 @@
       });
     }
 
-    if (remote.completed) {
-      merged.completed = true;
-      const completedAt = remote.completedAt || remote.completedAtV111 || '';
-      if (completedAt) {
-        merged.completedAt = completedAt;
-        merged.completedAtV111 = remote.completedAtV111 || completedAt;
-      }
-    }
+    /* V132: a teljesítés és a visszavonás időbélyeg szerint dől el. Egy régi
+       admin-példány pipa nélküli állapota nem esemény, ezért nem írhatja
+       felül a sofőr pipáját; a sofőr TUDATOS visszavonása viszont érvényes. */
+    applyCompletionV132(merged, completionStateV132(remote, order));
 
     const driverNotes = [remote, order].filter(value => String(value.driverNoteV111 || '').trim());
     if (driverNotes.length) {
@@ -440,6 +472,120 @@
     }
     emit('online', `${targetDate} fuvarjai szinkronizálva.`);
     return { date: targetDate, count: scoped.length };
+  }
+
+  /* ===== V132 – CSAK A TÉNYLEGESEN MÓDOSÍTOTT FUVAROK MENNEK FEL ========
+
+     A régi syncOrders minden mentéskor a TELJES fuvarlistát küldte, a
+     helyben lévő (akár egy perce frissített, régi) példánnyal. Ha közben a
+     másik fél módosított valamit, azt ez felülírta: így tűnt el a sofőr
+     pipája és a szállítólevél jelölése. Adminnál ráadásul minden olyan
+     szerverfuvart törölt, ami a saját listájában nem szerepelt – a sofőr
+     által közben létrehozottakat is.
+
+     Most a hívó megmondja, melyik fuvar változott és melyiket törölték
+     TÉNYLEGESEN. Csak ezek mennek fel, más rekordhoz nem nyúlunk. */
+  async function deleteOrdersByIdV132(ids) {
+    const list = [...new Set((ids || []).map(String).filter(Boolean))];
+    for (let i = 0; i < list.length; i += 50) {
+      const chunk = list.slice(i, i + 50).map(id => `"${String(id).replace(/"/g, '\\"')}"`).join(',');
+      if (chunk) await dbRequest(`orders?id=in.(${encodeURIComponent(chunk)})`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+    }
+  }
+
+  async function syncChangedOrdersV132({ orders = [], deletedIds = [], backlogChanged = [], backlogDeletedIds = [], backlogAll = null } = {}, currentProfile = profile) {
+    if (!currentProfile) currentProfile = await fetchProfile();
+    const changed = Array.isArray(orders) ? orders : [];
+    emit('syncing', 'Változások mentése…');
+    if (currentProfile.role === 'admin') {
+      if (changed.length) {
+        const latest = await mergeFreshAdminDriverFieldsV131(changed);
+        const rows = latest.map(orderToRow);
+        await dbRequest('orders?on_conflict=id', { method: 'POST', body: rows, headers: { Prefer: 'resolution=merge-duplicates,return=minimal' } });
+      }
+      if (deletedIds.length) await deleteOrdersByIdV132(deletedIds);
+      const backlogRows = (backlogChanged || []).map(entry => ({ id: String(entry.id), source_order_id: entry.sourceOrderId || null, target_order_id: entry.targetOrderId || null, moved_to_date: entry.movedToDate || null, payload: { ...entry, id: String(entry.id) }, updated_at: new Date().toISOString() }));
+      if (backlogRows.length) await dbRequest('backlog_entries?on_conflict=id', { method: 'POST', body: backlogRows, headers: { Prefer: 'resolution=merge-duplicates,return=minimal' } });
+      for (const id of backlogDeletedIds || []) await dbRequest(`backlog_entries?id=eq.${encodeURIComponent(String(id))}`, { method: 'DELETE' });
+    } else {
+      if (changed.length) await dbRequest('rpc/sync_own_orders', { method: 'POST', body: { p_orders: changed } });
+      if (backlogAll) await dbRequest('rpc/sync_own_backlog', { method: 'POST', body: { p_entries: backlogAll.map(entry => ({ ...entry, id: String(entry.id) })) } });
+    }
+    emit('online', 'Változások mentve.');
+    return { orders: changed.length, deleted: deletedIds.length };
+  }
+
+  /* V132: adminnál a háttérfrissítés nem tölti le a teljes archívumot,
+     csak a megadott naptól kezdve. */
+  async function fetchOrdersSinceV132(fromDate) {
+    const params = { select: 'id,schedule_date,vehicle_id,driver_key,order_no,project_name,sequence,payload,updated_at', order: 'schedule_date.asc,sequence.asc' };
+    if (fromDate) params.schedule_date = `gte.${fromDate}`;
+    const rows = await dbRequest(`orders?${qs(params)}`);
+    return (rows || []).map(rowToOrder);
+  }
+
+  async function fetchOrderPayloadsV132(ids) {
+    const list = [...new Set((ids || []).map(String).filter(Boolean))];
+    const result = new Map();
+    for (let start = 0; start < list.length; start += 50) {
+      const values = list.slice(start, start + 50).map(id => `"${id.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',');
+      const rows = await dbRequest(`orders?${qs({ select: 'id,payload,updated_at', id: `in.(${values})` })}`);
+      for (const row of rows || []) result.set(String(row.id), row.payload || {});
+    }
+    return result;
+  }
+
+  /* V132: a sofőri mezők (teljesítés, szállítólevél-jelölés) szűk célú,
+     atomi írása. A SUPABASE_SOFOR_MEZOK_V132.sql hozza létre. Ha nincs
+     létrehozva, false-t ad, és a hívó a régi úton marad. */
+  function missingFunctionV132(error) {
+    return /set_driver_fields_v132|PGRST202|could not find the function|does not exist|schema cache/i.test(String(error?.message || error || ''))
+      || error?.status === 404;
+  }
+  let driverFieldsMissingV132 = false;
+  async function setDriverFieldsV132(order) {
+    if (!order?.id || driverFieldsMissingV132) return false;
+    const fields = {
+      completed: !!order.completed,
+      completedAt: order.completed ? (order.completedAtV111 || order.completedAt || '') : '',
+      completedAtV111: order.completed ? (order.completedAtV111 || order.completedAt || '') : '',
+      completedUndoneAtV132: order.completedUndoneAtV132 || '',
+      deliveryReports: Array.isArray(order.deliveryReports) ? order.deliveryReports : []
+    };
+    try {
+      await dbRequest('rpc/set_driver_fields_v132', { method: 'POST', body: { p_order_id: String(order.id), p_fields: fields } });
+      return true;
+    } catch (error) {
+      if (missingFunctionV132(error)) { driverFieldsMissingV132 = true; console.warn('[V132] a set_driver_fields_v132 függvény nincs létrehozva (SUPABASE_SOFOR_MEZOK_V132.sql)'); return false; }
+      throw error;
+    }
+  }
+
+  /* V132 – SZÁLLÍTÓLEVÉL-SZÁM A FÁJLTÁBLÁBÓL
+
+     A Mentett fotók gomb eddig csak a fuvar payloadjában tárolt jelölést
+     nézte, a galéria viszont a delivery_report_files táblát. Ha a jelölés
+     elveszett, a kép megvolt, a gomb mégis szürke maradt. Most a gomb a
+     fájltáblából is kap számot – az Outlook-forrásmellékletek nélkül. */
+  async function fetchDeliveryFileCountsV132() {
+    const files = [];
+    for (let offset = 0; offset < 200000; offset += 1000) {
+      const page = await dbRequest(`delivery_report_files?${qs({ select: 'order_id,report_id', order: 'id.asc', limit: '1000', offset: String(offset) })}`);
+      files.push(...(page || []));
+      if (!page || page.length < 1000) break;
+    }
+    let sourceReports = new Set();
+    try {
+      const rows = await dbRequest(`delivery_reports?${qs({ select: 'id', note: 'ilike.*outlook*forr*' })}`);
+      sourceReports = new Set((rows || []).map(row => String(row.id)));
+    } catch (error) { console.warn('[V132] a forrásmellékletek azonosítása nem sikerült', error); }
+    const counts = new Map();
+    for (const file of files) {
+      if (sourceReports.has(String(file.report_id))) continue;
+      const id = String(file.order_id || '');
+      if (id) counts.set(id, (counts.get(id) || 0) + 1);
+    }
+    return counts;
   }
 
   async function loadOrdersIntoState({ preserveLocalIfRemoteEmpty = false } = {}) {
@@ -666,6 +812,10 @@
     fetchOrders, fetchBacklog, syncOrders, syncOrdersForDate, syncBacklog, loadOrdersIntoState, fetchMasterData, syncMasterData, loadMasterIntoState, masterSnapshot, requestTransfer, acceptTransfer, rejectTransfer, cancelTransfer, listTransfers,
     createDeliveryReport, listDeliveryFiles, relinkDeliveryFiles,
     deleteDeliveryFile, deleteDeliveryFiles, listAllDeliveryFiles, updateOwnOrder, syncOrderThread,
-    startPolling, stopPolling, driverKeyFromOrder, DRIVER_VEHICLES
+    startPolling, stopPolling, driverKeyFromOrder, DRIVER_VEHICLES,
+    /* V132 */
+    syncChangedOrdersV132, fetchOrdersSinceV132, fetchOrderPayloadsV132, setDriverFieldsV132,
+    fetchDeliveryFileCountsV132, completionStateV132, applyCompletionV132,
+    mergeAdminDriverFieldsV131
   };
 })(typeof window !== 'undefined' ? window : globalThis);

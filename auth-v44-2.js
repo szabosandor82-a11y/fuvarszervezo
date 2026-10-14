@@ -22,6 +22,85 @@
   let suppressOnlineSave = false;
   let refreshInProgress = false;
 
+  /* ===== V132 – VÁLTOZÁSKÖVETÉS ======================================
+
+     Minden fuvarról megjegyezzük, milyen állapotban volt, amikor utoljára
+     a szerverrel egyeztettünk (betöltés vagy sikeres mentés). Ami azóta
+     helyben változott, az „piszkos”: csak ez megy fel, és egy frissítés
+     sem írhatja felül, amíg fel nem jutott.
+
+       syncedV132        fuvar id → az utolsó egyeztetett állapot kulcsa
+       syncedBacklogV132 hátralék id → ugyanez a hátraléklistára
+       inflightV132      épp közvetlen mentés alatt álló fuvarok
+       writtenAtV132     fuvar id → mikor jutott fel utoljára közvetlenül
+       completedSeenV132 fuvar id → teljesített volt-e az előző mentéskor */
+  const syncedV132 = new Map();
+  const syncedBacklogV132 = new Map();
+  const inflightV132 = new Set();
+  const writtenAtV132 = new Map();
+  const completedSeenV132 = new Map();
+  const deletedThisSessionV132 = new Set();
+  let loadingV132 = false;
+
+  function orderKeyV132(order) {
+    if (!order) return '';
+    const { localUpdatedAt, onlineUpdatedAt, ...rest } = order;
+    try { return JSON.stringify(rest); } catch (_) { return String(Math.random()); }
+  }
+  function backlogKeyV132(entry) {
+    try { return JSON.stringify(entry || {}); } catch (_) { return String(Math.random()); }
+  }
+  function isDirtyV132(order) {
+    if (!order) return false;
+    const id = String(order.id);
+    return inflightV132.has(id) || syncedV132.get(id) !== orderKeyV132(order);
+  }
+  /* Egyeztetett állapot rögzítése. A `keepDirty` halmazban lévő fuvarok
+     korábbi kulcsa megmarad, hogy továbbra is felmenjenek. */
+  function resetSnapshotV132(keepDirty = new Set()) {
+    const previous = new Map(syncedV132);
+    syncedV132.clear();
+    for (const order of state.orders || []) {
+      const id = String(order.id);
+      if (keepDirty.has(id)) { if (previous.has(id)) syncedV132.set(id, previous.get(id)); }
+      else syncedV132.set(id, orderKeyV132(order));
+    }
+    syncedBacklogV132.clear();
+    for (const entry of state.backlog || []) syncedBacklogV132.set(String(entry.id), backlogKeyV132(entry));
+    rememberCompletionV132();
+  }
+  function rememberCompletionV132() {
+    completedSeenV132.clear();
+    for (const order of state.orders || []) completedSeenV132.set(String(order.id), !!order.completed);
+  }
+  /* A teljesítés visszavonása ESEMÉNY: időbélyeget kap, hogy az
+     összefésülés (és a szerveroldali védelem) meg tudja különböztetni a
+     régi, pipa nélküli adatpéldánytól. */
+  function stampUndoV132() {
+    const now = new Date().toISOString();
+    for (const order of state.orders || []) {
+      const id = String(order.id);
+      const seen = completedSeenV132.get(id);
+      if (seen === true && !order.completed) order.completedUndoneAtV132 = now;
+      /* A tételenkénti pipálással teljesült fuvar is kapjon időpontot,
+         különben egy korábbi visszavonás „későbbinek” látszana nála. */
+      if (seen === false && order.completed && !order.completedAt && !order.completedAtV111) order.completedAt = now;
+    }
+    rememberCompletionV132();
+  }
+  function collectChangesV132() {
+    const ids = new Set((state.orders || []).map(order => String(order.id)));
+    const orders = (state.orders || []).filter(order => !inflightV132.has(String(order.id)) && syncedV132.get(String(order.id)) !== orderKeyV132(order));
+    const deletedIds = [...syncedV132.keys()].filter(id => !ids.has(id) && !inflightV132.has(id));
+    const backlogIds = new Set((state.backlog || []).map(entry => String(entry.id)));
+    const backlogChanged = (state.backlog || []).filter(entry => syncedBacklogV132.get(String(entry.id)) !== backlogKeyV132(entry));
+    const backlogDeletedIds = [...syncedBacklogV132.keys()].filter(id => !backlogIds.has(id));
+    return { orders, deletedIds, backlogChanged, backlogDeletedIds };
+  }
+  function hasChangesV132(changes) {
+    return !!(changes.orders.length || changes.deletedIds.length || changes.backlogChanged.length || changes.backlogDeletedIds.length);
+  }
+
   const byId = id => document.getElementById(id);
   const normalizeEmail = value => String(value || '').trim().toLowerCase();
   const safe = value => typeof esc === 'function' ? esc(value || '') : String(value || '').replace(/[&<>"']/g, '');
@@ -487,7 +566,7 @@
     if (refreshButton) { refreshButton.disabled = true; refreshButton.querySelector('small').textContent = 'Frissítés…'; }
     try {
       suppressOnlineSave = true;
-      await global.V44Online.loadOrdersIntoState();
+      await reloadOrdersV132();
       if (isAdmin()) { await global.V44Online.loadMasterIntoState({ preserveLocalIfRemoteEmpty: true }); if (typeof render === 'function') render(); }
       await refreshTransfers();
       if (isAdmin()) {
@@ -582,9 +661,12 @@
        ha az egyik oldalon át van véve vagy van hiányjelzés, az marad – a
        másik oldal üres állapota nem törölheti. */
     if (Array.isArray(vesztes.items) && Array.isArray(nyertes.items)) {
-      const vesztesTetel = new Map(vesztes.items.map(item => [String(item?._id || item?.code || ''), item]));
-      egyesult.items = nyertes.items.map(item => {
-        const par = vesztesTetel.get(String(item?._id || item?.code || ''));
+      /* V132: azonosító és cikkszám nélküli tételeknél a sorszám is a kulcs
+         része – korábban ezek mind ugyanarra az üres kulcsra estek. */
+      const tetelKulcs = (item, index) => String(item?._id || item?.code || `${item?.name || item?.description || ''}#${index}`);
+      const vesztesTetel = new Map(vesztes.items.map((item, index) => [tetelKulcs(item, index), item]));
+      egyesult.items = nyertes.items.map((item, index) => {
+        const par = vesztesTetel.get(tetelKulcs(item, index));
         if (!par) return item;
         const hiany = value => String(value ?? '').trim() !== '';
         return {
@@ -595,8 +677,14 @@
         };
       });
     }
-    if (vesztes.completed) egyesult.completed = true;
-    if (vesztes.completedAtV111 && !egyesult.completedAtV111) egyesult.completedAtV111 = vesztes.completedAtV111;
+    /* V132: a teljesítés és a visszavonás időbélyeg szerint dől el. */
+    const onlineV132 = (typeof globalThis !== 'undefined' && globalThis.V44Online) || null;
+    if (onlineV132?.completionStateV132) {
+      onlineV132.applyCompletionV132(egyesult, onlineV132.completionStateV132(nyertes, vesztes));
+    } else {
+      if (vesztes.completed) egyesult.completed = true;
+      if (vesztes.completedAtV111 && !egyesult.completedAtV111) egyesult.completedAtV111 = vesztes.completedAtV111;
+    }
 
     /* V114: a sofőr fuvar szintű megjegyzése is megmarad. A frissebb beírásé
        nyer; ha csak az egyik oldalon van, az marad. */
@@ -660,6 +748,7 @@
           await global.V44Online.syncOrders(localOrders, currentProfile);
           [state.orders, state.backlog] = await Promise.all([global.V44Online.fetchOrders(), global.V44Online.fetchBacklog()]);
         } else { state.orders = remoteOrders; state.backlog = remoteBacklog; }
+        resetSnapshotV132();
       } else {
         // V70: NEM írjuk felül vakon a helyi állapotot. Ha egy fuvart helyben
         // módosítottunk (pl. másik napra raktuk), de a feltöltés még nem ment
@@ -669,17 +758,143 @@
         const merged = mergeOrdersByTimestampV70(localOrders, remoteOrders);
         state.orders = merged.orders;
         state.backlog = mergeBacklogByTimestampV70(state.backlog || [], remoteBacklog, merged.keptLocalIds);
+        /* V132: csak a helyben frissebb fuvarok számítanak módosítottnak,
+           és CSAK ezek mennek fel – a teljes lista nem, és törlés sincs. */
+        resetSnapshotV132(merged.keptLocalIds);
+        for (const id of merged.keptLocalIds) syncedV132.delete(id);
         if (merged.keptLocalIds.size) {
           console.info('[V70] Helyben frissebb fuvar megtartva:', merged.keptLocalIds.size);
           // a helyi többletet azonnal feltöltjük, hogy a szerver is kövesse
-          try { await global.V44Online.syncOrders(state.orders, currentProfile); }
+          try {
+            const kept = state.orders.filter(order => merged.keptLocalIds.has(String(order.id)));
+            await global.V44Online.syncChangedOrdersV132({ orders: kept }, currentProfile);
+            for (const order of kept) syncedV132.set(String(order.id), orderKeyV132(order));
+          }
           catch (error) { console.warn('[V70] A helyi változás feltöltése nem sikerült', error); }
         }
       }
-      if (typeof save === 'function') save(false);
+      loadingV132 = true;
+      try { if (typeof save === 'function') save(false); } finally { loadingV132 = false; }
+      rememberCompletionV132();
+      if (currentProfile.role === 'admin') await refreshDeliveryCountsV132();
       if (typeof render === 'function') render();
       await refreshTransfers();
     } finally { suppressOnlineSave = false; }
+  }
+
+  /* ===== V132 – A FRISSÍTÉS ÖSSZEFÉSÜL, NEM CSERÉL ===================
+
+     A régi loadOrdersIntoState egyszerűen lecserélte a helyi fuvarlistát
+     a szerverről jöttre. Ha a lekérés a pipa megnyomása előtt indult el,
+     vagy a mentés még úton volt, a régi szerverállapot felülírta a helyi
+     pipát – és a késleltetett mentés ezt a régit vissza is írta.
+
+     Most a még fel nem jutott (piszkos vagy épp mentés alatt álló) fuvar
+     helyi változata marad meg, a szerver sofőri mezőivel összefésülve. Ha
+     egy fuvar közvetlen mentése a lekérés indulása UTÁN fejeződött be, a
+     szerver válasza már régi lehet, ezért annál is a helyi marad. */
+  async function reloadOrdersV132() {
+    const fetchStartedAt = Date.now();
+    const [remoteOrders, remoteBacklog] = await Promise.all([global.V44Online.fetchOrders(), global.V44Online.fetchBacklog()]);
+    loadingV132 = true;
+    try {
+      const localById = new Map((state.orders || []).map(order => [String(order.id), order]));
+      const keep = new Set();
+      for (const order of state.orders || []) {
+        const id = String(order.id);
+        if (isDirtyV132(order) || (writtenAtV132.get(id) || 0) >= fetchStartedAt) keep.add(id);
+      }
+      const remoteIds = new Set(remoteOrders.map(order => String(order.id)));
+      const merged = remoteOrders.map(remote => {
+        const id = String(remote.id);
+        const local = localById.get(id);
+        if (!local || !keep.has(id)) return remote;
+        const egyesult = mergeDriverFieldsV104(local, remote);
+        if (currentProfile?.role !== 'admin') egyesult.items = local.items;
+        return egyesult;
+      });
+      /* A szerveren még nem létező, de helyben piszkos fuvar (pl. most
+         létrehozott célfuvar) megmarad, amíg fel nem jut. */
+      for (const [id, local] of localById) if (keep.has(id) && !remoteIds.has(id) && syncedV132.get(id) !== orderKeyV132(local) && !syncedV132.has(id)) merged.push(local);
+      const keptBacklog = (state.backlog || []).filter(entry => syncedBacklogV132.get(String(entry.id)) !== backlogKeyV132(entry));
+      const keptBacklogIds = new Set(keptBacklog.map(entry => String(entry.id)));
+      state.orders = merged;
+      state.backlog = [...(remoteBacklog || []).filter(entry => !keptBacklogIds.has(String(entry.id))), ...keptBacklog];
+      resetSnapshotV132(keep);
+      for (const entry of keptBacklog) syncedBacklogV132.delete(String(entry.id));
+      if (typeof global.save === 'function') global.save(false);
+      if (typeof global.render === 'function') global.render();
+    } finally { loadingV132 = false; }
+    if (isAdmin()) await refreshDeliveryCountsV132();
+    if (hasChangesV132(collectChangesV132())) retrySyncLaterV132(1500);
+    return state.orders;
+  }
+  global.reloadOrdersV132 = reloadOrdersV132;
+
+  /* ===== V132 – SZÁLLÍTÓLEVÉL-SZÁM A FÁJLTÁBLÁBÓL ===================== */
+  global.deliveryFileCountsV132 = global.deliveryFileCountsV132 || new Map();
+  async function refreshDeliveryCountsV132() {
+    if (!isAdmin() || !global.V44Online?.fetchDeliveryFileCountsV132) return false;
+    try {
+      const counts = await global.V44Online.fetchDeliveryFileCountsV132();
+      const before = JSON.stringify([...global.deliveryFileCountsV132].sort());
+      global.deliveryFileCountsV132 = counts;
+      return before !== JSON.stringify([...counts].sort());
+    } catch (error) { console.warn('[V132] szállítólevél-számok', error); return false; }
+  }
+
+  /* ===== V132 – AZ ADMIN FELÜLET PERCENKÉNT ÁTVESZI A SOFŐRI JELZÉSEKET
+
+     Az admin felület eddig semmit nem frissített magától, ezért a pipa és
+     a szállítólevél csak kézi Frissítés után látszott. A tervezést (sorrend,
+     kiosztás) továbbra sem írjuk felül: csak a sofőri mezők (teljesítés,
+     átvételek, szállítólevelek, megjegyzés, üzenetek) olvadnak be, és a
+     sofőr által létrehozott új fuvar jelenik meg. */
+  async function adminPollV132() {
+    if (!isAdmin() || refreshInProgress || loadingV132 || document.hidden) return;
+    if ([...document.querySelectorAll('dialog')].some(dialog => dialog.open)) return;
+    if (document.querySelector('.sortable-chosen, .sortable-ghost, .sortable-drag')) return;
+    try {
+      const from = typeof shiftWorkday === 'function' ? shiftWorkday(currentWorkday(), -5) : fallbackShiftWorkday(currentWorkday(), -5);
+      const [remoteOrders, countsChanged] = await Promise.all([global.V44Online.fetchOrdersSinceV132(from), refreshDeliveryCountsV132()]);
+      if (refreshInProgress || loadingV132) return;
+      const localById = new Map((state.orders || []).map(order => [String(order.id), order]));
+      const deletedLocally = new Set([...syncedV132.keys()].filter(id => !localById.has(id)));
+      for (const id of deletedThisSessionV132) deletedLocally.add(id);
+      let changed = countsChanged;
+      loadingV132 = true;
+      try {
+        for (const remote of remoteOrders) {
+          const id = String(remote.id);
+          const local = localById.get(id);
+          if (!local) {
+            if (deletedLocally.has(id)) continue;
+            state.orders.push(remote);
+            syncedV132.set(id, orderKeyV132(remote));
+            changed = true;
+            continue;
+          }
+          const wasClean = !isDirtyV132(local);
+          const before = orderKeyV132(local);
+          const merged = global.V44Online.mergeAdminDriverFieldsV131(local, remote);
+          Object.assign(local, merged);
+          if (!merged.completedAtV111) delete local.completedAtV111;
+          if (!merged.completedUndoneAtV132) delete local.completedUndoneAtV132;
+          if (orderKeyV132(local) !== before) {
+            changed = true;
+            if (wasClean) syncedV132.set(id, orderKeyV132(local));
+          }
+        }
+        if (changed) {
+          rememberCompletionV132();
+          const scroll = captureViewScroll();
+          if (typeof global.saveLocalOnlyV129 === 'function') global.saveLocalOnlyV129();
+          else if (typeof global.save === 'function') global.save(false);
+          if (typeof global.render === 'function') global.render();
+          restoreViewScroll(scroll);
+        }
+      } finally { loadingV132 = false; }
+    } catch (error) { console.warn('[V132] admin háttérfrissítés', error); }
   }
 
   async function logout() {
@@ -1036,6 +1251,7 @@
       order.completed = false;
       order.completedAt = '';
       delete order.completedAtV111;
+      order.completedUndoneAtV132 = new Date().toISOString();
     }
     /* V114: a módosítás idejét közvetlenül jelöljük. Korábban egy nem létező
        függvényt hívtunk (stampOrderChange), ezért a gomb HIBÁRA FUTOTT, és a
@@ -1043,12 +1259,11 @@
     order.localUpdatedAt = new Date().toISOString();
     save();
     try {
-      if (global.V44Online?.configured?.()) {
-        if (currentProfile?.role === 'admin') await global.V44Online.syncOrdersForDate(order.scheduleDate, [order], currentProfile);
-        else await global.V44Online.updateOwnOrder(order);
-      }
+      /* V132: közvetlen mentés „úton” jelöléssel – a késleltetett mentés és
+         az automatikus frissítés nem írhatja felül közben. */
+      if (global.V44Online?.configured?.()) await directOrderWriteV132(order);
     } catch (error) {
-      alert(`A teljesítés helyben megmaradt, de az online mentés nem sikerült: ${error.message}`);
+      alert(`A teljesítés helyben megmaradt, és automatikusan újrapróbáljuk, de az online mentés most nem sikerült: ${error.message}`);
     }
   }
 
@@ -1087,6 +1302,8 @@
     try {
       await global.V44Online.deleteDeliveryFile(file);
       global.__galleryFilesV119 = (global.__galleryFilesV119 || []).filter(item => String(item.id) !== String(fileId));
+      const szamlalo = global.deliveryFileCountsV132, fuvarId = String(file.order_id || '');
+      if (szamlalo?.has?.(fuvarId)) szamlalo.set(fuvarId, Math.max(0, szamlalo.get(fuvarId) - 1));
       /* A fuvar JELÖLÉSE megmarad: a Mentett fotók gomb továbbra is mutatja,
          hogy volt feltöltve szállítólevél – csak a kép nem nyílik meg. */
       await openMediaGallery(String(file.order_id || ''));
@@ -1192,53 +1409,88 @@
   }
   global.openMediaGallery = openMediaGallery;
 
-  function scheduleSync() {
+  /* ===== V132 – CÉLZOTT, ÜTKÖZÉSMENTES ONLINE MENTÉS ==================
+
+     Korábban a 900 ms-os késleltetett mentés a lefutás pillanatában
+     kiolvasta a TELJES state.orders-t és felküldte. Ha közben egy
+     automatikus frissítés visszatöltötte a szerver régi állapotát, a
+     mentés ezt a régi állapotot írta vissza – a sofőr pipája és a
+     szállítólevél jelölése végleg elveszett.
+
+     Most:
+       - csak a ténylegesen módosított (piszkos) fuvarok mennek fel;
+       - a közvetlen mentés alatt álló fuvart a késleltetett mentés kihagyja;
+       - frissítés közben a mentés nem fut le, hanem utána újraütemeződik;
+       - adminnál csak a TÉNYLEGESEN törölt fuvar törlődik a szerverről. */
+  let syncRunningV132 = null;
+
+  function scheduleSync(delay = 900) {
     if (suppressOnlineSave || !currentProfile || !global.V44Online?.configured()) return;
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(async () => {
-      saveTimer = null;
+    saveTimer = setTimeout(() => { saveTimer = null; runSyncV132(); }, delay);
+  }
+
+  /* Újraütemezés a suppressOnlineSave jelzőtől függetlenül: a frissítés
+     alatt elhalasztott mentés a frissítés után is lefusson. */
+  function retrySyncLaterV132(delay = 1500) {
+    if (!currentProfile || !global.V44Online?.configured()) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { saveTimer = null; runSyncV132(); }, delay);
+  }
+
+  async function runSyncV132() {
+    if (!currentProfile || !global.V44Online?.configured()) return;
+    if (loadingV132 || refreshInProgress || syncRunningV132 || suppressOnlineSave) { retrySyncLaterV132(1500); return; }
+    const changes = collectChangesV132();
+    if (!hasChangesV132(changes)) return;
+    const sentKeys = new Map(changes.orders.map(order => [String(order.id), orderKeyV132(order)]));
+    const sentBacklog = new Map(changes.backlogChanged.map(entry => [String(entry.id), backlogKeyV132(entry)]));
+    const isDriver = currentProfile.role !== 'admin';
+    const backlogTouched = changes.backlogChanged.length || changes.backlogDeletedIds.length;
+    syncRunningV132 = (async () => {
       try {
-        // A mobil állapot csak a felhasználó által látható fuvarokat és az általa frissen
-        // létrehozott, jövőbeli hátralékos célfuvarokat tartalmazza. A szerveroldali RPC
-        // újra ellenőrzi, hogy csak tétel-, hátralék- és fotóadat módosulhasson.
-        const orders = state.orders || [];
-        await global.V44Online.syncOrders(orders, currentProfile);
+        await global.V44Online.syncChangedOrdersV132({
+          orders: changes.orders,
+          deletedIds: isDriver ? [] : changes.deletedIds,
+          backlogChanged: isDriver ? [] : changes.backlogChanged,
+          backlogDeletedIds: isDriver ? [] : changes.backlogDeletedIds,
+          backlogAll: isDriver && backlogTouched ? (state.backlog || []) : null
+        }, currentProfile);
+        /* Admin mentésnél a friss szerveradat beolvadt a fuvarba – az így
+           kapott, ténylegesen felírt állapot az egyeztetett. */
+        for (const order of changes.orders) {
+          const id = String(order.id);
+          if (!isDriver) syncedV132.set(id, orderKeyV132(order));
+          else if (orderKeyV132(order) === sentKeys.get(id)) syncedV132.set(id, sentKeys.get(id));
+        }
+        for (const id of changes.deletedIds) { syncedV132.delete(id); deletedThisSessionV132.add(id); }
+        if (isDriver) syncedV132.forEach((_, id) => { if (!(state.orders || []).some(order => String(order.id) === id)) syncedV132.delete(id); });
+        for (const [id, key] of sentBacklog) syncedBacklogV132.set(id, key);
+        for (const id of changes.backlogDeletedIds) syncedBacklogV132.delete(id);
+        if (isDriver && backlogTouched) for (const entry of state.backlog || []) syncedBacklogV132.set(String(entry.id), backlogKeyV132(entry));
 
-        /* V117 – AZ ÜZENET A SZINKRON UTÁN MEGY FEL
-
-           A sofőr mentése egy szűrt eljáráson megy át, ami az üzenetszálat
-           nem engedi át. Eddig az üzenetet a mentés ELŐTT küldtük fel külön,
-           de a késleltetett szinkron 900 ezredmásodperccel később FELÜLÍRTA.
-           Az üzenet tehát feljutott, majd azonnal letörlődött.
-
-           Ezért most a szinkron UTÁN küldjük fel azokat a fuvarokat, amelyek
-           üzenetet hordoznak. */
-        if (currentProfile.role !== 'admin' && global.V44Online?.updateOwnOrder) {
-          /* V118: a SZŰK CÉLÚ eljárás az elsődleges. A teljes fuvart író
-             eljárás sikerrel tér vissza, miközben kiszűri az új mezőt –
-             ezért a korábbi "tartalékként hívjuk" megoldás soha nem indult
-             el. Ha a szűk eljárás nincs létrehozva, egyértelműen szólunk. */
-          const uzenetesek = orders.filter(order => (order.threadV115 || []).length);
-          for (const order of uzenetesek) {
-            try {
-              await global.V44Online.syncOrderThread(order);
-            } catch (error) {
+        /* V117/V118: az üzenetszál a szűrt mentés UTÁN megy fel – de most
+           csak a ténylegesen módosított fuvaroké, nem minden fuvaré. */
+        if (isDriver) {
+          for (const order of changes.orders.filter(order => (order.threadV115 || []).length)) {
+            try { await global.V44Online.syncOrderThread(order); }
+            catch (error) {
               const hianyzik = /sync_order_thread|PGRST202|does not exist|schema cache/i.test(String(error?.message || ''));
-              if (hianyzik) {
-                console.warn('[V118] a sync_order_thread eljárás nincs létrehozva', error);
-                if (!global.__threadSqlWarnedV118) {
-                  global.__threadSqlWarnedV118 = true;
-                  alert('Az üzenetek feltöltéséhez a Supabase-ben le kell futtatni a SUPABASE_UZENETEK.sql fájlt, és engedélyezni a sync_order_thread függvényt.');
-                }
-              } else {
-                console.warn('[V118] az üzenet feltöltése nem sikerült', order.orderNo, error);
+              if (hianyzik && !global.__threadSqlWarnedV118) {
+                global.__threadSqlWarnedV118 = true;
+                alert('Az üzenetek feltöltéséhez a Supabase-ben le kell futtatni a SUPABASE_UZENETEK.sql fájlt, és engedélyezni a sync_order_thread függvényt.');
               }
+              console.warn('[V118] az üzenet feltöltése nem sikerült', order.orderNo, error);
               try { await global.V44Online.updateOwnOrder(order); }
               catch (masodik) { console.warn('[V118] a teljes fuvar feltöltése sem ment', masodik); }
             }
           }
-        }
-        if (currentProfile.role === 'admin') {
+          /* A sofőri teljesítés és a szállítólevél-jelölés atomi írása is. */
+          for (const order of changes.orders) {
+            try { await global.V44Online.setDriverFieldsV132?.(order); }
+            catch (error) { console.warn('[V132] sofőri mezők írása', order.orderNo, error); }
+          }
+        } else {
           try { await global.V44Online.syncMasterData(state, currentProfile); }
           catch (error) {
             console.warn('[V48] Törzsadat-szinkron hiba', error);
@@ -1246,10 +1498,79 @@
           }
         }
       } catch (error) {
-        console.error('[V48] Online mentési hiba', error);
+        console.error('[V132] Online mentési hiba', error);
         setSyncStatus({ state: 'error', message: `Mentési hiba: ${error.message}` });
+        retrySyncLaterV132(15000);
       }
-    }, 900);
+    })();
+    try { await syncRunningV132; } finally { syncRunningV132 = null; }
+    if (hasChangesV132(collectChangesV132()) && !saveTimer) retrySyncLaterV132(900);
+  }
+
+  /* V132 – KÖZVETLEN MENTÉS EGY FUVARRA (pipa, szállítólevél, üzenet)
+
+     A fuvar a mentés idejére „úton” jelölést kap, így a késleltetett
+     mentés nem küld róla egy párhuzamos, esetleg régebbi példányt. */
+  async function directOrderWriteV132(order) {
+    if (!order?.id) return;
+    const id = String(order.id);
+    const keyBefore = orderKeyV132(order);
+    inflightV132.add(id);
+    try {
+      if (currentProfile?.role === 'admin') {
+        await global.V44Online.syncOrdersForDate(order.scheduleDate, [order], currentProfile);
+        syncedV132.set(id, orderKeyV132(order));
+      } else {
+        await global.V44Online.updateOwnOrder(order);
+        const atomic = await global.V44Online.setDriverFieldsV132?.(order);
+        if (atomic === false) await verifyDriverWriteV132(order);
+        if (orderKeyV132(order) === keyBefore) syncedV132.set(id, keyBefore);
+      }
+      writtenAtV132.set(id, Date.now());
+    } finally {
+      inflightV132.delete(id);
+      if (isDirtyV132(order)) retrySyncLaterV132(900);
+    }
+  }
+  global.directOrderWriteV132 = directOrderWriteV132;
+  /* V132: az automatikus tesztek ezen keresztül állítják be a belépett
+     felhasználót és olvassák a változáskövetést. A felületről nem érhető el
+     semmi olyan, ami jogosultságot adna: a szerver minden írást ellenőriz. */
+  global.__V132SyncTest = {
+    setProfile: value => { currentProfile = value; },
+    resetSnapshot: () => resetSnapshotV132(),
+    collect: () => collectChangesV132(),
+    runSync: () => runSyncV132(),
+    reload: () => reloadOrdersV132(),
+    isDirty: order => isDirtyV132(order),
+    installSaveHook: () => installGuardsAndHooks(),
+    adminPoll: () => adminPollV132()
+  };
+  global.markOrdersSyncedV132 = orders => {
+    for (const order of orders || []) if (order?.id) syncedV132.set(String(order.id), orderKeyV132(order));
+    if (hasChangesV132(collectChangesV132())) retrySyncLaterV132(900);
+  };
+
+  /* Ha a szűk célú SQL-függvény még nincs létrehozva, visszaolvassuk, hogy
+     a szerver tényleg eltárolta-e a teljesítést és a szállítólevelet. Ha
+     nem, egyszer szólunk – ez a szerveroldali mezőszűrés jele. */
+  async function verifyDriverWriteV132(order) {
+    try {
+      const payload = (await global.V44Online.fetchOrderPayloadsV132([order.id])).get(String(order.id));
+      if (!payload) return;
+      const reportIds = new Set((payload.deliveryReports || []).map(report => String(report?.id || report?.at)));
+      const missingReport = (order.deliveryReports || []).some(report => !reportIds.has(String(report?.id || report?.at)));
+      const wrongCompletion = !!payload.completed !== !!order.completed;
+      if ((missingReport || wrongCompletion) && !global.__driverFieldsWarnedV132) {
+        global.__driverFieldsWarnedV132 = true;
+        console.warn('[V132] a szerver nem tárolta el a sofőri mezőt', { order: order.orderNo, missingReport, wrongCompletion });
+        alert('A szerver nem tárolta el a teljesítést vagy a szállítólevél jelölését. Az adminnak le kell futtatnia a SUPABASE_SOFOR_MEZOK_V132.sql fájlt a Supabase-ben. A változás a telefonon megmarad, és újra megpróbáljuk felküldeni.');
+      }
+      if (missingReport || wrongCompletion) throw new Error('A szerver nem tárolta el a változást.');
+    } catch (error) {
+      if (/nem tárolta el/.test(String(error?.message))) throw error;
+      console.warn('[V132] ellenőrző visszaolvasás', error);
+    }
   }
 
   /* V70: ha a lap bezárul vagy háttérbe kerül, a függőben lévő mentést
@@ -1260,8 +1581,7 @@
     if (!saveTimer) return;
     clearTimeout(saveTimer); saveTimer = null;
     if (suppressOnlineSave || !currentProfile || !global.V44Online?.configured()) return;
-    try { global.V44Online.syncOrders(state.orders || [], currentProfile); }
-    catch (error) { console.warn('[V70] Azonnali mentés nem sikerült', error); }
+    runSyncV132().catch(error => console.warn('[V70] Azonnali mentés nem sikerült', error));
   }
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushPendingSyncV70(); });
@@ -1304,6 +1624,7 @@
     const originalSave = global.save;
     if (typeof originalSave === 'function') {
       global.save = function (...args) {
+        if (!loadingV132) stampUndoV132();
         const result = originalSave.apply(this, args);
         if (isRestrictedUser()) setTimeout(() => renderDriverPortal(), 0);
         scheduleSync();
@@ -1339,8 +1660,7 @@
         const retryButton = cameraForm.querySelector('button[type="submit"]');
         if (retryButton) { retryButton.disabled = true; retryButton.textContent = 'Fuvaradat mentése…'; }
         try {
-          if (currentProfile?.role === 'admin') await global.V44Online.syncOrdersForDate(order.scheduleDate, [order], currentProfile);
-          else await global.V44Online.updateOwnOrder(order);
+          await directOrderWriteV132(order);
           cameraForm.__pendingDeliveryMetadataV131 = null;
           if (typeof audioBlob !== 'undefined') audioBlob = null;
           cameraForm.closest('dialog')?.close();
@@ -1363,8 +1683,7 @@
         order.deliveryReports.push({ id: result.report.id, at: result.report.created_at || new Date().toISOString(), note: deliveryNote, photoCount: files.length, fileCount: result.report.fileCount, hasAudio: typeof audioBlob !== 'undefined' && !!audioBlob, createdBy: currentSession?.user?.email, createdRole: currentProfile?.role || 'driver', userComment: !!deliveryNote.trim(), commentAt: deliveryNote.trim() ? new Date().toISOString() : '' });
         if (typeof save === 'function') save();
         try {
-          if (currentProfile?.role === 'admin') await global.V44Online.syncOrdersForDate(order.scheduleDate, [order], currentProfile);
-          else await global.V44Online.updateOwnOrder(order);
+          await directOrderWriteV132(order);
         } catch (error) {
           cameraForm.__pendingDeliveryMetadataV131 = { orderId: String(order.id) };
           alert(`A fájlok feltöltődtek, de a fuvar buborékának mentése nem sikerült: ${error.message}\n\nNe töltsd fel újra a fájlokat. A gomb újrapróbálása csak a fuvaradatot menti.`);
@@ -1389,7 +1708,10 @@
       host.innerHTML = `<div class="panel online-settings-card"><h3>Online szinkron</h3><small>A szállítólevél-fotók közvetlenül a rendeléshez kerülnek, és a Mentett fotók gombbal visszanézhetők.</small><div class="online-settings-actions"><button type="button" class="secondary" id="forceOnlineSync">Minden fuvar online mentése</button><button type="button" class="secondary" id="refreshOnlineAdmin">Online frissítés</button></div></div>
       <div class="panel v121-transfers-hidden" hidden><h3>Fuvarátadások</h3><div class="transfer-admin-list">${transfers.length ? transfers.map(transfer => `<article class="transfer-admin-row status-${safe(transfer.status)}"><div><b>${safe(transfer.order_no)} · ${safe(transfer.project_name || '')}</b><small>${safe(transfer.schedule_date || '')}</small></div><div><span>${safe(DRIVER_LABELS[transfer.from_driver_key] || transfer.from_driver_key)} → ${safe(DRIVER_LABELS[transfer.to_driver_key] || transfer.to_driver_key)}</span><strong>${transfer.status === 'pending' ? 'Függőben' : transfer.status === 'accepted' ? 'Elfogadva' : transfer.status === 'rejected' ? 'Elutasítva' : 'Visszavonva'}</strong><small>${new Date(transfer.created_at).toLocaleString('hu-HU')}</small></div></article>`).join('') : '<div class="notice">Még nincs fuvarátadási esemény.</div>'}</div></div>`;
       byId('forceOnlineSync')?.addEventListener('click', async () => {
-        try { await global.V44Online.syncOrders(state.orders || [], currentProfile); await global.V44Online.syncMasterData(state, currentProfile); alert('Minden fuvar és a teljes aktuális törzsadat online mentve.'); }
+        /* V132: minden fuvar felmegy, de a sofőri mezők beolvasztásával, és
+           TÖRLÉS NÉLKÜL – a régi admin-példány nem törölheti a sofőr által
+           közben létrehozott fuvarokat. */
+        try { const all = state.orders || []; await global.V44Online.syncChangedOrdersV132({ orders: all }, currentProfile); global.markOrdersSyncedV132(all); await global.V44Online.syncMasterData(state, currentProfile); if (typeof render === 'function') render(); alert('Minden fuvar és a teljes aktuális törzsadat online mentve.'); }
         catch (error) { alert(`Szinkronhiba: ${error.message}`); }
       });
       byId('refreshOnlineAdmin')?.addEventListener('click', refreshOnlineNow);
@@ -1455,7 +1777,7 @@
     if (pollBusyV115() || refreshInProgress) return;
     try {
       suppressOnlineSave = true;
-      await global.V44Online.loadOrdersIntoState();
+      await reloadOrdersV132();
       await refreshTransfers();
       if (isAdmin()) { if (typeof render === 'function') render(); }
       else await renderDriverPortal();
@@ -1470,10 +1792,22 @@
     /* Az ADMIN felületen marad a kézi Frissítés: ott épp tervezel, és egy
        magától érkező átrendezés zavaró volna. A sofőri felület viszont
        követi az adminét. */
-    if (isAdmin()) return;
-    pollTimerV115 = setInterval(pollOnceV115, 60000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) pollOnceV115(); });
+    /* V132: az admin felület is percenként átveszi a sofőri jelzéseket
+       (pipa, szállítólevél), de a tervezést nem írja felül. */
+    if (isAdmin()) {
+      pollTimerV115 = setInterval(adminPollV132, 60000);
+      refreshDeliveryCountsV132().then(changed => { if (changed && typeof global.render === 'function') global.render(); });
+    } else pollTimerV115 = setInterval(pollOnceV115, 60000);
+    /* V132: a láthatóság-figyelő egyszer kerül fel, nem minden belépéskor. */
+    if (!visibilityBoundV132) {
+      visibilityBoundV132 = true;
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden || !currentProfile) return;
+        if (isAdmin()) adminPollV132(); else pollOnceV115();
+      });
+    }
   }
+  let visibilityBoundV132 = false;
 
   async function restoreOnlineSession() {
     if (!global.V44Online?.configured()) return showLogin();
