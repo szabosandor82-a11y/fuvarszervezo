@@ -3780,11 +3780,14 @@ function renderBacklog() {
    A dátum nélküli bejegyzésnek nincs célfuvarja: a tétel adatait és a
    forrásfuvar fejlécét magában hordozza, és ütemezéskor jön létre (vagy
    bővül) a célnapi fuvar – ugyanúgy, mint a dátummal áthelyezett tételnél. */
-const UNDATED_LOOKBACK_DAYS_V139 = 30;
-const ORDER_HEADER_DROP_V139 = ['items','deliveryReports','deliveryReportsDeletedV133','sourceMailReportIdsV135','sourceUploadFailedV135','sourceUploadPartialV136','completedAtV111','completedUndoneAtV132','threadV115','movedByDriverV121','localUpdatedAt','onlineUpdatedAt'];
+/* V140: az állandók a függvényeken BELÜL vannak. A Hátralék rajzolása már
+   az app.js betöltése közben lefut – egy itt, fájlszinten deklarált const
+   ekkor még nem létezne („Cannot access … before initialization”), és a
+   belépés elakadna. */
+function undatedLookbackDaysV139(){return 30}
 function orderHeaderV139(o){
   const h={...o};
-  for(const k of ORDER_HEADER_DROP_V139)delete h[k];
+  for(const k of ['items','deliveryReports','deliveryReportsDeletedV133','sourceMailReportIdsV135','sourceUploadFailedV135','sourceUploadPartialV136','completedAtV111','completedUndoneAtV132','threadV115','movedByDriverV121','localUpdatedAt','onlineUpdatedAt'])delete h[k];
   return h;
 }
 function currentWorkdayV139(){return typeof normalizeWorkday==='function'?normalizeWorkday(today()):today()}
@@ -3822,7 +3825,7 @@ window.moveUncheckedToUndatedV139=moveUncheckedToUndatedV139;
 
 /* Az elmúlt 30 nap nem teljesített fuvarjain ottfelejtett tételek. */
 function forgottenItemsV139(){
-  const ma=today(),hatar=shiftDaysV139(ma,-UNDATED_LOOKBACK_DAYS_V139),out=[];
+  const ma=today(),hatar=shiftDaysV139(ma,-undatedLookbackDaysV139()),out=[];
   for(const o of state.orders||[]){
     const d=String(o.scheduleDate||'');
     if(!d||d>=ma||d<hatar||o.completed)continue;
