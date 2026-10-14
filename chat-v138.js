@@ -143,18 +143,94 @@
   }
 
   /* ===== hang, rezgés, fülcím ========================================== */
-  function beep() {
-    try {
-      const Ctx = global.AudioContext || global.webkitAudioContext;
-      if (!Ctx) return;
-      st.audio = st.audio || new Ctx();
-      const osc = st.audio.createOscillator(), gain = st.audio.createGain();
-      osc.frequency.value = 880; gain.gain.value = 0.06;
-      osc.connect(gain); gain.connect(st.audio.destination);
-      osc.start(); osc.stop(st.audio.currentTime + 0.15);
-    } catch (_) {}
-    try { global.navigator?.vibrate?.(150); } catch (_) {}
+  /* ===== V142 – HALLHATÓ ÉRTESÍTÉS ===================================
+
+     A böngészők csak akkor engednek hangot, ha a hanglejátszót egy
+     felhasználói művelet (kattintás, koppintás, billentyű) „felébresztette”.
+     A V138 a lejátszót az üzenet érkezésekor hozta létre – ezért némán
+     maradt, ráadásul 6%-os hangerőn szólt. Most:
+       - az első kattintásra/koppintásra/billentyűre a hang felébred;
+       - jól hallható, kéthangú jelzés szól (mint a csevegőalkalmazásoknál);
+       - 🔔/🔕 gombbal némítható (felhasználónként megjegyzi);
+       - ha a lap a háttérben van, böngészőértesítés is felugrik (ha
+         engedélyezted). */
+  const LS_MUTED = 'chatV142Muted';
+  const isMuted = () => { try { return localStorage.getItem(`${LS_MUTED}:${st.me}`) === '1'; } catch (_) { return false; } };
+  function setMuted(value) {
+    try { localStorage.setItem(`${LS_MUTED}:${st.me}`, value ? '1' : '0'); } catch (_) {}
+    renderMuteButtons();
   }
+  function audioContext() {
+    const Ctx = global.AudioContext || global.webkitAudioContext;
+    if (!Ctx) return null;
+    st.audio = st.audio || new Ctx();
+    return st.audio;
+  }
+  /* Az első felhasználói műveletnél: hang felébresztése (iOS-en egy néma
+     hanggal), és az értesítési engedély kérése. */
+  function unlockAudio() {
+    const ctx = audioContext();
+    if (ctx) {
+      try { ctx.resume?.(); } catch (_) {}
+      try {
+        const buffer = ctx.createBuffer(1, 1, 22050), source = ctx.createBufferSource();
+        source.buffer = buffer; source.connect(ctx.destination); source.start(0);
+      } catch (_) {}
+    }
+    st.audioUnlocked = true;
+  }
+  function askNotificationPermission() {
+    try {
+      if (global.Notification && global.Notification.permission === 'default') global.Notification.requestPermission?.();
+    } catch (_) {}
+  }
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    const onFirstGesture = () => { unlockAudio(); };
+    for (const type of ['pointerdown', 'touchstart', 'keydown', 'click']) document.addEventListener(type, onFirstGesture, { capture: true, passive: true });
+  }
+  function chime() {
+    const ctx = audioContext();
+    if (!ctx) return;
+    try { if (ctx.state === 'suspended') ctx.resume?.(); } catch (_) {}
+    const tone = (freq, start, length) => {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const t0 = ctx.currentTime + start;
+      gain.gain.setValueAtTime?.(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime?.(0.35, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime?.(0.0001, t0 + length);
+      if (!gain.gain.setValueAtTime) gain.gain.value = 0.35;
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(t0); osc.stop(t0 + length + 0.02);
+    };
+    tone(880, 0, 0.22);
+    tone(1318.5, 0.16, 0.32);
+  }
+  function beep() {
+    if (isMuted()) return;
+    try { chime(); } catch (_) {}
+    try { global.navigator?.vibrate?.([120, 60, 120]); } catch (_) {}
+  }
+  function showBrowserNotification(rows) {
+    try {
+      if (!document.hidden || !global.Notification || global.Notification.permission !== 'granted') return;
+      const last = rows[rows.length - 1];
+      const who = last.sender_name || nameOf(last.sender_email);
+      const text = last.body ? String(last.body).slice(0, 120) : ((last.attachments || []).length ? '📎 Fájl érkezett' : 'Új üzenet');
+      const note = new global.Notification(rows.length > 1 ? `${rows.length} új üzenet – ${who}` : `Új üzenet – ${who}`, { body: text, tag: `chat-${last.conversation}`, silent: isMuted() });
+      note.onclick = () => { try { global.focus(); } catch (_) {} note.close?.(); };
+    } catch (_) {}
+  }
+  function renderMuteButtons() {
+    const muted = isMuted();
+    for (const button of document.querySelectorAll('.cv-mute')) {
+      button.textContent = muted ? '🔕' : '🔔';
+      button.title = muted ? 'Hangjelzés bekapcsolása' : 'Hangjelzés némítása';
+      button.setAttribute('aria-pressed', muted ? 'true' : 'false');
+    }
+  }
+
   function updateTitle(total) {
     const base = String(document.title || '').replace(/^\(\d+\)\s*/, '');
     document.title = total ? `(${total}) ${base}` : base;
@@ -202,6 +278,7 @@
   function notifyIncoming(rows) {
     if (!rows.length) return;
     beep();
+    showBrowserNotification(rows);
     if (st.role === 'admin') {
       const map = dismissed();
       for (const row of rows) delete map[row.conversation];
@@ -258,7 +335,10 @@
     view.fileInput.onchange = () => { addFiles(view, [...view.fileInput.files]); view.fileInput.value = ''; };
     view.input.addEventListener('input', () => autosize(view.input));
     view.input.addEventListener('keydown', event => {
-      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); view.form.requestSubmit?.() || submit(view); }
+      /* V141: az Enter EGYSZER küld. Korábban a requestSubmit() (ami maga is
+         küld) üres visszatérési értéke miatt a „|| submit(view)” is lefutott,
+         így minden üzenet kétszer ment el. */
+      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); submit(view); }
     });
     view.input.addEventListener('paste', event => {
       const files = [...(event.clipboardData?.items || [])].filter(item => item.kind === 'file').map(item => item.getAsFile()).filter(Boolean);
@@ -376,6 +456,13 @@
   }
 
   async function submit(view) {
+    /* V141: amíg egy küldés folyamatban van, újabb nem indul (gyors dupla
+       Enter vagy dupla koppintás a ➤ gombon). */
+    if (view.busy) return;
+    view.busy = true;
+    try { await submitOnce(view); } finally { view.busy = false; }
+  }
+  async function submitOnce(view) {
     const text = view.input.value.trim();
     const sendButton = view.form.querySelector('.cv-send');
     if (view.editing) {
@@ -413,14 +500,17 @@
     root.innerHTML = `
       <button type="button" class="cv-fab" aria-label="Üzenetek az irodával">💬<span class="cv-badge hidden"></span></button>
       <section class="cv-panel hidden" role="dialog" aria-label="Üzenetek az irodával">
-        <header class="cv-panel-head"><b>Üzenetek az irodával</b><button type="button" class="cv-close" aria-label="Bezárás">×</button></header>
+        <header class="cv-panel-head"><b>Üzenetek az irodával</b><span class="cv-head-tools"><button type="button" class="cv-mute" aria-label="Hangjelzés"></button><button type="button" class="cv-close" aria-label="Bezárás">×</button></span></header>
         <div class="cv-view"></div>
       </section>`;
     document.body.append(root);
     st.root = root;
     const panel = root.querySelector('.cv-panel');
     createView(st.me, root.querySelector('.cv-view'), { includeGroup: true });
+    renderMuteButtons();
+    root.querySelector('.cv-mute').onclick = () => setMuted(!isMuted());
     root.querySelector('.cv-fab').onclick = () => {
+      askNotificationPermission();
       st.driverOpen = true; panel.classList.remove('hidden'); root.querySelector('.cv-fab').classList.add('hidden');
       renderView(st.views.get(st.me), true); markVisibleRead(); schedule();
     };
@@ -471,6 +561,8 @@
     if (!el) return;
     const conversation = el.dataset.conv;
     const action = el.dataset.cv;
+    if (action !== 'mute') askNotificationPermission();
+    if (action === 'mute') { setMuted(!isMuted()); return; }
     if (action === 'head') { st.openWins.includes(conversation) ? closeWindow(conversation) : openWindow(conversation); }
     else if (action === 'dismiss') { event.stopPropagation(); dismissConversation(conversation); }
     else if (action === 'close') closeWindow(conversation);
@@ -501,12 +593,13 @@
         ${item.unread ? `<span class="cv-badge">${item.unread}</span>` : ''}
         <span class="cv-head-x" data-cv="dismiss" data-conv="${esc(item.conversation)}" title="Buborék elrejtése" aria-label="Buborék elrejtése">×</span>
       </button>`;
-    }).join('') + `<button type="button" class="cv-head cv-plus" data-cv="plus" title="Új beszélgetés" aria-label="Új beszélgetés">+</button>`;
+    }).join('') + `<button type="button" class="cv-head cv-plus" data-cv="plus" title="Új beszélgetés" aria-label="Új beszélgetés">+</button>`
+      + `<button type="button" class="cv-head cv-mute cv-mute-head" data-cv="mute" aria-label="Hangjelzés"></button>`;
 
     const windows = st.root.querySelector('.cv-windows');
     for (const el of [...windows.children]) if (!st.openWins.includes(el.dataset.conv)) el.remove();
     st.openWins.forEach((conversation, index) => {
-      let win = windows.querySelector(`.cv-win[data-conv="${CSS.escape(conversation)}"]`);
+      let win = [...windows.children].find(el => el.dataset.conv === conversation);
       if (!win) {
         win = document.createElement('section');
         win.className = 'cv-win';
@@ -519,6 +612,7 @@
     });
     const total = active.reduce((sum, item) => sum + item.unread, 0);
     updateTitle(total);
+    renderMuteButtons();
   }
 
   /* ===== közös rajzolás ================================================ */
@@ -577,6 +671,7 @@
 
   global.ChatV138 = {
     start, stop, tick, state: st,
-    _logic: { esc, linkify, unreadCount, seenLabel, activeConversations, initials, lastRead, readKey, ALL }
+    _logic: { esc, linkify, unreadCount, seenLabel, activeConversations, initials, lastRead, readKey, ALL },
+    _sound: { beep, chime, unlockAudio, isMuted, setMuted }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

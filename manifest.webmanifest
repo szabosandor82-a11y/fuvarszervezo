@@ -1,6 +1,6 @@
 {
-  "name": "Fuvarszervező V140",
-  "short_name": "Fuvar V140",
+  "name": "Fuvarszervező V142",
+  "short_name": "Fuvar V142",
   "description": "Stand 98 fuvarszervező admin- és mobil sofőralkalmazás",
   "start_url": "./index.html",
   "scope": "./",

@@ -1511,3 +1511,9 @@ tr.v126-report-grand td{background:#dbeafd;font-weight:800}
 .v139-editor button,.v139-group-all button{padding:6px 10px;border-radius:8px;font-weight:800}
 .v139-today{background:#2563c9!important;color:#fff!important;border-color:#2563c9!important}
 .v139-group-all{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0 2px;padding:8px 10px;border-radius:10px;background:#fff1c9;font-size:13px;font-weight:700;color:#5e4413}
+
+/* ===== V142 – CSEVEGŐ HANGJELZÉS ====================================== */
+.cv-head-tools{display:flex;align-items:center;gap:6px}
+.cv-panel-head .cv-mute{border:0;background:#ffffff26;color:#fff;width:34px;height:34px;border-radius:50%;font-size:17px;cursor:pointer}
+.cv-head.cv-mute-head{width:40px;height:40px;align-self:center;background:#fff;color:#2563c9;border:2px solid #c9d6e3;font-size:17px}
+.cv-head.cv-mute-head[aria-pressed=true]{background:#eef1f4;color:#6b7f93}
