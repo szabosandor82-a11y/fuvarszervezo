@@ -850,7 +850,8 @@
       /* V134: a sofőri felület is lekéri – a saját fuvarjaira. */
       const counts = isAdmin()
         ? await global.V44Online.fetchDeliveryFileCountsV132?.()
-        : await global.V44Online.fetchDeliveryFileCountsForOrdersV134?.((state.orders || []).map(order => order.id));
+        : await global.V44Online.fetchDeliveryFileCountsForOrdersV134?.((state.orders || []).map(order => order.id),
+          (state.orders || []).flatMap(order => order.sourceMailReportIdsV135 || []));
       if (!counts) return false;
       const before = JSON.stringify([...global.deliveryFileCountsV132].sort());
       const wasLoaded = !!global.deliveryFileCountsLoadedV134;
@@ -1147,8 +1148,11 @@
       ].map(nev => String(nev || '').trim().toLowerCase()).filter(Boolean));
       const soforFotoja = file => /^szallitolevel-/i.test(String(file.file_name || ''))
         || /^(foto|photo|img)[-_]/i.test(String(file.file_name || ''));
+      /* V135: a fuvar maga is tudja, melyik bejegyzés a levél melléklete. */
+      const ismertForras = new Set((order.sourceMailReportIdsV135 || []).map(String));
       const sources = all.filter(file => {
         if (file.is_source_mail === true) return true;
+        if (ismertForras.has(String(file.report_id || ''))) return true;
         const nev = String(file.file_name || '').trim().toLowerCase();
         if (nev && mellekletNevek.has(nev)) return true;
         return file.is_source_mail == null && !soforFotoja(file);
@@ -1194,15 +1198,29 @@
 
          Ezért ha a levélből van melléklet, CSAK azt mutatjuk. A szerveri lista
          akkor jön elő, ha a levélből semmi nincs. */
-      files.innerHTML = levelHtml ? levelHtml
+      /* V135: az admin látja, hogy a melléklet elérhető-e a sofőr számára –
+         a saját gépén tárolt eredeti ezt eddig elfedte. */
+      if (isAdmin()) {
+        const szerveren = sources.length;
+        const vanHelyi = !!levelHtml || !!localHtml;
+        const allapot = szerveren
+          ? `<div class="v135-source-status ok" id="v135SourceStatus">✓ A sofőr is látja: ${szerveren} fájl a szerveren.</div>`
+          : vanHelyi
+            ? `<div class="v135-source-status missing" id="v135SourceStatus">⚠ A sofőr NEM látja ezt a mellékletet: nincs feltöltve a szerverre.${order.sourceUploadFailedV135?.error ? ` <small>Utolsó hiba: ${safe(order.sourceUploadFailedV135.error)}</small>` : ''}<button type="button" class="v135-upload" onclick="uploadLocalSourceForOrderV135('${safe(order.id)}')">Feltöltés a sofőrnek</button></div>`
+            : '';
+        if (levelHtml) levelHtml += allapot;
+        global.__v135StatusHtml = allapot;
+      }
+      files.innerHTML = (levelHtml ? levelHtml
         : localHtml + missingLinkListV107(sources.filter(file => !levelNevek.has(nevKulcsV109(file.file_name)))) + (megnyithato.length
         ? `<div class="mail-files-title">Szerverről (${megnyithato.length})</div>`
           + megnyithato.map(attachmentLinkV71).join('')
         : (localHtml ? '' : `<small>${mail.attachmentsUnreadable
             ? 'A levél mellékletét nem sikerült kibontani az importkor – ez továbbított (FW:) leveleknél fordul elő. Mentsd el az EREDETI levelet .msg fájlként, és azt húzd be az importba.'
             : (mail.attachmentNames || []).length
-              ? 'A levélnek volt melléklete, de a fájlok nincsenek feltöltve. A mellékletek mentése a V65 óta működik – a korábban importált fuvaroknál a levelet újra kell importálni.'
-              : 'Ehhez a levélhez nem tartozott melléklet.'}</small>`));
+              ? (isAdmin() ? 'A levélnek volt melléklete, de a fájlok nincsenek feltöltve, és ezen a gépen sincs meg az eredeti. Húzd be újra az eredeti .msg fájlt az importba.' : 'A levélnek volt melléklete, de még nincs feltöltve a sofőröknek. Szólj az adminnak: a Beállítások lapon egy gombbal pótolja.')
+              : 'Ehhez a levélhez nem tartozott melléklet.'}</small>`)))
+        + (isAdmin() && !levelHtml ? (global.__v135StatusHtml || '') : '');
     } catch (error) {
       files.innerHTML = `<small>A mellékletek nem tölthetők be: ${safe(error.message)}</small>`;
     }
@@ -1491,7 +1509,8 @@
     for (const order of orders || []) {
       const own = (allFiles || []).filter(file => String(file.order_id || '') === String(order.id));
       adjustDeliveryCountV134(order.id, 0);
-      const fresh = own.filter(file => !file.is_source_mail).length;
+      const knownSource = new Set((order.sourceMailReportIdsV135 || []).map(String));
+      const fresh = own.filter(file => !file.is_source_mail && !knownSource.has(String(file.report_id || ''))).length;
       if (global.deliveryFileCountsV132.get(String(order.id)) !== fresh) countsChanged = true;
       global.deliveryFileCountsV132.set(String(order.id), fresh);
       if (!canEditOrder(order.id)) continue;
@@ -1581,7 +1600,8 @@
          Csatolmány gomb mögé tartoznak, nem ide. */
       /* V104: időrendben, a LEGFRISSEBB elöl – utólagos kereséskor a
          legutóbbi szállítólevél az érdekes. A dátum a kép alatt látszik. */
-      const files = groups.flat().filter(file => !file.is_source_mail)
+      const knownSourceV135 = new Set(orders.flatMap(order => order.sourceMailReportIdsV135 || []).map(String));
+      const files = groups.flat().filter(file => !file.is_source_mail && !knownSourceV135.has(String(file.report_id || '')))
         .sort((a, b) => String(b.created_at || b.fuvarNap || '').localeCompare(String(a.created_at || a.fuvarNap || '')));
       const napja = file => {
         const forras = String(file.created_at || file.fuvarNap || '').slice(0, 10);
@@ -1726,6 +1746,164 @@
     }
   }
   global.directOrderWriteV132 = directOrderWriteV132;
+  /* ===== V135 – A LEVÉL MELLÉKLETE MEGBÍZHATÓAN A SOFŐRHÖZ JUT =========
+
+     Az import eddig a mellékleteket a fuvar online mentésével EGY IDŐBEN,
+     annak megvárása nélkül kezdte feltölteni. Ha a fuvar még nem volt a
+     szerveren, a szerver elutasította a mellékletet. Az admin ezt nem vette
+     észre, mert a saját gépén tárolt eredetiből nyitotta meg – a sofőr
+     viszont csak a szerveri példányt látja, így nála üres volt.
+
+     Most:
+       - a feltöltés előtt megvárjuk, hogy a fuvar biztosan a szerveren legyen;
+       - a feltöltés hiba esetén újrapróbál;
+       - siker esetén a fuvar megjegyzi a melléklet-bejegyzés azonosítóját
+         (sourceMailReportIdsV135), így a sofőr külön lekérdezés nélkül is
+         felismeri;
+       - végleges hibánál maradandó jelzést kap (sourceUploadFailedV135),
+         ami az admin buborékon látszik, és a Beállításokban pótolható. */
+  const sleepV135 = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  async function ensureOrdersOnServerV135(orderIds) {
+    const ids = [...new Set((orderIds || []).map(String).filter(Boolean))];
+    if (!ids.length || !currentProfile || !global.V44Online?.configured?.()) return ids;
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    if (syncRunningV132) { try { await syncRunningV132; } catch (_) {} }
+    try { await runSyncV132(); } catch (error) { console.warn('[V135] mentés a feltöltés előtt', error); }
+    let missing = ids;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const found = await global.V44Online.fetchOrderPayloadsV132(missing);
+        missing = missing.filter(id => !found.has(id));
+      } catch (error) { console.warn('[V135] a fuvarok ellenőrzése', error); }
+      if (!missing.length) return [];
+      const orders = (state.orders || []).filter(order => missing.includes(String(order.id)));
+      if (orders.length) {
+        try {
+          await global.V44Online.syncChangedOrdersV132({ orders }, currentProfile);
+          for (const order of orders) syncedV132.set(String(order.id), orderKeyV132(order));
+        } catch (error) { console.warn('[V135] a fuvar közvetlen mentése', error); }
+      }
+      await sleepV135(400 * (attempt + 1));
+    }
+    return missing;
+  }
+  global.ensureOrdersOnServerV135 = ensureOrdersOnServerV135;
+
+  async function uploadOrderSourceFilesV135(order, files, label) {
+    if (!order?.id || !(files || []).length) return { ok: false, error: 'Nincs feltölthető fájl.' };
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const result = await global.V44Online.createDeliveryReport(order, files, label || 'Outlook forrás');
+        order.sourceMailReportIdsV135 = [...new Set([...(order.sourceMailReportIdsV135 || []), String(result.report.id)])];
+        delete order.sourceUploadFailedV135;
+        order.localUpdatedAt = new Date().toISOString();
+        if (typeof save === 'function') save(false);
+        return { ok: true, count: result.report.fileCount || files.length };
+      } catch (error) {
+        lastError = error;
+        console.warn('[V135] a melléklet feltöltése', order.orderNo, attempt + 1, error);
+        await sleepV135(800 * (attempt + 1));
+      }
+    }
+    order.sourceUploadFailedV135 = { at: new Date().toISOString(), error: String(lastError?.message || lastError || 'ismeretlen hiba'), count: files.length };
+    order.localUpdatedAt = new Date().toISOString();
+    if (typeof save === 'function') save(false);
+    return { ok: false, error: order.sourceUploadFailedV135.error };
+  }
+  global.uploadOrderSourceFilesV135 = uploadOrderSourceFilesV135;
+
+  /* A gépen tárolt eredeti mellékletek fájlként – előbb az IndexedDB-s
+     (V108), ha nincs, a régi localStorage-os (V73) másolatból. */
+  async function localSourceFilesV135(orderId) {
+    const files = [];
+    try {
+      for (const record of await (global.mailAttachmentsV108?.(orderId) || [])) {
+        if (record?.bytes) files.push(new File([record.bytes], record.name || 'melleklet', { type: record.type || 'application/octet-stream' }));
+      }
+    } catch (error) { console.warn('[V135] helyi mellékletek', error); }
+    if (files.length) return files;
+    for (const item of (typeof global.loadOrderAttachmentsV73 === 'function' ? global.loadOrderAttachmentsV73(orderId) : [])) {
+      try {
+        const match = /^data:([^;]*);base64,(.*)$/.exec(String(item.dataUrl || ''));
+        if (!match) continue;
+        const binary = atob(match[2]);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        files.push(new File([bytes], item.name || 'melleklet', { type: match[1] || 'application/octet-stream' }));
+      } catch (_) {}
+    }
+    return files;
+  }
+  global.localSourceFilesV135 = localSourceFilesV135;
+
+  /* Egy fuvar mellékletének pótlása a Csatolmány ablakból. */
+  async function uploadLocalSourceForOrderV135(orderId) {
+    if (!isAdmin()) return alert('A mellékletet csak az admin töltheti fel.');
+    const order = (state.orders || []).find(item => String(item.id) === String(orderId));
+    if (!order) return;
+    const files = await localSourceFilesV135(orderId);
+    if (!files.length) return alert('Ezen a gépen nincs meg a levél eredeti melléklete. Húzd be újra az eredeti .msg fájlt az importba.');
+    const status = byId('v135SourceStatus');
+    if (status) status.textContent = 'Feltöltés a sofőrnek…';
+    await ensureOrdersOnServerV135([order.id]);
+    const result = await uploadOrderSourceFilesV135(order, files, `Outlook forrás · ${order.sourceMail?.fileName || ''}`.trim());
+    if (typeof global.render === 'function') global.render();
+    if (!result.ok) return alert(`A melléklet feltöltése nem sikerült: ${result.error}`);
+    await openSourceMail(order.id);
+  }
+  global.uploadLocalSourceForOrderV135 = uploadLocalSourceForOrderV135;
+
+  /* ===== V135 – HIÁNYZÓ MELLÉKLETEK PÓTLÁSA EGY GOMBBAL ================
+
+     Minden fuvar, amelynek levélmelléklete nincs a szerveren, de az eredeti
+     megvan ezen a gépen, feltöltődik. A végén lista mutatja, mit pótolt, és
+     melyik fuvarnál nincs meg az eredeti (ott újra kell importálni). */
+  function orderHasMailAttachmentV135(order) {
+    const names = (Array.isArray(order?.sourceMail?.attachmentNames) ? order.sourceMail.attachmentNames : [])
+      .filter(name => /\.(pdf|docx?|xlsx?|xlsm|csv)$/i.test(String(name || '')));
+    return !!(order?.sourceMail && (names.length || order.sourceUploadFailedV135));
+  }
+  async function backfillSourceMailV135() {
+    if (!isAdmin()) return;
+    const host = byId('v135BackfillProgress');
+    const button = byId('v135Backfill');
+    const show = text => { if (host) { host.classList.remove('hidden'); host.textContent = text; } };
+    if (button) button.disabled = true;
+    try {
+      show('A szerveren lévő mellékletek ellenőrzése…');
+      const covered = await global.V44Online.fetchSourceMailCoverageV135();
+      const candidates = [];
+      for (const order of state.orders || []) {
+        if (covered.has(String(order.id))) continue;
+        const files = await localSourceFilesV135(order.id);
+        if (files.length) candidates.push({ order, files });
+        else if (orderHasMailAttachmentV135(order)) candidates.push({ order, files: [] });
+      }
+      const fillable = candidates.filter(item => item.files.length);
+      const missingOriginals = candidates.filter(item => !item.files.length).map(item => item.order);
+      if (!fillable.length && !missingOriginals.length) { show('Minden levélmelléklet elérhető a sofőröknek.'); return; }
+      if (fillable.length && !confirm(`${fillable.length} fuvar levélmelléklete hiányzik a szerverről, de megvan ezen a gépen. Feltöltsem őket, hogy a sofőrök is megnyithassák?`)) { show('A pótlás nem indult el.'); return; }
+      let done = 0;
+      const failed = [];
+      for (const { order, files } of fillable) {
+        show(`Feltöltés: ${done + failed.length + 1} / ${fillable.length} · ${order.orderNo || order.id}`);
+        await ensureOrdersOnServerV135([order.id]);
+        const result = await uploadOrderSourceFilesV135(order, files, `Outlook forrás · ${order.sourceMail?.fileName || ''}`.trim());
+        if (result.ok) done++; else failed.push(`${order.orderNo || order.id}: ${result.error}`);
+      }
+      if (typeof global.render === 'function') global.render();
+      const lines = [`Kész: ${done} fuvar melléklete feltöltve.`];
+      if (failed.length) lines.push(`Sikertelen (${failed.length}): ${failed.slice(0, 10).join(' · ')}${failed.length > 10 ? ' …' : ''}`);
+      if (missingOriginals.length) lines.push(`Ezen a gépen nincs meg az eredeti (${missingOriginals.length}) – ezeket újra kell importálni: ${missingOriginals.slice(0, 30).map(order => `${order.orderNo || '—'} (${order.scheduleDate || ''})`).join(', ')}${missingOriginals.length > 30 ? ' …' : ''}`);
+      show(lines.join('\n'));
+    } catch (error) {
+      show(`A pótlás megszakadt: ${error.message}`);
+    } finally { if (button) button.disabled = false; }
+  }
+  global.backfillSourceMailV135 = backfillSourceMailV135;
+
   /* V132: az automatikus tesztek ezen keresztül állítják be a belépett
      felhasználót és olvassák a változáskövetést. A felületről nem érhető el
      semmi olyan, ami jogosultságot adna: a szerver minden írást ellenőriz. */
@@ -1737,7 +1915,8 @@
     reload: () => reloadOrdersV132(),
     isDirty: order => isDirtyV132(order),
     installSaveHook: () => installGuardsAndHooks(),
-    adminPoll: () => adminPollV132()
+    adminPoll: () => adminPollV132(),
+    synced: () => syncedV132
   };
   global.markOrdersSyncedV132 = orders => {
     for (const order of orders || []) if (order?.id) syncedV132.set(String(order.id), orderKeyV132(order));
@@ -1925,8 +2104,10 @@
          Korábban külön menüpontot csináltunk neki, pedig ez a lap már
          létezett – csak belépéskor épül, ezért nem volt az index.html-ben. */
       section.innerHTML = '<div class="page-head"><div><small>ONLINE</small><h2>Beállítások és fuvarátadások</h2></div></div><div id="onlineAdminContent"></div>'
-        + '<section class="panel v119-archive"><h3>Szállítólevelek archiválása</h3><p class="v108-hint">Az új feltöltések is azonnal bekerülhetnek a ZIP-be. Törölni csak már archivált, legalább két napos fájlokat lehet, külön megerősítéssel.</p><div id="v119Summary" class="v119-summary">Összesítés betöltése…</div><div class="v119-buttons"><button type="button" id="v119ArchiveRefresh" class="secondary">Összesítés frissítése</button><button type="button" id="v119Archive">Archiválás</button><button type="button" id="v119Purge" class="v115-danger">Archiváltak törlése</button></div><div id="v119Progress" class="v119-progress hidden"></div></section>';
+        + '<section class="panel v119-archive"><h3>Szállítólevelek archiválása</h3><p class="v108-hint">Az új feltöltések is azonnal bekerülhetnek a ZIP-be. Törölni csak már archivált, legalább két napos fájlokat lehet, külön megerősítéssel.</p><div id="v119Summary" class="v119-summary">Összesítés betöltése…</div><div class="v119-buttons"><button type="button" id="v119ArchiveRefresh" class="secondary">Összesítés frissítése</button><button type="button" id="v119Archive">Archiválás</button><button type="button" id="v119Purge" class="v115-danger">Archiváltak törlése</button></div><div id="v119Progress" class="v119-progress hidden"></div></section>'
+        + '<section class="panel v135-backfill"><h3>Levélmellékletek a sofőröknek</h3><p class="v108-hint">Azoknak a fuvaroknak a levélmellékletét, amelyek nem jutottak fel a szerverre, ezen a gépen tárolt eredetiből feltölti, hogy a sofőrök is megnyithassák. Azon a gépen futtasd, amelyiken az importok készültek.</p><div class="v119-buttons"><button type="button" id="v135Backfill">Hiányzó mellékletek feltöltése a sofőröknek</button></div><div id="v135BackfillProgress" class="v135-progress hidden"></div></section>';
       document.querySelector('main')?.append(section);
+      section.querySelector('#v135Backfill')?.addEventListener('click', () => backfillSourceMailV135());
       const navButton = document.createElement('button');
       navButton.className = 'nav'; navButton.dataset.page = 'onlineAdmin'; navButton.innerHTML = '<span>⚙</span><small>Beállítások</small>';
       document.querySelector('nav')?.append(navButton);

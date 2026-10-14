@@ -1,0 +1,25 @@
+FUVARSZERVEZŐ V135 – HELYI ELLENŐRZÉS
+
+Futtatott parancsok:
+  node --check (minden .js fájl)
+  node TEST_V135.js     (a TEST_V132_SYNC.js, TEST_V133_FEATURES.js,
+                         TEST_V134_FEATURES.js és TEST_V135_FEATURES.js
+                         teszteket is futtatja)
+
+Eredmény:
+  Szintaktikai ellenőrzés: sikeres.
+  Elfogadási tesztek: 483/483 sikeres (477 korábbi + 6 új).
+  Régebbi tesztek: TEST_V33–V49 sikeres. A TEST_V52/V53/V54 1–2 hibája
+  változatlan a V131 óta (nem a V135 okozza).
+
+Új tesztek:
+  - a melléklet csak akkor töltődik fel, ha a fuvar már a szerveren van
+    (a hamis szerver idegenkulcs-hibát ad, ha a fuvar hiányzik);
+  - átmeneti hibánál újrapróbál, végleges hibánál maradandó jelzés;
+  - a pótló gomb a helyben tárolt eredetiből tölt fel, és megnevezi azokat
+    a fuvarokat, ahol nincs meg az eredeti;
+  - a jogosultság miatt rejtett bejegyzés nem szűri ki a mellékletet;
+  - az import sorrendje: előbb fuvar, utána melléklet;
+  - az admin Csatolmány ablak és a buborék jelzései.
+
+SQL-módosítás nem kell.

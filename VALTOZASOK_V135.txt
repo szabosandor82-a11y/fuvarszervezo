@@ -1,0 +1,35 @@
+FUVARSZERVEZŐ V135
+
+A HIBA OKA
+Az import a levél mellékleteit a fuvar online mentésével EGY IDŐBEN, annak
+megvárása nélkül kezdte feltölteni. Ha a fuvar még nem volt a szerveren, a
+szerver elutasította a mellékletet. Az admin ezt nem vette észre, mert a
+Csatolmány az admin gépén tárolt eredeti levélmellékletet nyitja meg – a
+sofőr viszont csak a szerveri példányt látja, ezért nála üres volt.
+A Supabase-lekérdezés szerint szeptember 30. és október 14. között szinte
+egyetlen levélmelléklet sem jutott fel (pl. Patrik mai fuvarjai).
+
+JAVÍTÁS
+- Az import előbb megvárja, hogy az új fuvarok biztosan a szerveren
+  legyenek, és csak utána tölti fel a mellékleteket.
+- A feltöltés hiba esetén automatikusan újrapróbál (3-szor).
+- Végleges hibánál a fuvar maradandó jelzést kap: az admin buborékon
+  „⚠ Melléklet nem jutott fel a sofőrhöz”, a Nézet sorain „melléklet nincs
+  fent” felirat jelenik meg.
+- A sikeresen feltöltött melléklet azonosítója a fuvar adatába is bekerül,
+  így a sofőri felület külön lekérdezés nélkül is biztosan felismeri.
+- Ha a jogosultsági szabály miatt a sofőr nem látja a melléklet-bejegyzést,
+  a fájl ISMERETLENnek számít, nem „nem forrásnak” – nem szűrődik ki.
+
+ADMIN CSATOLMÁNY ABLAK
+- Látszik, hogy a melléklet elérhető-e a sofőrnek:
+  „✓ A sofőr is látja: N fájl a szerveren” vagy
+  „⚠ A sofőr NEM látja ezt a mellékletet” + „Feltöltés a sofőrnek” gomb,
+  amely a gépen tárolt eredetiből pótolja – újraimport nélkül.
+
+VISSZAMENŐLEGES PÓTLÁS – BEÁLLÍTÁSOK LAP
+- Új gomb: „Hiányzó mellékletek feltöltése a sofőröknek”. Minden fuvarnál,
+  amelynek levélmelléklete nincs a szerveren, de az eredeti megvan EZEN A
+  GÉPEN, feltölti azt. A végén listázza, mit pótolt, és melyik fuvarnál nincs
+  meg az eredeti (ott az eredeti .msg fájlt újra kell importálni).
+- Azon a gépen és böngészőben kell futtatni, ahol az importok készültek.

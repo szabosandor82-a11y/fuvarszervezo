@@ -633,7 +633,7 @@
 
   /* V134: a sofőri felület a saját fuvarjaira kérdezi le a fájlszámot,
      ugyanazzal a szabállyal, mint az admin (Outlook-forrás nélkül). */
-  async function fetchDeliveryFileCountsForOrdersV134(orderIds) {
+  async function fetchDeliveryFileCountsForOrdersV134(orderIds, knownSourceReportIds = []) {
     const ids = [...new Set((orderIds || []).map(String).filter(Boolean))];
     const files = [];
     for (let start = 0; start < ids.length; start += 100) {
@@ -643,6 +643,7 @@
     }
     const counts = new Map(ids.map(id => [id, 0]));
     let sourceReports = new Set();
+    const known = new Set((knownSourceReportIds || []).map(String));
     const reportIds = [...new Set(files.map(file => String(file.report_id || '')).filter(Boolean))];
     if (reportIds.length) {
       try {
@@ -651,11 +652,29 @@
       } catch (error) { console.warn('[V134] a forrásmellékletek azonosítása nem sikerült', error); }
     }
     for (const file of files) {
-      if (sourceReports.has(String(file.report_id))) continue;
+      if (sourceReports.has(String(file.report_id)) || known.has(String(file.report_id))) continue;
       const id = String(file.order_id || '');
       if (id) counts.set(id, (counts.get(id) || 0) + 1);
     }
     return counts;
+  }
+
+  /* V135: mely fuvaroknak van a szerveren levélmelléklete (legalább egy
+     fájl egy „Outlook forrás” bejegyzésben). */
+  async function fetchSourceMailCoverageV135() {
+    const sourceReports = new Set();
+    for (let offset = 0; offset < 200000; offset += 1000) {
+      const page = await dbRequest(`delivery_reports?${qs({ select: 'id', note: 'ilike.*outlook*forr*', order: 'id.asc', limit: '1000', offset: String(offset) })}`);
+      for (const row of page || []) sourceReports.add(String(row.id));
+      if (!page || page.length < 1000) break;
+    }
+    const covered = new Set();
+    for (let offset = 0; offset < 200000; offset += 1000) {
+      const page = await dbRequest(`delivery_report_files?${qs({ select: 'order_id,report_id', order: 'id.asc', limit: '1000', offset: String(offset) })}`);
+      for (const file of page || []) if (sourceReports.has(String(file.report_id))) covered.add(String(file.order_id));
+      if (!page || page.length < 1000) break;
+    }
+    return covered;
   }
 
   async function loadOrdersIntoState({ preserveLocalIfRemoteEmpty = false } = {}) {
@@ -847,7 +866,9 @@
         const noteById = new Map((reports || []).map(report => [String(report.id), String(report.note || '')]));
         for (const row of result) {
           row.report_note = noteById.get(String(row.report_id)) || '';
-          row.is_source_mail = /outlook\s*forr[aá]s/i.test(row.report_note);
+          /* V135: ha a jogosultsági szabály miatt a bejegyzés nem látszik, a
+             válasz nem hiba, hanem üres – ez ISMERETLEN, nem „nem forrás”. */
+          row.is_source_mail = noteById.has(String(row.report_id)) ? /outlook\s*forr[aá]s/i.test(row.report_note) : null;
         }
       }
     } catch (error) {
@@ -895,6 +916,8 @@
     /* V133 */
     mergeReportsV133, applyReportsV133, fetchReportNotesV133,
     /* V134 */
-    fetchDeliveryFileCountsForOrdersV134
+    fetchDeliveryFileCountsForOrdersV134,
+    /* V135 */
+    fetchSourceMailCoverageV135
   };
 })(typeof window !== 'undefined' ? window : globalThis);

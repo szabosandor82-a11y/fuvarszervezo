@@ -1396,3 +1396,14 @@ tr.v126-report-grand td{background:#dbeafd;font-weight:800}
 .v122-cal-detail>p{color:#24394d}
 .v122-cal-notes{border-color:#e2c27c;background:#fff3d6;color:#5e4413}
 .v122-cal-detail[data-driver]{border-left-color:var(--driver-dot,#5d7b96)}
+
+/* ===== V135 – LEVÉLMELLÉKLET A SOFŐRNEK =============================== */
+.tag.v135-source-missing{background:#fde2e1!important;color:#9b1c1c!important;border:1px solid #e88a87!important;font-weight:800}
+.v56-chip.v135-chip-missing{background:#fde2e1;color:#9b1c1c;border:1px solid #e88a87}
+.v135-source-status{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:12px 0 0;padding:10px 12px;border-radius:10px;font-size:13px;font-weight:700}
+.v135-source-status.ok{background:#e6f6e1;border:1px solid #7fbf6c;color:#1f5a17}
+.v135-source-status.missing{background:#fde8e7;border:1px solid #e88a87;color:#8a1c1c}
+.v135-source-status small{flex-basis:100%;font-weight:500;color:#7a2a2a}
+.v135-source-status .v135-upload{margin-left:auto;padding:7px 12px;border-radius:8px;border:0;background:#c62828;color:#fff;font-weight:800;cursor:pointer}
+.v135-progress{margin-top:10px;padding:10px 12px;border:1px solid #c9d6e3;border-radius:10px;background:#f4f8fc;color:#173048;font-size:13px;white-space:pre-wrap}
+.v135-progress.hidden{display:none}

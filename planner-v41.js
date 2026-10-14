@@ -1407,6 +1407,17 @@
     /* V72: a feltöltés hibája eddig csak a konzolba került, ezért úgy tűnt,
        hogy a melléklet ott van, pedig soha nem jutott fel. Most szólunk. */
     const failed = [];
+    /* V135 – ELŐBB A FUVAR, UTÁNA A MELLÉKLET
+
+       Eddig a feltöltés a fuvar online mentésével egy időben indult, és ha a
+       fuvar még nem ért fel, a szerver elutasította a mellékletet. Az admin
+       a saját gépén tárolt eredetiből ezt nem vette észre – a sofőr viszont
+       üres Csatolmányt látott. Most megvárjuk, hogy a fuvarok fent legyenek. */
+    const withFiles = orders.filter((order, index) => order?.id && entries[index]?.sourceMail?.files?.length);
+    if (withFiles.length && typeof global.ensureOrdersOnServerV135 === 'function') {
+      try { await global.ensureOrdersOnServerV135(withFiles.map(order => order.id)); }
+      catch (error) { console.warn('[V135] a fuvarok mentése a melléklet előtt', error); }
+    }
     for (let index = 0; index < entries.length; index++) {
       const mail = entries[index]?.sourceMail;
       const order = orders[index];
@@ -1443,17 +1454,24 @@
         } catch (error) { /* egy melléklet kihagyható */ }
       }
       if (!files.length) continue;
+      const label = `Outlook forrás · ${mail.fileName || ''}`.trim();
+      if (typeof global.uploadOrderSourceFilesV135 === 'function') {
+        /* V135: újrapróbálással; végleges hibánál a fuvar maradandó jelzést kap. */
+        const result = await global.uploadOrderSourceFilesV135(order, files, label);
+        if (!result.ok) failed.push(`${order.orderNo || order.id}: ${result.error}`);
+        continue;
+      }
       try {
-        await global.V44Online.createDeliveryReport(order, files,
-          `Outlook forrás · ${mail.fileName || ''}`.trim());
+        await global.V44Online.createDeliveryReport(order, files, label);
       } catch (error) {
         console.warn('[V72] forráslevél feltöltése sikertelen', order.orderNo, error);
         failed.push(`${order.orderNo || order.id}: ${error.message}`);
       }
     }
     if (failed.length && typeof alert === 'function') {
-      alert('A levél mellékletei nem töltődtek fel, ezért a Csatolmány gombbal nem lesznek megnyithatók.\n'
-        + 'Továbbított (FW:) levélnél mentsd el az EREDETI levelet .msg fájlként, és azt húzd be.\n\n'
+      alert('A levél mellékletei nem töltődtek fel, ezért a sofőr a Csatolmány gombbal nem tudja megnyitni őket.\n'
+        + 'A fuvar buborékán ezt jelezzük; a Beállítások lapon a „Hiányzó mellékletek feltöltése a sofőröknek” gombbal később pótolható.\n'
+        + 'Továbbított (FW:) levélnél, ha a melléklet ki sem bontható, mentsd el az EREDETI levelet .msg fájlként, és azt húzd be.\n\n'
         + failed.slice(0, 5).join('\n') + (failed.length > 5 ? `\n… és további ${failed.length - 5}` : ''));
     }
   }
