@@ -1,0 +1,37 @@
+FUVARSZERVEZŐ V139
+
+(A V138 újdonságait – csevegő, külön megjegyzés-rész a Mentett fotókban –
+is tartalmazza; lásd VALTOZASOK_V138.txt.)
+
+DÁTUM NÉLKÜLI HÁTRALÉK
+Eddig a Hátralékba csak dátummal lehetett tételt tenni. Ha a dátum nem volt
+ismert, a tétel kipipálatlanul az elmúlt napi fuvaron maradt, a Hátralék
+menübe nem került be, és semmi nem figyelmeztetett rá.
+
+- Tételek ablak: új „Hátralékba dátum nélkül” gomb (admin és sofőr). A
+  kipipálatlan tételek a hiányzó mennyiséggel a Hátralékba kerülnek, egyik
+  napra sem – nem jelennek meg a sofőrnél, és nem bontják meg a napi tervet.
+  Sofőrnél csak az aktuális munkanapon használható.
+- Hátralék menü, legfelül: „Dátum nélkül – infóra vár” szakasz,
+  rendelésenként csoportosítva (rendelésszám, beszállító, projekt, sofőr,
+  eredeti nap). Tételenként üres dátummező, „Ütemezés” és „Mára” gomb;
+  rendelésenként „Mindet erre a napra” és „Mindet mára”. Ütemezéskor a tétel
+  a célnapra kerül ugyanannak a sofőrnek és fuvarnak a másolatába – a cég
+  (Stand 98 / Future) és az „Áthelyezve” jelzés öröklődik.
+- „Vissza” gomb: a tétel kipipálatlanul visszakerül az eredeti fuvarba.
+- Ugyanitt az utolsó 30 nap NEM teljesített fuvarjain ottfelejtett,
+  kipipálatlan tételek („Elmúlt napon kipipálatlan · dátum”). Ezek is
+  ütemezhetők, vagy a „Megvan” gombbal kipipálhatók.
+- A dátum nélküli bejegyzést a mentéskori állapot-rendező nem törli (eddig
+  minden célfuvar nélküli hátralékot törölt volna).
+
+SOFŐRI HÁTRALÉK-MENTÉS VÉDELME
+- A szerver sofőri eljárása minden olyan hátralékot töröl, ami a küldött
+  listában nincs benne. Ha az admin közben létrehozott egyet, a sofőr régi
+  listája törölte volna. Most a telefon küldés előtt beolvassa a szerver
+  friss hátralékait: az admin újat megtartja, a szerveren már lezártat pedig
+  nem küldi vissza.
+
+SQL-módosítás nem kell (a hátralék táblája és a sofőri eljárás már most
+kezeli a dátum és célfuvar nélküli bejegyzést). A V138 csevegőjéhez a
+SUPABASE_CSEVEGO_V138.sql futtatása szükséges, ha még nem történt meg.

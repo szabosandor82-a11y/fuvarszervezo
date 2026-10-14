@@ -1,0 +1,35 @@
+FUVARSZERVEZŐ V138 – HELYI ELLENŐRZÉS
+
+Futtatott parancsok:
+  node --check (minden .js fájl)
+  node TEST_V138.js          (a V132–V138 funkciótesztekkel együtt)
+  npm i jsdom && node TEST_V138_UI.js   (a csevegő felülete böngésző-
+                                         környezetben; jsdom nélkül kihagyja)
+
+Eredmény:
+  Szintaktikai ellenőrzés: sikeres.
+  Elfogadási tesztek: 502/502 sikeres jsdom-mal (494 korábbi + 8 új).
+  Régebbi tesztek: TEST_V33–V49 sikeres. A TEST_V52/V53/V54 1–2 hibája
+  változatlan a V131 óta.
+
+Csevegő – felületteszt (jsdom, a teljes folyamat):
+  - sofőr: gomb és olvasatlan-szám; csak a saját és a csoportos üzenetek
+    látszanak (Márió üzenete nem); megnyitáskor olvasottá válik; küldés a
+    saját beszélgetésbe; „Elküldve” → „Látta”; kép küldése és megjelenése;
+    szerkesztés („szerkesztve”); törlés („Az üzenet törölve”);
+  - admin: annyi buborék, ahány aktív beszélgetés, olvasatlan-számmal és a
+    fül címében; ablak megnyitása és olvasottá tétele; válasz; csoportos
+    üzenet a „+” gombbal („Látta: 0/2”); buborék elrejtése és visszatérése
+    új üzenetre (a teszt közben talált hibát javítottam: olvasatlan üzenet
+    mellett az elrejtés nem működött).
+Csevegő – logika és szerverkérések: olvasatlan-számítás, „Látta”,
+  aktív buborékok, HTML-biztonság, a kérések címe és tartalma.
+Mentett fotók: két külön rész; a megjegyzés szövege és a hangjegyzet a
+  megjegyzések között; az Outlook-forrás nem jelenik meg megjegyzésként.
+
+SQL: a SUPABASE_CSEVEGO_V138.sql PostgreSQL-motoron (PGlite), valódi
+sorszintű jogosultsággal, kétszeri futtatással: 22/22 eset sikeres
+(Patrik nem írhat Márió beszélgetésébe és nem láthatja; sofőr nem küldhet
+csoportos üzenetet; a küldő/idő nem hamisítható; inaktív felhasználó semmit
+nem lát; más üzenete nem szerkeszthető; törlés csak jelöléssel; olvasottság
+és fájlok ugyanezekkel a szabályokkal).

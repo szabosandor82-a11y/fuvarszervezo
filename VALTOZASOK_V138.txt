@@ -1,0 +1,41 @@
+FUVARSZERVEZŐ V138
+
+CSEVEGŐ – GYORS ÜZENETEK A SOFŐRÖKKEL (új)
+Nem hivatalos, gyors kapcsolattartásra, a fuvarhoz kötött üzenetszáltól
+(✉ Üzenetek) függetlenül.
+
+Sofőr
+- Jobb alul lebegő 💬 gomb, rajta az olvasatlan üzenetek száma; koppintásra
+  teljes képernyős beszélgetés az irodával.
+- Csak a saját beszélgetését és a csoportos („📢 Mindenkinek”) üzeneteket
+  látja – ezt a szerver garantálja, nem csak a felület.
+
+Admin
+- Alul annyi kerek buborék, ahány aktív beszélgetés van (sofőr monogramja,
+  színe, olvasatlan-szám). Kattintásra kis csevegőablak nyílik, egyszerre
+  legfeljebb 3 (telefonon 1).
+- Aktív: van olvasatlan, 24 órán belül volt üzenet, vagy megnyitottad.
+  A buborék a sarkában lévő ×-szel elrejthető; új üzenetre visszajön.
+- „+” gomb: új beszélgetés bármelyik sofőrrel, vagy csoportos üzenet
+  mindenkinek („Látta: 2/3” jelzéssel).
+
+Mindkét oldalon
+- Kép- és fájlküldés (📎 gombbal vagy képbeillesztéssel), max. 50 MB/fájl.
+- Saját üzenet szerkesztése („szerkesztve” felirattal) és törlése („Az üzenet
+  törölve” felirat marad).
+- „Elküldve” / „Látta” jelzés, hang és rezgés új üzenetnél, olvasatlan-szám a
+  böngészőfül címében.
+- Frissítés: nyitott beszélgetésnél 3, egyébként 15 másodpercenként.
+
+MENTETT FOTÓK – MEGJEGYZÉS ÉS HANGJEGYZET KÜLÖN RÉSZBEN
+- A szállítólevél szöveges megjegyzése eddig sehol nem látszott, a
+  hangjegyzet a fotók közé keveredett. Most a Mentett fotók ablak két részből
+  áll: „Fotók és csatolmányok”, alatta „Megjegyzések és hangjegyzetek”
+  szállítólevelenként, dátummal és rendelésszámmal. Az admin és a sofőr is
+  így látja. A hangjegyzet is törölhető a kukával.
+
+SUPABASE – EGYSZER LE KELL FUTTATNI
+- SUPABASE_CSEVEGO_V138.sql: chat_messages és chat_reads tábla, chat-files
+  tároló, és a jogosultsági szabályok (a sofőr csak a sajátját látja és írja,
+  csoportos üzenetet csak az admin küldhet, üzenetet csak a küldője
+  szerkeszthet, a küldő és az idő nem hamisítható).

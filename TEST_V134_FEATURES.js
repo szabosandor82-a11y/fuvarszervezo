@@ -82,7 +82,10 @@ async function run(test) {
     env.t.setProfile({ role: 'admin' });
     assert.equal(can({ id: 'f2', storage_path: 'tegnap/r2/a.jpg', order_id: 'tegnap', report_id: 'r2' }), true, 'az admin nem törölhet');
     const auth = fs.readFileSync(__dirname + '/auth-v44-2.js', 'utf8');
-    assert.ok(auth.includes('${canDeleteGalleryFileV134(file) ? `<button type="button" class="v119-del"'), 'a kuka csak adminnak jelenik meg');
+    /* V138: a kuka gombot a galériában egy közös segédfüggvény rajzolja. */
+    const kuka = auth.slice(auth.indexOf('function galleryDeleteButtonV138'), auth.indexOf('function galleryNotesV138'));
+    assert.ok((kuka.includes('canDeleteGalleryFileV134(file)') && kuka.includes('class="v119-del"'))
+      || auth.includes('${canDeleteGalleryFileV134(file) ? `<button type="button" class="v119-del"'), 'a kuka csak adminnak jelenik meg');
   });
 
   await test('V134: feltöltés és törlés után azonnal változik a szám', () => {

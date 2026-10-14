@@ -1,14 +1,16 @@
-FUVARSZERVEZŐ V137
+FUVARSZERVEZŐ V139
 
 FRISSÍTÉS
 0. Ha még nem tetted meg: a Supabase SQL Editorban futtasd le a
+   SUPABASE_CSEVEGO_V138.sql fájlt (a csevegőhöz).
+   Ha még nem tetted meg, futtasd le a
    SUPABASE_TAROLO_V136.sql fájlt (a végén a tároló új beállítása látszik).
    Ha még nem tetted meg, futtasd le a
    SUPABASE_SOFOR_TORLES_V134.sql fájlt, és ha még nem futott, a
    SUPABASE_SOFOR_MEZOK_V133.sql fájlt is ("Success. No rows returned" a
    helyes válasz). Több futtatás sem árt, adatot nem töröl.
 1. Készíts biztonsági másolatot a jelenlegi GitHub Pages fájlokról.
-2. Bontsd ki a Fuvarszervezo_V137_Mobile_PWA_GitHub_Pages.zip fájlt.
+2. Bontsd ki a Fuvarszervezo_V139_Mobile_PWA_GitHub_Pages.zip fájlt.
 3. A csomag gyökérkönyvtárának tartalmát másold a meglévő alkalmazás
    gyökérkönyvtárába a korábbi azonos nevű fájlok felülírásával.
    Az index.html közvetlenül az alkalmazás gyökerében legyen.
@@ -28,8 +30,8 @@ VÁLTOZÁSOK
 - A sofőr korábbi fuvarjainak SQL-szabálya valódi DATE típusú összehasonlítást
   használ.
 
-A változtatások részletei: VALTOZASOK_V137.txt.
-A helyi ellenőrzések eredménye: ELLENORZES_V137.txt.
+A változtatások részletei: VALTOZASOK_V139.txt.
+A helyi ellenőrzések eredménye: ELLENORZES_V139.txt.
 
 SUPABASE
 Ha a sofőr korábbi fuvarjainak visszanézése már működik, a SQL-fájlt nem kell
@@ -51,9 +53,9 @@ A ZIP ellenőrzése után az „Archiváltak törlése” gombbal, a kért fájl
 beírásával törölhetők a legalább két napos fájlok.
 
 
-A V137-ben a fuvarszétosztás és az optimalizálás kizárólag a képernyőn megnyitott napot módosítja. A mentés is csak ennek a napnak a fuvarjait küldi fel, a korábbi és későbbi napokhoz nem nyúl.
+A V139-ben a fuvarszétosztás és az optimalizálás kizárólag a képernyőn megnyitott napot módosítja. A mentés is csak ennek a napnak a fuvarjait küldi fel, a korábbi és későbbi napokhoz nem nyúl.
 
-A V128-ban a sofőr által átmozgatott fuvarok és hátralékok céldátuma az admin és a sofőr buborékjában is megjelenik. A funkció a V137-ben is megmaradt; részletek: VALTOZASOK_V128.txt.
+A V128-ban a sofőr által átmozgatott fuvarok és hátralékok céldátuma az admin és a sofőr buborékjában is megjelenik. A funkció a V139-ben is megmaradt; részletek: VALTOZASOK_V128.txt.
 
 SZÁLLÍTÓLEVÉL ÉS TELJESÍTÉS
 A feltöltés csak azután jelez sikert, hogy a fájlok és a fuvar buborékadatai is
@@ -77,7 +79,7 @@ vagy egy régi adatpéldány mentése felülírta. A V132-ben a frissítés
 összefésül, a mentés csak a módosított fuvart küldi, az admin csak a
 ténylegesen törölt fuvart törli, a Mentett fotók gomb a feltöltött fájlok
 táblájából is bezöldül, és az admin felület percenként átveszi a sofőri
-jelzéseket. Fontos: MINDEN eszközön (admin gép, sofőrtelefonok) a V137
+jelzéseket. Fontos: MINDEN eszközön (admin gép, sofőrtelefonok) a V139
 fusson – telefonon zárd be teljesen és nyisd újra az alkalmazást.
 Részletek: VALTOZASOK_V132.txt, ellenőrzés: ELLENORZES_V132.txt.
 
@@ -117,3 +119,17 @@ V137 – TÖRÖLT FUVAR A SOFŐRNÉL, ELAKADT SOFŐRI MENTÉSEK
 - Egy elutasított fuvar nem akasztja meg a sofőr többi mentését.
 - Újraimportnál a régi fuvar mellékletei nem vesznek el.
 Részletek: VALTOZASOK_V137.txt, ellenőrzés: ELLENORZES_V137.txt.
+
+V138 – CSEVEGŐ ÉS KÜLÖN MEGJEGYZÉS-RÉSZ
+- Gyors üzenetek az iroda és a sofőrök között: kép, fájl, csoportos üzenet,
+  szerkesztés, törlés. Sofőrnél jobb alul 💬 gomb, adminnál alul buborékok.
+- A Mentett fotók ablakban a szállítólevél megjegyzése és hangjegyzete külön
+  részben látszik.
+- TEENDŐ: futtasd le a SUPABASE_CSEVEGO_V138.sql fájlt.
+Részletek: VALTOZASOK_V138.txt, ellenőrzés: ELLENORZES_V138.txt.
+
+V139 – DÁTUM NÉLKÜLI HÁTRALÉK
+- Tételek ablak: „Hátralékba dátum nélkül” gomb.
+- Hátralék menü teteje: „Dátum nélkül – infóra vár” – dátum, Ütemezés, Mára.
+- Az utolsó 30 nap ottfelejtett, kipipálatlan tételei is itt látszanak.
+Részletek: VALTOZASOK_V139.txt, ellenőrzés: ELLENORZES_V139.txt.

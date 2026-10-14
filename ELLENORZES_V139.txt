@@ -1,0 +1,27 @@
+FUVARSZERVEZŐ V139 – HELYI ELLENŐRZÉS
+
+Futtatott parancsok:
+  node --check (minden .js fájl)
+  node TEST_V139.js     (a V132–V139 funkciótesztekkel; jsdom-mal a V138
+                         csevegő-felületteszttel együtt)
+
+Eredmény:
+  Szintaktikai ellenőrzés: sikeres.
+  Elfogadási tesztek: 508/508 sikeres (502 korábbi + 6 új).
+  Régebbi tesztek: TEST_V33–V49 sikeres. A TEST_V52/V53/V54 1–2 hibája
+  változatlan a V131 óta.
+
+Új tesztek (az app.js valódi függvényeivel):
+  - „Hátralékba dátum nélkül”: nem jön létre napi fuvar; a hiányzó
+    mennyiség a Hátralékba kerül, a részlet az eredeti fuvarban marad; az
+    állapot-rendező nem törli;
+  - ütemezés és „Mára”: a célnapi fuvar létrejön, ugyanarra a napra a
+    második tétel ugyanabba kerül, a cég (Future) öröklődik;
+  - ottfelejtett tételek: csak az utolsó 30 nap nem teljesített fuvarjai,
+    a hiányzó mennyiséggel; ütemezhetők és kipipálhatók;
+  - „Vissza” és a csoportos „Mindet mára”;
+  - a Hátralék menü szakasza, a gomb és a sofőri jogosultság;
+  - a sofőri hátralék-mentés megtartja az admin friss bejegyzését, és nem
+    küldi vissza a szerveren lezártat.
+Közben két meglévő teszt két hiányosságot fogott meg az új ütemezőben (a
+forrásnap és a cég öröklése) – javítva.
