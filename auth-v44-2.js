@@ -361,12 +361,12 @@
   function userBubble(order, index) {
     const items = order.items || [];
     const received = items.filter(item => item.received).length;
-    /* V133: ugyanaz a számolás, mint az admin buborékon (törölt bejegyzés
-       nélkül, a hangjegyzetet is beleértve). */
-    const reportPhotos = typeof global.deliveryPhotoCountV132 === 'function'
-      ? global.deliveryPhotoCountV132(order)
-      : (order.deliveryReports || []).reduce((sum, report) => sum + (+report.photoCount || +report.fileCount || 0), 0);
-    const archiveSuffix = typeof global.deliveryArchiveSuffixV133 === 'function' ? global.deliveryArchiveSuffixV133([order]) : '';
+    /* V134: ugyanaz a szabály, mint az admin buborékon – a szám a
+       ténylegesen meglévő fájlokból jön, üres galériánál alapállapot. */
+    const delivery = typeof global.deliveryStateV134 === 'function'
+      ? global.deliveryStateV134([order])
+      : { files: 0, archived: 0, marked: false, label: 'Mentett fotók' };
+    const reportPhotos = delivery.files;
     const canTransfer = !order.completed && !transferForOrder(order.id);
     const commentClass = global.userCommentClass ? global.userCommentClass(order) : '';
     const hasSourceMail = order.sourceMail ? true : hasOutlookSource(order);
@@ -391,7 +391,7 @@
           onclick="openThreadV115('${safe(order.id)}')">✉ Üzenetek${(global.orderThreadV115?.(order) || []).length
             ? ` (${(global.orderThreadV115?.(order) || []).length})` : ''}</button>
         <button type="button" class="camera-action${locked ? ' is-locked' : ''}" ${locked ? `disabled title="Csak az aktuális munkanapon tölthető fel"` : ''} onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>
-        <button type="button" class="secondary v133-saved-photos${reportPhotos ? ' has-photos' : ''}" onclick="openMediaGallery('${safe(order.id)}')">Mentett fotók${reportPhotos ? ` (${reportPhotos})${safe(archiveSuffix)}` : ''}</button>
+        <button type="button" class="secondary v133-saved-photos${delivery.marked ? ' has-photos' : ''}" onclick="openMediaGallery('${safe(order.id)}')">${safe(delivery.label)}</button>
         ${hasSourceMail ? `<button type="button" class="mail-action" onclick="openSourceMail('${safe(order.id)}')">Csatolmány</button>` : ''}
         ${canTransfer ? `<button type="button" class="transfer-action${locked ? ' is-locked' : ''}" ${locked ? `disabled title="Csak az aktuális munkanapon adható át"` : ''} onclick="openTransferDialog('${safe(order.id)}')">Fuvar átadása</button>` : ''}
       </div>
@@ -787,7 +787,7 @@
       loadingV132 = true;
       try { if (typeof save === 'function') save(false); } finally { loadingV132 = false; }
       rememberCompletionV132();
-      if (currentProfile.role === 'admin') await refreshDeliveryCountsV132();
+      await refreshDeliveryCountsV132();
       if (typeof render === 'function') render();
       await refreshTransfers();
     } finally { suppressOnlineSave = false; }
@@ -836,7 +836,7 @@
       if (typeof global.save === 'function') global.save(false);
       if (typeof global.render === 'function') global.render();
     } finally { loadingV132 = false; }
-    if (isAdmin()) await refreshDeliveryCountsV132();
+    await refreshDeliveryCountsV132();
     if (hasChangesV132(collectChangesV132())) retrySyncLaterV132(1500);
     return state.orders;
   }
@@ -845,14 +845,31 @@
   /* ===== V132 – SZÁLLÍTÓLEVÉL-SZÁM A FÁJLTÁBLÁBÓL ===================== */
   global.deliveryFileCountsV132 = global.deliveryFileCountsV132 || new Map();
   async function refreshDeliveryCountsV132() {
-    if (!isAdmin() || !global.V44Online?.fetchDeliveryFileCountsV132) return false;
+    if (!currentProfile || !global.V44Online) return false;
     try {
-      const counts = await global.V44Online.fetchDeliveryFileCountsV132();
+      /* V134: a sofőri felület is lekéri – a saját fuvarjaira. */
+      const counts = isAdmin()
+        ? await global.V44Online.fetchDeliveryFileCountsV132?.()
+        : await global.V44Online.fetchDeliveryFileCountsForOrdersV134?.((state.orders || []).map(order => order.id));
+      if (!counts) return false;
       const before = JSON.stringify([...global.deliveryFileCountsV132].sort());
+      const wasLoaded = !!global.deliveryFileCountsLoadedV134;
       global.deliveryFileCountsV132 = counts;
-      return before !== JSON.stringify([...counts].sort());
+      global.deliveryFileCountsLoadedV134 = true;
+      return !wasLoaded || before !== JSON.stringify([...counts].sort());
     } catch (error) { console.warn('[V132] szállítólevél-számok', error); return false; }
   }
+  /* V134: feltöltés vagy törlés után a szám azonnal kövesse a változást,
+     ne csak a következő frissítéskor. */
+  function adjustDeliveryCountV134(orderId, delta) {
+    const id = String(orderId || '');
+    if (!id) return;
+    const map = global.deliveryFileCountsV132 instanceof Map ? global.deliveryFileCountsV132 : new Map();
+    map.set(id, Math.max(0, (+map.get(id) || 0) + delta));
+    global.deliveryFileCountsV132 = map;
+  }
+  global.adjustDeliveryCountV134 = adjustDeliveryCountV134;
+
 
   /* ===== V132 – AZ ADMIN FELÜLET PERCENKÉNT ÁTVESZI A SOFŐRI JELZÉSEKET
 
@@ -1306,15 +1323,16 @@
 
   /* V119 – egy kép törlése a galériából ÉS a tárhelyről. */
   async function deleteGalleryFileV119(fileId) {
-    if (!isAdmin()) return alert('Törölni csak az admin tud.');
     const file = (global.__galleryFilesV119 || []).find(item => String(item.id) === String(fileId));
     if (!file) return;
+    /* V134: a sofőr is törölhet – de csak a saját fuvarján, az aktív
+       munkanapon, és archivált szállítólevelet nem. */
+    if (!canDeleteGalleryFileV134(file)) return alert(isAdmin() ? 'Ez a fájl nem törölhető.' : 'Törölni csak az aktuális munkanapon, a saját fuvarodon lehet.');
     if (!confirm(`Véglegesen törlöd ezt a képet?\n\n${file.file_name || ''}\n\nA fájl a tárhelyről is törlődik, visszaállítani nem lehet.`)) return;
     try {
       await global.V44Online.deleteDeliveryFile(file);
       global.__galleryFilesV119 = (global.__galleryFilesV119 || []).filter(item => String(item.id) !== String(fileId));
-      const szamlalo = global.deliveryFileCountsV132, fuvarId = String(file.order_id || '');
-      if (szamlalo?.has?.(fuvarId)) szamlalo.set(fuvarId, Math.max(0, szamlalo.get(fuvarId) - 1));
+      if (!file.is_source_mail) adjustDeliveryCountV134(file.order_id, -1);
       /* V133: a jelölés a törléshez igazodik. Archivált fájl törlésekor a
          jelölés megmarad „archiválva” felirattal; soha nem archivált fájl
          törlésekor a szállítólevél-bejegyzés fogy, és ha az utolsó fájlja is
@@ -1326,6 +1344,17 @@
     }
   }
   global.deleteGalleryFileV119 = deleteGalleryFileV119;
+
+  function canDeleteGalleryFileV134(file) {
+    if (!file?.id || !file?.storage_path) return false;
+    if (isAdmin()) return true;
+    const orderId = String(file.order_id || '');
+    if (!orderId || !canEditOrder(orderId)) return false;
+    const order = (state.orders || []).find(item => String(item.id) === orderId);
+    const report = (order?.deliveryReports || []).find(item => String(item?.id || '') === String(file.report_id || ''));
+    return !report?.archivedAtV133;
+  }
+  global.canDeleteGalleryFileV134 = canDeleteGalleryFileV134;
 
   function wasArchivedV133(fileId) {
     try { return typeof global.archivedMapV119 === 'function' && !!global.archivedMapV119()[String(fileId)]; }
@@ -1449,6 +1478,41 @@
 
   global.openSourceMail = openSourceMail;
 
+  /* ===== V134 – A JELÖLÉS A TÉNYLEGES FÁJLOKHOZ IGAZODIK ==============
+
+     Ha a galéria megnyitásakor kiderül, hogy egy szállítólevél-jelöléshez
+     nincs fájl (pl. félbeszakadt feltöltés, máshonnan törölt fájl), és
+     archiválva sem volt, a jelölés törlődik – a gomb alapállapotba kerül,
+     és a régi szám nem jön vissza. Csak szerkeszthető fuvaron fut (a sofőr
+     a régi napokat nem módosíthatja). */
+  function healDeliveryMarksV134(orders, allFiles) {
+    const reportIds = new Set((allFiles || []).map(file => String(file.report_id || '')).filter(Boolean));
+    let changed = false, countsChanged = false;
+    for (const order of orders || []) {
+      const own = (allFiles || []).filter(file => String(file.order_id || '') === String(order.id));
+      adjustDeliveryCountV134(order.id, 0);
+      const fresh = own.filter(file => !file.is_source_mail).length;
+      if (global.deliveryFileCountsV132.get(String(order.id)) !== fresh) countsChanged = true;
+      global.deliveryFileCountsV132.set(String(order.id), fresh);
+      if (!canEditOrder(order.id)) continue;
+      const reports = order.deliveryReports || [];
+      const stale = reports.filter(report => report && !report.archivedAtV133
+        && !/^outlook\s*forr/i.test(String(report.note || ''))
+        && (report.id ? !reportIds.has(String(report.id)) : !own.length));
+      if (!stale.length) continue;
+      const keys = stale.map(report => String(report.id || report.at || ''));
+      order.deliveryReports = reports.filter(report => !stale.includes(report));
+      order.deliveryReportsDeletedV133 = [...new Set([...(order.deliveryReportsDeletedV133 || []), ...keys.filter(Boolean)])];
+      order.localUpdatedAt = new Date().toISOString();
+      changed = true;
+    }
+    if (changed && typeof save === 'function') save();
+    else if (countsChanged && isAdmin() && typeof global.render === 'function') global.render();
+    else if (countsChanged && !isAdmin()) renderDriverPortal();
+    return changed;
+  }
+  global.healDeliveryMarksV134 = healDeliveryMarksV134;
+
   /* ===== V133 – ARCHIVÁLT SZÁLLÍTÓLEVELEK ============================ */
   function archivedReportsV133(orders) {
     return (orders || []).flatMap(order => (order?.deliveryReports || []).filter(report => report?.archivedAtV133));
@@ -1527,10 +1591,13 @@
          csak a listából – archiválás után ne foglaljon helyet. Csak admin
          törölhet. */
       global.__galleryFilesV119 = files;
+      /* V134: a galéria a pontos állapotot látja – a fájlszám ehhez igazodik,
+         és a fájl nélküli, nem archivált maradványjelölés törlődik. */
+      healDeliveryMarksV134(orders, groups.flat());
       /* V133: az archiválás után törölt szállítólevelek nem tűnnek el
          nyomtalanul – a galéria jelzi, hogy archiválva vannak. */
       const archivedNoteV133 = archivedReportsNoteV133(orders);
-      if (host) host.innerHTML = (files.length ? files.map(file => file.mime_type?.startsWith('audio/') ? `<article><audio controls src="${safe(file.url)}"></audio><small>${safe(file.orderNo)} · ${safe(napja(file))} · ${safe(file.file_name || 'Hangjegyzet')}</small></article>` : `<article><a href="${safe(file.url)}" target="_blank" rel="noopener"><img src="${safe(file.url)}" alt="Szállítólevél"></a><small><b>${safe(napja(file))}</b> · ${safe(file.orderNo)} · ${safe(file.file_name || 'Fotó')}${isAdmin() ? `<button type="button" class="v119-del" title="Törlés a tárhelyről is" onclick="deleteGalleryFileV119('${safe(file.id)}')">🗑</button>` : ''}</small></article>`).join('') : (archivedNoteV133 ? '' : '<div class="mobile-empty">Ehhez a fuvarhoz még nincs elmentett fotó.</div>')) + archivedNoteV133;
+      if (host) host.innerHTML = (files.length ? files.map(file => file.mime_type?.startsWith('audio/') ? `<article><audio controls src="${safe(file.url)}"></audio><small>${safe(file.orderNo)} · ${safe(napja(file))} · ${safe(file.file_name || 'Hangjegyzet')}</small></article>` : `<article><a href="${safe(file.url)}" target="_blank" rel="noopener"><img src="${safe(file.url)}" alt="Szállítólevél"></a><small><b>${safe(napja(file))}</b> · ${safe(file.orderNo)} · ${safe(file.file_name || 'Fotó')}${canDeleteGalleryFileV134(file) ? `<button type="button" class="v119-del" title="Törlés a tárhelyről is" onclick="deleteGalleryFileV119('${safe(file.id)}')">🗑</button>` : ''}</small></article>`).join('') : (archivedNoteV133 ? '' : '<div class="mobile-empty">Ehhez a fuvarhoz még nincs elmentett fotó.</div>')) + archivedNoteV133;
     } catch (error) { if (host) host.innerHTML = `<div class="mobile-empty">Betöltési hiba: ${safe(error.message)}</div>`; }
   }
   global.openMediaGallery = openMediaGallery;
@@ -1806,6 +1873,7 @@
         const result = await global.V44Online.createDeliveryReport(order, files, byId('cameraNote')?.value || '', typeof audioBlob !== 'undefined' ? audioBlob : null);
         order.deliveryReports = order.deliveryReports || [];
         const deliveryNote = byId('cameraNote')?.value || '';
+        adjustDeliveryCountV134(order.id, +(result.report.fileCount || 0));
         order.deliveryReports.push({ id: result.report.id, at: result.report.created_at || new Date().toISOString(), note: deliveryNote, photoCount: files.length, fileCount: result.report.fileCount, hasAudio: typeof audioBlob !== 'undefined' && !!audioBlob, createdBy: currentSession?.user?.email, createdRole: currentProfile?.role || 'driver', userComment: !!deliveryNote.trim(), commentAt: deliveryNote.trim() ? new Date().toISOString() : '' });
         if (typeof save === 'function') save();
         try {

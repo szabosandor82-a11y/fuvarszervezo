@@ -1,0 +1,30 @@
+FUVARSZERVEZŐ V134
+
+SOFŐRI TÖRLÉS A MENTETT FOTÓKBAN
+- A sofőri galériában is megjelenik a kis kuka a képek mellett.
+- Csak a saját fuvaron és csak az aktív munkanapon törölhet; visszamenőleg
+  és előre nem (ugyanaz a szabály, mint a többi sofőri műveletnél).
+  Archivált szállítólevelet a sofőr nem törölhet.
+- A szerver is ellenőrzi (SUPABASE_SOFOR_TORLES_V134.sql): sofőr csak a
+  saját, MAI napi (Budapest szerinti) fuvarjának fájlját törölheti a
+  tárhelyről és a fájltáblából. Hétvégén ezért sofőrként nem törölhető.
+- Ha a szerver nem engedi a törlést, a program ezt hibaként jelzi (eddig a
+  csendben elmaradt törlés sikeresnek látszhatott).
+
+MENTETT FOTÓK GOMB: CSAK A VALÓS FÁJLOK SZÁMÍTANAK
+- A zöld kijelölés és a zárójeles szám kizárólag a ténylegesen meglévő
+  fájlokból jön, az admin oldalon és a sofőri felületen is. Üres galériánál
+  a gomb alapállapotban van: szürke, felirata csak „Mentett fotók”.
+- Feltöltés után a szám azonnal nő, törlés után azonnal csökken; ha az
+  utolsó fájl is törlődött, a gomb visszaáll alapállapotba.
+- Archiválás után a megbeszéltek szerint: „Mentett fotók · archiválva”
+  (zöld marad), vegyes esetben „Mentett fotók (2) · 3 archiválva”.
+- Önjavítás: ha a galéria megnyitásakor kiderül, hogy egy jelöléshez nincs
+  fájl és archiválva sem volt, a maradványjelölés törlődik, így a régi szám
+  nem jön vissza. Sofőrnél ez is csak az aktív napi fuvaron fut.
+- A sofőri felület is lekéri a saját fuvarjainak fájlszámát (frissítéskor
+  és belépéskor).
+
+SUPABASE
+- Új: SUPABASE_SOFOR_TORLES_V134.sql – a sofőri törlés jogosultsága.
+- A SUPABASE_SOFOR_MEZOK_V133.sql továbbra is kell (ha még nem futott le).

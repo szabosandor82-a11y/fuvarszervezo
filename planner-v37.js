@@ -385,7 +385,8 @@
     const manualNotes = [...new Set(orders.flatMap(order => [order.note, order.manualItems])
       .map(value => String(value || '').trim())
       .filter(value => value && !/^outlook import/i.test(value)))];
-    const deliveryPhotos = orders.reduce((sum, order) => sum + photoCountOfOrderV132(order), 0);
+    const deliveryV134 = deliveryStateOfV134(orders);
+    const deliveryPhotos = deliveryV134.marked;
     const projects = [...new Set(groups.map(group => group.projectName).filter(Boolean))];
     const dropCount = projects.length || 1;
 
@@ -408,7 +409,7 @@
       <article class="v56-row ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''} ${longReasons.length ? 'has-long' : ''}${unreadComment ? ' user-comment-unread' : ''}" data-id="${escHtml(first.id || ids.split(',')[0] || '')}">
         <span class="v56-index drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : 'Fogd meg és told fel-le a sorrend átrendezéséhez'}" aria-label="Sorrend átrendezése">${escHtml(String(index + 1))}</span>
         <div class="v56-main">
-          <div class="v56-line-top"><b>${escHtml(displayName)}</b>${central ? '<span class="v56-chip">kp</span>' : ''}${longReasons.length ? '<span class="v56-chip v56-chip-warn">szálas</span>' : ''}${deliveryPhotos ? `<span class="v56-chip v56-chip-ok" title="A sofőr feltöltötte a szállítólevelet">szállítólevél ${deliveryPhotos}${archiveSuffixV133(orders)}</span>` : ''}<span class="v56-addr">${address ? '— ' + escHtml(address) : ''}</span></div>
+          <div class="v56-line-top"><b>${escHtml(displayName)}</b>${central ? '<span class="v56-chip">kp</span>' : ''}${longReasons.length ? '<span class="v56-chip v56-chip-warn">szálas</span>' : ''}${deliveryPhotos ? `<span class="v56-chip v56-chip-ok" title="A sofőr feltöltötte a szállítólevelet">szállítólevél${deliveryV134.files ? ` ${deliveryV134.files}` : ''}${escHtml(deliveryV134.suffix)}</span>` : ''}<span class="v56-addr">${address ? '— ' + escHtml(address) : ''}</span></div>
         </div>
         <button type="button" class="v56-items-btn" onclick="event.stopPropagation();v56ToggleItems('${escHtml(ids)}',this)" title="Lerakók és tételek">${dropCount} lerakó · ${itemCount} tétel${manualNotes.length ? ' + kézi' : ''} <span class="v56-caret">▾</span></button>
         ${hasSourceMail ? `<button type="button" class="v56-mail-btn" title="Importált levél és csatolmány" onclick="event.stopPropagation();openSourceMail('${escHtml(sourceOrder.id || '')}')">Csatolmány</button>` : ''}
@@ -475,6 +476,12 @@
   function deliveryPhotoCount(group) {
     return (group.orders || []).reduce((sum, order) => sum + photoCountOfOrderV132(order), 0);
   }
+  /* V134: a gomb állapota (zöld, felirat) közös szabály szerint (app.js). */
+  function deliveryStateOfV134(orders) {
+    if (typeof global.deliveryStateV134 === 'function') return global.deliveryStateV134(orders || []);
+    const files = (orders || []).reduce((sum, order) => sum + photoCountOfOrderV132(order), 0);
+    return { files, archived: 0, marked: files > 0, suffix: '', label: `Mentett fotók${files ? ` (${files})` : ''}` };
+  }
 
   /* V73: a megjegyzés a fuvar note mezőjéből jön, mert azt az űrlapon
      szerkeszteni is lehet. A régi manualItems mezőt is figyeljük, hogy a
@@ -530,7 +537,8 @@
       ids, orderNos, itemCount, longReasons, complete, resolved, pinned, fullLoad, first,
       warnings, displayNumber, vehicleId, pickupOrderIds, regroupButton, options
     });
-    return `<div class="route-block ${deliveryPhotoCount(group) ? 'has-delivery' : ''} ${options.insidePickupGroup ? 'inside-pickup-group' : ''} ${pinned ? 'pinned-block' : ''} ${fullLoad ? 'full-load-block' : ''} ${resolved ? 'resolved-backlog-block' : ''}" data-group-key="${escHtml(group.key)}" data-pickup-move-key="${escHtml(pickupMoveKey(group))}" data-order-ids="${escHtml(ids)}" data-vehicle-id="${escHtml(vehicleId)}">
+    const deliveryV134 = deliveryStateOfV134(group.orders);
+    return `<div class="route-block ${deliveryV134.marked ? 'has-delivery' : ''} ${options.insidePickupGroup ? 'inside-pickup-group' : ''} ${pinned ? 'pinned-block' : ''} ${fullLoad ? 'full-load-block' : ''} ${resolved ? 'resolved-backlog-block' : ''}" data-group-key="${escHtml(group.key)}" data-pickup-move-key="${escHtml(pickupMoveKey(group))}" data-order-ids="${escHtml(ids)}" data-vehicle-id="${escHtml(vehicleId)}">
       <article class="bubble grouped-bubble v126-${cegKulcs} ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''}${unreadComment ? ' user-comment-unread' : ''}" data-id="${escHtml(first.id)}" data-order-ids="${escHtml(ids)}">
         <span class="drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : options.insidePickupGroup ? 'Az egész felrakási blokk húzása' : 'Húzás'}">${resolved ? '✓' : '☷'}</span>
         <div class="bubble-control-row">
@@ -543,9 +551,9 @@
         <div class="bubble-main-line"><b>Felrakó:</b><span>${escHtml(group.pickupName)}${group.pickupAddress ? ` · ${escHtml(group.pickupAddress)}` : ''}</span></div>
         <div class="bubble-main-line"><b>Lerakó:</b><span>${escHtml(group.projectName)}${group.dropAddress ? ` · ${escHtml(group.dropAddress)}` : ''}</span></div>
         <div class="bubble-main-line order-number-line"><b>Rendelésszám:</b><span>${escHtml(orderNos.join(', ') || 'Nincs megadva')}</span></div>
-        <div class="tags"><span class="tag">${group.orders.length} rendelés</span><span class="tag">${itemCount} tétel</span>${deliveryPhotoCount(group) ? `<span class="tag delivery-tag" title="A sofőr feltöltötte a szállítólevelet">Szállítólevél · ${deliveryPhotoCount(group)}</span>` : ''}${longReasons.map(reason => `<span class="tag long">${escHtml(reason)}</span>`).join('')}${pinned ? '<span class="tag pin-tag">Rögzítve</span>' : ''}${fullLoad ? '<span class="tag full-load-tag">Teljes autó</span>' : ''}${resolved ? '<span class="tag resolved-tag">✓ Elintézve</span>' : ''}${options.ungrouped && (options.samePickupCount || 0) > 1 ? '<span class="tag ungrouped-tag">Külön mozgatható</span>' : ''}</div>
+        <div class="tags"><span class="tag">${group.orders.length} rendelés</span><span class="tag">${itemCount} tétel</span>${deliveryV134.marked ? `<span class="tag delivery-tag" title="A sofőr feltöltötte a szállítólevelet">Szállítólevél${deliveryV134.files ? ` · ${deliveryV134.files}` : ''}${escHtml(deliveryV134.suffix)}</span>` : ''}${longReasons.map(reason => `<span class="tag long">${escHtml(reason)}</span>`).join('')}${pinned ? '<span class="tag pin-tag">Rögzítve</span>' : ''}${fullLoad ? '<span class="tag full-load-tag">Teljes autó</span>' : ''}${resolved ? '<span class="tag resolved-tag">✓ Elintézve</span>' : ''}${options.ungrouped && (options.samePickupCount || 0) > 1 ? '<span class="tag ungrouped-tag">Külön mozgatható</span>' : ''}</div>
         ${manualItemsOfGroup(group) ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${escHtml(manualItemsOfGroup(group))}</div>` : ''}
-        <div class="bubble-actions"><button onclick="editOrder('${escHtml(first.id)}')">Szerkesztés</button><button class="secondary" title="Visszaszállítás: a projekt lesz a felrakó, a beszállító a lerakó" onclick="returnOrder('${escHtml(first.id)}')">↩ Visszáru</button><button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button><button class="secondary v115-thread${szalOlvasatlan ? ' has-unread' : ''}" title="A fuvarhoz írt üzenetek" onclick="openThreadGroupV117('${escHtml(ids)}')">✉ Üzenetek${szalOsszes ? ` (${szalOsszes})` : ''}</button><button class="secondary v109-next-day" title="A fuvar átkerül ugyanehhez a sofőrhöz, a következő munkanapra" onclick="moveToNextWorkdayV109('${escHtml(ids)}')">→ Következő napra</button>${group.orders.some(hasOutlookSource) ? `<button onclick="openSourceMail('${escHtml((group.orders.find(hasOutlookSource) || first).id)}')">Csatolmány</button>` : ''}<button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button><button class="secondary ${deliveryPhotoCount(group) ? 'has-photos' : ''}" title="${deliveryPhotoCount(group) ? `${deliveryPhotoCount(group)} feltöltött szállítólevél-fotó` : 'Még nincs feltöltött fotó'}" onclick="openMediaGallery('${escHtml(ids)}')">📎 Mentett fotók${deliveryPhotoCount(group) ? ` (${deliveryPhotoCount(group)})${archiveSuffixV133(group.orders)}` : ''}</button></div>
+        <div class="bubble-actions"><button onclick="editOrder('${escHtml(first.id)}')">Szerkesztés</button><button class="secondary" title="Visszaszállítás: a projekt lesz a felrakó, a beszállító a lerakó" onclick="returnOrder('${escHtml(first.id)}')">↩ Visszáru</button><button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button><button class="secondary v115-thread${szalOlvasatlan ? ' has-unread' : ''}" title="A fuvarhoz írt üzenetek" onclick="openThreadGroupV117('${escHtml(ids)}')">✉ Üzenetek${szalOsszes ? ` (${szalOsszes})` : ''}</button><button class="secondary v109-next-day" title="A fuvar átkerül ugyanehhez a sofőrhöz, a következő munkanapra" onclick="moveToNextWorkdayV109('${escHtml(ids)}')">→ Következő napra</button>${group.orders.some(hasOutlookSource) ? `<button onclick="openSourceMail('${escHtml((group.orders.find(hasOutlookSource) || first).id)}')">Csatolmány</button>` : ''}<button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button><button class="secondary ${deliveryV134.marked ? 'has-photos' : ''}" title="${deliveryV134.files ? `${deliveryV134.files} feltöltött szállítólevél-fájl` : deliveryV134.archived ? 'A szállítólevelek archiválva' : 'Még nincs feltöltött fotó'}" onclick="openMediaGallery('${escHtml(ids)}')">📎 ${escHtml(deliveryV134.label)}</button></div>
         <button class="complete-button ${complete ? 'done' : ''}" onclick="v37ToggleGroupComplete('${escHtml(ids)}')">${complete ? '✓' : '○'}</button>
         <button class="trash" onclick="v33DeleteGroup('${escHtml(ids)}')">🗑</button>
       </article>

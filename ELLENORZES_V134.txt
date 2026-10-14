@@ -1,0 +1,28 @@
+FUVARSZERVEZŐ V134 – HELYI ELLENŐRZÉS
+
+Futtatott parancsok:
+  node --check (minden .js fájl)
+  node TEST_V134.js     (a TEST_V132_SYNC.js, TEST_V133_FEATURES.js és
+                         TEST_V134_FEATURES.js teszteket is futtatja)
+
+Eredmény:
+  Szintaktikai ellenőrzés: sikeres.
+  Elfogadási tesztek: 477/477 sikeres (470 korábbi + 7 új).
+  Régebbi tesztek: TEST_V33–V49 sikeres. A TEST_V52/V53/V54 1–2 hibája
+  változatlan a V131 óta (nem a V134 okozza).
+
+Új tesztek:
+  - üres galériánál szürke gomb, szám nélkül; a szám a valós fájlszám;
+    archivált és vegyes felirat;
+  - a galéria eltakarítja a fájl nélküli maradványjelölést, az archiváltat
+    megtartja;
+  - a sofőr csak az aktív napon, a saját fuvarján, nem archivált fájlt
+    törölhet; a régi napot a galéria sem módosítja;
+  - feltöltés és törlés után azonnal változik a szám;
+  - a sofőri fájlszám kihagyja az Outlook-forrásmellékletet;
+  - a jogosultság miatt elmaradt törlés hibát ad.
+
+SQL: a SUPABASE_SOFOR_TORLES_V134.sql PostgreSQL-motoron (PGlite), valódi
+sorszintű jogosultsággal tesztelve, kétszeri futtatással: 8/8 eset
+sikeres (másik sofőr, tegnapi és holnapi fuvar tiltva; mai engedve; más
+tároló tiltva; admin engedve).

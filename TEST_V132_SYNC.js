@@ -274,8 +274,10 @@ async function run(test) {
     vm.runInContext(src.slice(src.indexOf('function liveDeliveryReportsV133'), src.indexOf('window.deliveryPhotoCountV132', start)), c);
     assert.equal(c.deliveryPhotoCountV132({ id: 'o1', deliveryReports: [] }), 0);
     c.deliveryFileCountsV132 = new Map([['o1', 2]]);
+    c.deliveryFileCountsLoadedV134 = true;
     assert.equal(c.deliveryPhotoCountV132({ id: 'o1', deliveryReports: [] }), 2, 'elveszett jelölésnél a fájl sem zöldíti');
-    assert.equal(c.deliveryPhotoCountV132({ id: 'o1', deliveryReports: [{ photoCount: 3 }] }), 3);
+    /* V134: a szám csak a ténylegesen meglévő fájlokból jön. */
+    assert.equal(c.deliveryPhotoCountV132({ id: 'o1', deliveryReports: [{ photoCount: 3 }] }), 2);
     const v37 = fs.readFileSync(__dirname + '/planner-v37.js', 'utf8');
     assert.ok(v37.includes('global.deliveryPhotoCountV132(order)'), 'a buborék nem a közös számlálót használja');
   });

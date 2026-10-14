@@ -631,6 +631,33 @@
     return result;
   }
 
+  /* V134: a sofőri felület a saját fuvarjaira kérdezi le a fájlszámot,
+     ugyanazzal a szabállyal, mint az admin (Outlook-forrás nélkül). */
+  async function fetchDeliveryFileCountsForOrdersV134(orderIds) {
+    const ids = [...new Set((orderIds || []).map(String).filter(Boolean))];
+    const files = [];
+    for (let start = 0; start < ids.length; start += 100) {
+      const values = ids.slice(start, start + 100).map(id => `"${id.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',');
+      const rows = await dbRequest(`delivery_report_files?${qs({ select: 'order_id,report_id', order_id: `in.(${values})` })}`);
+      files.push(...(rows || []));
+    }
+    const counts = new Map(ids.map(id => [id, 0]));
+    let sourceReports = new Set();
+    const reportIds = [...new Set(files.map(file => String(file.report_id || '')).filter(Boolean))];
+    if (reportIds.length) {
+      try {
+        const notes = await fetchReportNotesV133(reportIds);
+        sourceReports = new Set([...notes.values()].filter(row => /outlook\s*forr/i.test(String(row.note || ''))).map(row => String(row.id)));
+      } catch (error) { console.warn('[V134] a forrásmellékletek azonosítása nem sikerült', error); }
+    }
+    for (const file of files) {
+      if (sourceReports.has(String(file.report_id))) continue;
+      const id = String(file.order_id || '');
+      if (id) counts.set(id, (counts.get(id) || 0) + 1);
+    }
+    return counts;
+  }
+
   async function loadOrdersIntoState({ preserveLocalIfRemoteEmpty = false } = {}) {
     emit('syncing', 'Fuvarok betöltése…');
     const [orders, backlog] = await Promise.all([fetchOrders(), fetchBacklog()]);
@@ -748,9 +775,14 @@
     }
 
     // 2. a nyilvántartó sor
-    await dbRequest(`delivery_report_files?${qs({ id: `eq.${azonosito}` })}`, {
-      method: 'DELETE', headers: { Prefer: 'return=minimal' }
+    /* V134: a jogosultsági szabály csendben 0 sort törölhet – ezt
+       hibaként jelezzük, különben a felület törlést mutatna. */
+    const toroltSorok = await dbRequest(`delivery_report_files?${qs({ id: `eq.${azonosito}`, select: 'id' })}`, {
+      method: 'DELETE', headers: { Prefer: 'return=representation' }
     });
+    if (Array.isArray(toroltSorok) && !toroltSorok.length) {
+      throw new Error('A szerver nem engedte a törlést. Sofőrként csak a saját, MAI napi fuvar fájlja törölhető (hétvégén egyik sem). Ha hétköznap is ezt látod, az adminnak le kell futtatnia a SUPABASE_SOFOR_TORLES_V134.sql fájlt.');
+    }
     return { deleted: true, path: ut, size: +fileRow.file_size || 0 };
   }
 
@@ -861,6 +893,8 @@
     fetchDeliveryFileCountsV132, completionStateV132, applyCompletionV132,
     mergeAdminDriverFieldsV131,
     /* V133 */
-    mergeReportsV133, applyReportsV133, fetchReportNotesV133
+    mergeReportsV133, applyReportsV133, fetchReportNotesV133,
+    /* V134 */
+    fetchDeliveryFileCountsForOrdersV134
   };
 })(typeof window !== 'undefined' ? window : globalThis);

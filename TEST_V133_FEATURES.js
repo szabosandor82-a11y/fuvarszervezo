@@ -100,8 +100,8 @@ async function run(test) {
     assert.ok(auth.includes('archivedReportsNoteV133(orders)'), 'a galéria nem jelzi az archivált fájlokat');
     assert.ok(auth.includes("(archivedNoteV133 ? '' : '<div class=\"mobile-empty\">Ehhez a fuvarhoz még nincs elmentett fotó.</div>')"), 'archivált fuvarnál is „nincs fotó” jelenne meg');
     const v37 = fs.readFileSync(__dirname + '/planner-v37.js', 'utf8');
-    assert.ok(v37.includes('archiveSuffixV133(group.orders)'), 'az admin gombján nincs archiválva felirat');
-    assert.ok(auth.includes('safe(archiveSuffix)'), 'a sofőri gombon nincs archiválva felirat');
+    assert.ok(v37.includes('deliveryStateOfV134(group.orders)') && v37.includes('escHtml(deliveryV134.label)'), 'az admin gombján nincs archiválva felirat');
+    assert.ok(auth.includes('safe(delivery.label)'), 'a sofőri gombon nincs archiválva felirat');
     const css = fs.readFileSync(__dirname + '/styles.css', 'utf8');
     assert.ok(css.includes('.v57-row-actions button.has-photos'), 'a sofőri zöld gomb stílusa hiányzik');
     assert.ok(css.includes('.v133-archived-note'), 'az archivált felirat stílusa hiányzik');

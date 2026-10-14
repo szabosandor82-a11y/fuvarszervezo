@@ -227,22 +227,39 @@ function liveDeliveryReportsV133(order){
   return (order?.deliveryReports||[]).filter(r=>r&&!torolt.has(String(r.id||r.at||'')));
 }
 window.liveDeliveryReportsV133=liveDeliveryReportsV133;
+/* V134 – A SZÁM CSAK A TÉNYLEGESEN MEGLÉVŐ FÁJLOKBÓL JÖN
+
+   A gomb zöldje és a zárójeles szám a feltöltött fájlok táblájából
+   (delivery_report_files) jön. Ha nincs fájl, a gomb alapállapotban van:
+   szürke, szám nélkül – akkor is, ha a fuvaron egy régi jelölés maradt.
+   Amíg a fájlszámok még nem töltődtek be, a fuvar saját (nem archivált)
+   jelölése szolgál átmeneti becslésként. */
 function deliveryPhotoCountV132(order){
   if(!order)return 0;
-  const jeloles=liveDeliveryReportsV133(order).reduce((n,r)=>n+(+r.photoCount||+r.fileCount||1),0);
-  const fajl=+(window.deliveryFileCountsV132?.get?.(String(order.id))||0);
-  return Math.max(jeloles,fajl);
+  const map=window.deliveryFileCountsV132;
+  if(window.deliveryFileCountsLoadedV134&&map&&typeof map.get==='function')return +(map.get(String(order.id))||0);
+  return liveDeliveryReportsV133(order).filter(r=>!r.archivedAtV133).reduce((n,r)=>n+(+r.photoCount||+r.fileCount||1),0);
 }
 window.deliveryPhotoCountV132=deliveryPhotoCountV132;
-/* V133: a Mentett fotók felirata. Ha minden szállítólevél archiválva van,
-   „· archiválva” kerül mögé; ha csak egy részük, a darabszámuk. */
-function deliveryArchiveSuffixV133(orders){
-  const lista=(Array.isArray(orders)?orders:[orders]).filter(Boolean);
-  const osszes=lista.reduce((n,o)=>n+deliveryPhotoCountV132(o),0);
-  const archivalt=lista.reduce((n,o)=>n+liveDeliveryReportsV133(o).filter(r=>r.archivedAtV133).reduce((m,r)=>m+(+r.photoCount||+r.fileCount||1),0),0);
-  if(!archivalt)return'';
-  return archivalt>=osszes?' · archiválva':` · ${archivalt} archiválva`;
+/* Archivált (a tárhelyről már törölt) szállítólevelek száma a jelölésből. */
+function deliveryArchivedCountV134(order){
+  return liveDeliveryReportsV133(order).filter(r=>r.archivedAtV133).reduce((n,r)=>n+(+r.photoCount||+r.fileCount||1),0);
 }
+window.deliveryArchivedCountV134=deliveryArchivedCountV134;
+/* A Mentett fotók gomb állapota egy vagy több fuvarra:
+     files     meglévő fájlok száma (ez kerül zárójelbe)
+     archived  archivált szállítólevelek száma
+     marked    zöld-e a gomb (van fájl, vagy archiválva volt)
+     label     „Mentett fotók (2) · 3 archiválva” / „Mentett fotók · archiválva” */
+function deliveryStateV134(orders){
+  const lista=(Array.isArray(orders)?orders:[orders]).filter(Boolean);
+  const files=lista.reduce((n,o)=>n+deliveryPhotoCountV132(o),0);
+  const archived=lista.reduce((n,o)=>n+deliveryArchivedCountV134(o),0);
+  const suffix=archived?(files?` · ${archived} archiválva`:' · archiválva'):'';
+  return {files,archived,marked:files>0||archived>0,suffix,label:`Mentett fotók${files?` (${files})`:''}${suffix}`};
+}
+window.deliveryStateV134=deliveryStateV134;
+function deliveryArchiveSuffixV133(orders){return deliveryStateV134(orders).suffix}
 window.deliveryArchiveSuffixV133=deliveryArchiveSuffixV133;
 
 /* V132: az Outlook-újraimport új azonosítóval hozza létre a fuvart. A
