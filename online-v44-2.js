@@ -851,14 +851,20 @@
      nem mozgatja, tehát gyors és visszafordítható. */
   async function relinkDeliveryFiles(oldOrderId, newOrderId) {
     const regi = String(oldOrderId || '').trim(), uj = String(newOrderId || '').trim();
-    if (!regi || !uj || regi === uj) return { moved: 0 };
-    const rows = await dbRequest(`delivery_report_files?${qs({ select: 'id', order_id: `eq.${regi}` })}`);
-    if (!rows || !rows.length) return { moved: 0 };
-    await dbRequest(`delivery_report_files?${qs({ order_id: `eq.${regi}` })}`, {
-      method: 'PATCH', body: { order_id: uj }, headers: { Prefer: 'return=minimal' }
+    if (!regi || !uj || regi === uj) return { moved: 0, reports: 0 };
+    /* V137: a bejegyzések (delivery_reports) is átkerülnek, nem csak a
+       fájlsorok. A szerver a fuvar törlésekor mindkettőt magával vinné
+       (ON DELETE CASCADE), ezért ennek a régi fuvar törlése ELŐTT kell
+       megtörténnie. */
+    const files = await dbRequest(`delivery_report_files?${qs({ order_id: `eq.${regi}`, select: 'id' })}`, {
+      method: 'PATCH', body: { order_id: uj }, headers: { Prefer: 'return=representation' }
     });
-    return { moved: rows.length };
+    const reports = await dbRequest(`delivery_reports?${qs({ order_id: `eq.${regi}`, select: 'id' })}`, {
+      method: 'PATCH', body: { order_id: uj }, headers: { Prefer: 'return=representation' }
+    });
+    return { moved: Array.isArray(files) ? files.length : 0, reports: Array.isArray(reports) ? reports.length : 0 };
   }
+
 
   /* ===== V119 – A FÁJL TÖRLÉSE A TÁROLÓBÓL IS ========================
 

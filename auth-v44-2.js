@@ -40,6 +40,44 @@
   const writtenAtV132 = new Map();
   const completedSeenV132 = new Map();
   const deletedThisSessionV132 = new Set();
+
+  /* ===== V137 – A SZERVEREN TÖRÖLT FUVAR NEM TÉR VISSZA ================
+
+     A telefon eddig nem tudta megkülönböztetni a helyben létrehozott, még
+     fel nem töltött fuvart a szerveren közben TÖRÖLTTŐL – mindkettő „csak
+     helyben létezett”. A törölt fuvart megtartotta, és minden mentéskor
+     visszaküldte; a szerver ezt elutasította, és mivel a sofőr módosításai
+     egyetlen kérésben mennek fel, emiatt a többi változása sem jutott fel.
+
+     Most a program megjegyzi (tartósan), mely fuvarok voltak már a
+     szerveren. Ami volt, de már nincs, az törölt: eltűnik. Helyben csak az
+     maradhat meg, ami még soha nem volt fent, és sofőrnél csak akkor, ha
+     hátralék-átütemezésből született (más új fuvart a szerver úgysem fogad
+     el). */
+  const KNOWN_IDS_KEY_V137 = 'fuvarszervezo_known_server_ids_v137';
+  const knownServerIdsV137 = new Set();
+  try { for (const id of JSON.parse(localStorage.getItem(KNOWN_IDS_KEY_V137) || '[]')) knownServerIdsV137.add(String(id)); } catch (_) {}
+  function rememberServerIdsV137(ids) {
+    let added = false;
+    for (const id of ids || []) { const key = String(id || ''); if (key && !knownServerIdsV137.has(key)) { knownServerIdsV137.add(key); added = true; } }
+    if (added) { try { localStorage.setItem(KNOWN_IDS_KEY_V137, JSON.stringify([...knownServerIdsV137])); } catch (_) {} }
+  }
+  function driverCreatedOrderV137(order) {
+    return !!(order && (order.movedFromOrderId || order.failedMovedFrom || order.movedByDriverV121));
+  }
+  /* Megtartható-e egy helyben meglévő, a szerveren hiányzó fuvar? */
+  function keepLocalOnlyOrderV137(order) {
+    const id = String(order?.id || '');
+    if (!id || knownServerIdsV137.has(id)) return false;
+    if (currentProfile?.role === 'admin') return true;
+    return driverCreatedOrderV137(order);
+  }
+  /* V137: az újraimport idejére a lecserélt fuvar szerveroldali törlése
+     visszatartható, amíg a mellékletei át nem kerültek az új fuvarra
+     (a szerver a fuvarral együtt a mellékletek nyilvántartását is törli). */
+  const holdDeleteV137 = new Set();
+  global.holdOrderDeletionV137 = ids => { for (const id of ids || []) holdDeleteV137.add(String(id)); };
+  global.releaseOrderDeletionV137 = ids => { for (const id of ids || []) holdDeleteV137.delete(String(id)); retrySyncLaterV132(300); };
   let loadingV132 = false;
 
   function orderKeyV132(order) {
@@ -91,7 +129,7 @@
   function collectChangesV132() {
     const ids = new Set((state.orders || []).map(order => String(order.id)));
     const orders = (state.orders || []).filter(order => !inflightV132.has(String(order.id)) && syncedV132.get(String(order.id)) !== orderKeyV132(order));
-    const deletedIds = [...syncedV132.keys()].filter(id => !ids.has(id) && !inflightV132.has(id));
+    const deletedIds = [...syncedV132.keys()].filter(id => !ids.has(id) && !inflightV132.has(id) && !holdDeleteV137.has(id));
     const backlogIds = new Set((state.backlog || []).map(entry => String(entry.id)));
     const backlogChanged = (state.backlog || []).filter(entry => syncedBacklogV132.get(String(entry.id)) !== backlogKeyV132(entry));
     const backlogDeletedIds = [...syncedBacklogV132.keys()].filter(id => !backlogIds.has(id));
@@ -767,6 +805,19 @@
         // a régi szerveroldali állapot nyerne, és a változás elveszne.
         // Ezért időbélyeg alapján fésülünk: a frissebb rekord marad.
         const merged = mergeOrdersByTimestampV70(localOrders, remoteOrders);
+        /* V137: a szerveren nem létező helyi fuvar közül csak a valóban új
+           marad meg; a szerveren közben törölt eltűnik. */
+        const remoteIdsV137 = new Set(remoteOrders.map(order => String(order.id)));
+        const droppedV137 = [];
+        merged.orders = merged.orders.filter(order => {
+          const id = String(order.id);
+          if (remoteIdsV137.has(id) || keepLocalOnlyOrderV137(order)) return true;
+          droppedV137.push(order.orderNo || id);
+          merged.keptLocalIds.delete(id);
+          return false;
+        });
+        if (droppedV137.length) console.info('[V137] A szerveren már nem létező fuvar eltávolítva:', droppedV137.join(', '));
+        rememberServerIdsV137(remoteIdsV137);
         state.orders = merged.orders;
         state.backlog = mergeBacklogByTimestampV70(state.backlog || [], remoteBacklog, merged.keptLocalIds);
         /* V132: csak a helyben frissebb fuvarok számítanak módosítottnak,
@@ -780,6 +831,7 @@
             const kept = state.orders.filter(order => merged.keptLocalIds.has(String(order.id)));
             await global.V44Online.syncChangedOrdersV132({ orders: kept }, currentProfile);
             for (const order of kept) syncedV132.set(String(order.id), orderKeyV132(order));
+            rememberServerIdsV137(kept.map(order => order.id));
           }
           catch (error) { console.warn('[V70] A helyi változás feltöltése nem sikerült', error); }
         }
@@ -826,7 +878,9 @@
       });
       /* A szerveren még nem létező, de helyben piszkos fuvar (pl. most
          létrehozott célfuvar) megmarad, amíg fel nem jut. */
-      for (const [id, local] of localById) if (keep.has(id) && !remoteIds.has(id) && syncedV132.get(id) !== orderKeyV132(local) && !syncedV132.has(id)) merged.push(local);
+      /* V137: csak a még soha fel nem jutott, valóban új fuvar marad meg. */
+      for (const [id, local] of localById) if (keep.has(id) && !remoteIds.has(id) && !syncedV132.has(id) && keepLocalOnlyOrderV137(local)) merged.push(local);
+      rememberServerIdsV137(remoteIds);
       const keptBacklog = (state.backlog || []).filter(entry => syncedBacklogV132.get(String(entry.id)) !== backlogKeyV132(entry));
       const keptBacklogIds = new Set(keptBacklog.map(entry => String(entry.id)));
       state.orders = merged;
@@ -886,6 +940,7 @@
     try {
       const from = typeof shiftWorkday === 'function' ? shiftWorkday(currentWorkday(), -5) : fallbackShiftWorkday(currentWorkday(), -5);
       const [remoteOrders, countsChanged] = await Promise.all([global.V44Online.fetchOrdersSinceV132(from), refreshDeliveryCountsV132()]);
+      rememberServerIdsV137(remoteOrders.map(order => order.id));
       if (refreshInProgress || loadingV132) return;
       const localById = new Map((state.orders || []).map(order => [String(order.id), order]));
       const deletedLocally = new Set([...syncedV132.keys()].filter(id => !localById.has(id)));
@@ -1679,6 +1734,7 @@
           if (!isDriver) syncedV132.set(id, orderKeyV132(order));
           else if (orderKeyV132(order) === sentKeys.get(id)) syncedV132.set(id, sentKeys.get(id));
         }
+        rememberServerIdsV137(changes.orders.map(order => order.id));
         for (const id of changes.deletedIds) { syncedV132.delete(id); deletedThisSessionV132.add(id); }
         if (isDriver) syncedV132.forEach((_, id) => { if (!(state.orders || []).some(order => String(order.id) === id)) syncedV132.delete(id); });
         for (const [id, key] of sentBacklog) syncedBacklogV132.set(id, key);
@@ -1715,12 +1771,50 @@
         }
       } catch (error) {
         console.error('[V132] Online mentési hiba', error);
+        /* V137: sofőrnél egy elutasított fuvar ne akassza meg a többit –
+           fuvaronként újrapróbáljuk, a szerveren már nem létezőt pedig
+           helyben is eltávolítjuk. */
+        if (isDriver && changes.orders.length) {
+          try { await isolateDriverSyncV137(changes.orders, sentKeys); }
+          catch (inner) { console.warn('[V137] fuvaronkénti mentés', inner); }
+        }
         setSyncStatus({ state: 'error', message: `Mentési hiba: ${error.message}` });
-        retrySyncLaterV132(15000);
+        if (hasChangesV132(collectChangesV132())) retrySyncLaterV132(15000);
       }
     })();
     try { await syncRunningV132; } finally { syncRunningV132 = null; }
     if (hasChangesV132(collectChangesV132()) && !saveTimer) retrySyncLaterV132(900);
+  }
+
+  async function isolateDriverSyncV137(orders, sentKeys) {
+    const removed = [];
+    for (const order of orders) {
+      const id = String(order.id);
+      try {
+        await global.V44Online.syncChangedOrdersV132({ orders: [order] }, currentProfile);
+        if (orderKeyV132(order) === sentKeys.get(id)) syncedV132.set(id, sentKeys.get(id));
+        rememberServerIdsV137([id]);
+        try { await global.V44Online.setDriverFieldsV132?.(order); } catch (_) {}
+      } catch (error) {
+        let exists = true;
+        try { exists = (await global.V44Online.fetchOrderPayloadsV132([id])).has(id); }
+        catch (_) { exists = true; }
+        if (!exists && !keepLocalOnlyOrderV137(order)) {
+          state.orders = (state.orders || []).filter(item => String(item.id) !== id);
+          syncedV132.delete(id);
+          removed.push(order.orderNo || id);
+        } else {
+          console.warn('[V137] a fuvar mentése nem sikerült', order.orderNo || id, error);
+        }
+      }
+    }
+    if (removed.length) {
+      console.info('[V137] A szerveren már nem létező fuvar eltávolítva:', removed.join(', '));
+      loadingV132 = true;
+      try { if (typeof global.save === 'function') global.save(false); } finally { loadingV132 = false; }
+      if (!isAdmin()) renderDriverPortal();
+    }
+    return removed;
   }
 
   /* V132 – KÖZVETLEN MENTÉS EGY FUVARRA (pipa, szállítólevél, üzenet)
@@ -1942,7 +2036,10 @@
     isDirty: order => isDirtyV132(order),
     installSaveHook: () => installGuardsAndHooks(),
     adminPoll: () => adminPollV132(),
-    synced: () => syncedV132
+    synced: () => syncedV132,
+    knownIds: () => knownServerIdsV137,
+    rememberIds: ids => rememberServerIdsV137(ids),
+    initialLoad: () => initialOnlineLoad()
   };
   global.markOrdersSyncedV132 = orders => {
     for (const order of orders || []) if (order?.id) syncedV132.set(String(order.id), orderKeyV132(order));

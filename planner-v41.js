@@ -2058,6 +2058,10 @@ ${entry.subject || ''}`) || project;
       const kulcs = `${String(regi.orderNo || '').trim()}|${norm(regi.pickupName || '')}`;
       elozoAzonositok.set(kulcs, String(regi.id));
     }
+    /* V137: a lecserélt fuvar szerveroldali törlését visszatartjuk, amíg a
+       mellékletei át nem kerültek az új fuvarra – a szerver a fuvarral együtt
+       a mellékletek nyilvántartását is törölné. */
+    if (replaceIds.size && typeof global.holdOrderDeletionV137 === 'function') global.holdOrderDeletionV137([...replaceIds]);
     if (replaceIds.size) {
       state.orders = (state.orders || []).filter(order => !replaceIds.has(order.id));
       state.backlog = (state.backlog || []).filter(record => !replaceIds.has(record.sourceOrderId) && !replaceIds.has(record.targetOrderId));
@@ -2092,16 +2096,39 @@ ${entry.subject || ''}`) || project;
         global.saveOrderAttachmentsV73(order.id, inline);
       }
     });
-    /* a régi fuvar mellékleteinek átkötése az újra */
-    if (elozoAzonositok.size && global.V44Online?.relinkDeliveryFiles) {
+    /* a régi fuvar mellékleteinek átkötése az újra
+       V137: előbb az új fuvar kerül fel (a hivatkozás miatt), utána az
+       átkötés, és csak a végén törlődik a régi fuvar a szerverről. */
+    if (replaceIds.size) {
+      const parok = [];
       for (const order of accepted) {
         const kulcs = `${String(order.orderNo || '').trim()}|${norm(order.pickupName || '')}`;
         const regiId = elozoAzonositok.get(kulcs);
-        if (regiId && regiId !== String(order.id)) {
-          global.V44Online.relinkDeliveryFiles(regiId, String(order.id))
-            .catch(error => console.warn('[V107] a régi mellékletek átkötése nem sikerült', order.orderNo, error));
-        }
+        if (regiId && regiId !== String(order.id)) parok.push([regiId, String(order.id)]);
       }
+      const visszatartott = [...replaceIds];
+      (async () => {
+        const hibas = [];
+        try {
+          if (parok.length && global.V44Online?.relinkDeliveryFiles) {
+            if (typeof global.ensureOrdersOnServerV135 === 'function') await global.ensureOrdersOnServerV135(parok.map(par => par[1]));
+            for (const [regiId, ujId] of parok) {
+              let kesz = false;
+              for (let proba = 0; proba < 3 && !kesz; proba++) {
+                try { await global.V44Online.relinkDeliveryFiles(regiId, ujId); kesz = true; }
+                catch (error) { console.warn('[V137] a mellékletek átkötése', regiId, error); await new Promise(r => setTimeout(r, 700 * (proba + 1))); }
+              }
+              if (!kesz) hibas.push(ujId);
+            }
+          }
+        } finally {
+          global.releaseOrderDeletionV137?.(visszatartott);
+          if (hibas.length && typeof alert === 'function') {
+            const nevek = accepted.filter(order => hibas.includes(String(order.id))).map(order => order.orderNo).join(', ');
+            alert(`Az újraimportált fuvar korábbi mellékleteit nem sikerült átkötni: ${nevek}. A régi szállítólevelek ezeknél nem látszanak.`);
+          }
+        }
+      })();
     }
     /* V108: a levél mellékletei a FUVARHOZ is elmentődnek, a levélből érkező
        eredeti bájtokkal. Így a Csatolmány akkor is megnyitja őket, ha a

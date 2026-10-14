@@ -1,0 +1,34 @@
+FUVARSZERVEZŐ V137
+
+A HIBA OKA (Supabase-ben igazolva)
+Az admin a 06935-öt törölte, a szerverről el is tűnt, de Patrik
+telefonján megmaradt. A telefon induláskor a nála tárolt fuvarokat
+összefésüli a szerverről jövőkkel, és a csak nála meglévőt „még fel nem
+töltött új fuvarnak” tekintette – a szerveren TÖRÖLTET is. Visszaküldte,
+de a sofőri mentő eljárás elutasította („Új fuvar csak hátralékos tétel
+átütemezésével hozható létre.”). A V132-es változáskövetés szerint ami nem
+jutott fel, az megmarad – így a fuvar ott ragadt. Mivel a sofőr módosításai
+egyetlen kérésben mennek fel, közben a többi változása (pipák, szállítólevél
+jelölés) sem jutott fel.
+
+JAVÍTÁS
+- A program tartósan megjegyzi, mely fuvarok voltak már a szerveren. Ami
+  volt, de már nincs, az törölt: indításkor és frissítéskor eltűnik.
+- Helyben csak a soha fel nem jutott, valóban új fuvar maradhat meg;
+  sofőrnél csak a hátralék-átütemezésből született (mást a szerver úgysem
+  fogad el).
+- Ha a szerver egy sofőri mentést elutasít, a program fuvaronként
+  újrapróbálja: a többi fuvar változása feljut, a szerveren már nem
+  létező fuvar pedig a telefonról is eltűnik.
+- Patrik telefonja a V137 betöltése után magától rendbe jön; a közben fel
+  nem jutott változásai is felmennek.
+
+ÚJRAIMPORT – MELLÉKLETEK MEGŐRZÉSE
+- A Supabase-ben minden fuvarra hivatkozó tábla ON DELETE CASCADE: a fuvar
+  törlése a melléklet-bejegyzéseket és fájlsorokat is törli. Újraimportnál a
+  régi fuvar törlése így megelőzhette a mellékletek átkötését az új fuvarra.
+- Most a régi fuvar szerveroldali törlése várakozik: előbb az új fuvar kerül
+  fel, utána a mellékletek – a fájlsorok ÉS a bejegyzések – átkötése, és
+  csak ezután törlődik a régi fuvar. Sikertelen átkötésről figyelmeztetés jön.
+
+SQL-módosítás nem kell.

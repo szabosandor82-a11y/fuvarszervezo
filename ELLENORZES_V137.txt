@@ -1,0 +1,22 @@
+FUVARSZERVEZŐ V137 – HELYI ELLENŐRZÉS
+
+Futtatott parancsok:
+  node --check (minden .js fájl)
+  node TEST_V137.js   (a V132–V137 funkciótesztekkel együtt)
+
+Eredmény:
+  Szintaktikai ellenőrzés: sikeres.
+  Elfogadási tesztek: 494/494 sikeres (489 korábbi + 5 új).
+  Régebbi tesztek: TEST_V33–V49 sikeres. A TEST_V52/V53/V54 1–2 hibája
+  változatlan a V131 óta.
+
+Új tesztek – a hamis szerver a valódi sync_own_orders viselkedését követi
+(nem létező, nem hátralékos fuvarnál az egész kérést elutasítja):
+  - indításkor a szerveren törölt fuvar eltűnik, az új hátralék-fuvar
+    megmarad és feljut;
+  - a már ismert, de törölt fuvar frissítéskor sem tér vissza;
+  - egy elutasított (ragadt) fuvar mellett a pipa feljut, a ragadt fuvar
+    eltűnik – ugyanez a teszt a V136-on a valós hibát mutatja
+    („a pipa nem jutott fel a ragadt fuvar miatt”);
+  - újraimportnál a régi fuvar törlése az átkötés végéig várakozik;
+  - az átkötés a fájlsorokat és a bejegyzéseket is viszi.
