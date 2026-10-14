@@ -137,6 +137,10 @@
     const vehicles = typeof activeVehicles === 'function' ? activeVehicles() : [];
     const label = $('#v94Date');
     if (label && typeof selectedDate === 'function') label.textContent = selectedDate();
+    /* V133: a fejléc dátummezője is a kiválasztott napot mutassa – akkor is,
+       ha a napot a „Fuvar napja és műveletek” panelen váltották. */
+    const picker = $('#v94Picker');
+    if (picker && typeof selectedDate === 'function' && document.activeElement !== picker) picker.value = selectedDate();
     if (!vehicles.length) {
       host.innerHTML = '<div class="v93-empty">Nincs aktív jármű erre a napra.</div>';
       return;

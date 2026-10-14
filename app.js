@@ -220,13 +220,30 @@ window.reconcileState = reconcileState;
    számít, így a gomb akkor is bezöldül, ha a jelölés valahol elveszett,
    de a fájl megvan – és akkor is zöld marad, ha a fájlt archiválás után
    törölték, de a jelölés megvan. */
+/* V133: a törölt szállítólevél-bejegyzés (deliveryReportsDeletedV133) nem
+   számít, akkor sem, ha egy régi példány még tartalmazza. */
+function liveDeliveryReportsV133(order){
+  const torolt=new Set((order?.deliveryReportsDeletedV133||[]).map(String));
+  return (order?.deliveryReports||[]).filter(r=>r&&!torolt.has(String(r.id||r.at||'')));
+}
+window.liveDeliveryReportsV133=liveDeliveryReportsV133;
 function deliveryPhotoCountV132(order){
   if(!order)return 0;
-  const jeloles=(order.deliveryReports||[]).reduce((n,r)=>n+(+r.photoCount||+r.fileCount||1),0);
+  const jeloles=liveDeliveryReportsV133(order).reduce((n,r)=>n+(+r.photoCount||+r.fileCount||1),0);
   const fajl=+(window.deliveryFileCountsV132?.get?.(String(order.id))||0);
   return Math.max(jeloles,fajl);
 }
 window.deliveryPhotoCountV132=deliveryPhotoCountV132;
+/* V133: a Mentett fotók felirata. Ha minden szállítólevél archiválva van,
+   „· archiválva” kerül mögé; ha csak egy részük, a darabszámuk. */
+function deliveryArchiveSuffixV133(orders){
+  const lista=(Array.isArray(orders)?orders:[orders]).filter(Boolean);
+  const osszes=lista.reduce((n,o)=>n+deliveryPhotoCountV132(o),0);
+  const archivalt=lista.reduce((n,o)=>n+liveDeliveryReportsV133(o).filter(r=>r.archivedAtV133).reduce((m,r)=>m+(+r.photoCount||+r.fileCount||1),0),0);
+  if(!archivalt)return'';
+  return archivalt>=osszes?' · archiválva':` · ${archivalt} archiválva`;
+}
+window.deliveryArchiveSuffixV133=deliveryArchiveSuffixV133;
 
 /* V132: az Outlook-újraimport új azonosítóval hozza létre a fuvart. A
    fájlok átkötése mellett a sofőr szállítólevél-jelölése is átkerül a
@@ -2007,8 +2024,12 @@ async function runPurgeV119(){
     });
     /* A sikeresen töröltek kikerülnek a nyilvántartásból is. */
     const maradt = archivedMapV119();
-    for (const file of lista) if (!eredmeny.hibas.some(h => h.file === (file.file_name || file.storage_path))) delete maradt[String(file.id)];
+    const toroltek = lista.filter(file => !eredmeny.hibas.some(h => h.file === (file.file_name || file.storage_path)));
+    for (const file of toroltek) delete maradt[String(file.id)];
     localStorage.setItem(ARCHIVE_KEY_V119, JSON.stringify(maradt));
+    /* V133: a fuvarok jelölése megmarad, „archiválva” felirattal. */
+    try { await window.markArchivedReportsV133?.(toroltek); }
+    catch (error) { console.warn('[V133] az archivált jelölés', error); }
 
     host.textContent = `Kész: ${eredmeny.kesz} fájl törölve, ${humanSizeV119(eredmeny.felszabadult)} szabadult fel` +
       (eredmeny.hibas.length ? `, ${eredmeny.hibas.length} sikertelen` : '') + '.';

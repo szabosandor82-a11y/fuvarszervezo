@@ -286,17 +286,47 @@
     return target;
   }
 
+  /* ===== V133 – SZÁLLÍTÓLEVÉL-JELÖLÉS: TÖRLÉS ÉS ARCHIVÁLÁS ===========
+
+     A két oldal szállítólevél-listája azonosító szerint egyesül, de:
+       - a TÖRÖLT bejegyzés (deliveryReportsDeletedV133) egyik oldalról sem
+         jöhet vissza – így tűnik el a jelölés, ha a galériából törölték az
+         utolsó fájlját;
+       - az ARCHIVÁLT bejegyzés (archivedAtV133) jelölése megmarad, akkor is,
+         ha a másik oldal régi példánya még nem tud róla. */
+  const reportKeyV133 = report => String(report?.id || report?.at || JSON.stringify(report));
+  function mergeReportsV133(a, b) {
+    const deleted = new Set([...(a?.deliveryReportsDeletedV133 || []), ...(b?.deliveryReportsDeletedV133 || [])].map(String));
+    const reports = new Map();
+    for (const report of [...(a?.deliveryReports || []), ...(b?.deliveryReports || [])]) {
+      if (!report) continue;
+      const key = reportKeyV133(report);
+      if (deleted.has(key)) continue;
+      const previous = reports.get(key);
+      if (!previous) { reports.set(key, report); continue; }
+      const combined = { ...previous, ...report };
+      const archivedAt = report.archivedAtV133 || previous.archivedAtV133;
+      if (archivedAt) combined.archivedAtV133 = archivedAt;
+      reports.set(key, combined);
+    }
+    return {
+      reports: [...reports.values()].sort((x, y) => String(x.at || '').localeCompare(String(y.at || ''))),
+      deleted: [...deleted],
+      had: !!((a?.deliveryReports || []).length || (b?.deliveryReports || []).length || deleted.size)
+    };
+  }
+  function applyReportsV133(target, result) {
+    if (!target || !result || !result.had) return target;
+    target.deliveryReports = result.reports;
+    if (result.deleted.length) target.deliveryReportsDeletedV133 = result.deleted;
+    return target;
+  }
+
   function mergeAdminDriverFieldsV131(order, remote) {
     if (!order || !remote) return order;
     const merged = { ...order };
 
-    const reports = new Map();
-    for (const report of [...(remote.deliveryReports || []), ...(order.deliveryReports || [])]) {
-      const key = String(report?.id || report?.at || JSON.stringify(report));
-      reports.set(key, report);
-    }
-    if (reports.size) merged.deliveryReports = [...reports.values()]
-      .sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
+    applyReportsV133(merged, mergeReportsV133(remote, order));
 
     const itemKey = (item, index) => String(item?._id || item?.code || `${item?.name || item?.description || ''}#${index}`);
     if (Array.isArray(order.items) && Array.isArray(remote.items)) {
@@ -536,7 +566,7 @@
   }
 
   /* V132: a sofőri mezők (teljesítés, szállítólevél-jelölés) szűk célú,
-     atomi írása. A SUPABASE_SOFOR_MEZOK_V132.sql hozza létre. Ha nincs
+     atomi írása. A SUPABASE_SOFOR_MEZOK_V133.sql hozza létre. Ha nincs
      létrehozva, false-t ad, és a hívó a régi úton marad. */
   function missingFunctionV132(error) {
     return /set_driver_fields_v132|PGRST202|could not find the function|does not exist|schema cache/i.test(String(error?.message || error || ''))
@@ -550,13 +580,14 @@
       completedAt: order.completed ? (order.completedAtV111 || order.completedAt || '') : '',
       completedAtV111: order.completed ? (order.completedAtV111 || order.completedAt || '') : '',
       completedUndoneAtV132: order.completedUndoneAtV132 || '',
-      deliveryReports: Array.isArray(order.deliveryReports) ? order.deliveryReports : []
+      deliveryReports: Array.isArray(order.deliveryReports) ? order.deliveryReports : [],
+      deliveryReportsDeletedV133: Array.isArray(order.deliveryReportsDeletedV133) ? order.deliveryReportsDeletedV133 : []
     };
     try {
       await dbRequest('rpc/set_driver_fields_v132', { method: 'POST', body: { p_order_id: String(order.id), p_fields: fields } });
       return true;
     } catch (error) {
-      if (missingFunctionV132(error)) { driverFieldsMissingV132 = true; console.warn('[V132] a set_driver_fields_v132 függvény nincs létrehozva (SUPABASE_SOFOR_MEZOK_V132.sql)'); return false; }
+      if (missingFunctionV132(error)) { driverFieldsMissingV132 = true; console.warn('[V132] a set_driver_fields_v132 függvény nincs létrehozva (SUPABASE_SOFOR_MEZOK_V133.sql)'); return false; }
       throw error;
     }
   }
@@ -586,6 +617,18 @@
       if (id) counts.set(id, (counts.get(id) || 0) + 1);
     }
     return counts;
+  }
+
+  /* V133: a jelentések megjegyzése – ebből derül ki, hogy sofőri
+     szállítólevél vagy Outlook-forrásmelléklet. */
+  async function fetchReportNotesV133(ids) {
+    const list = [...new Set((ids || []).map(String).filter(Boolean))];
+    const result = new Map();
+    for (let start = 0; start < list.length; start += 100) {
+      const rows = await dbRequest(`delivery_reports?${qs({ select: 'id,note,created_at', id: `in.(${list.slice(start, start + 100).join(',')})` })}`);
+      for (const row of rows || []) result.set(String(row.id), row);
+    }
+    return result;
   }
 
   async function loadOrdersIntoState({ preserveLocalIfRemoteEmpty = false } = {}) {
@@ -816,6 +859,8 @@
     /* V132 */
     syncChangedOrdersV132, fetchOrdersSinceV132, fetchOrderPayloadsV132, setDriverFieldsV132,
     fetchDeliveryFileCountsV132, completionStateV132, applyCompletionV132,
-    mergeAdminDriverFieldsV131
+    mergeAdminDriverFieldsV131,
+    /* V133 */
+    mergeReportsV133, applyReportsV133, fetchReportNotesV133
   };
 })(typeof window !== 'undefined' ? window : globalThis);

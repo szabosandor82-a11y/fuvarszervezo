@@ -1355,3 +1355,44 @@ tr.v126-report-grand td{background:#dbeafd;font-weight:800}
 .v126-entry-btn.active[data-entry-company="future"]{background:#19a8a8;color:#fff;border-color:#19a8a8}
 .v126-company-btn.active[data-company="future"]{background:#19a8a8;border-color:#19a8a8}
 .v126-th-note{display:block;font-size:10px;font-weight:500;color:var(--muted);text-transform:none;letter-spacing:0}
+
+/* ===== V133 – SOFŐRI MENTETT FOTÓK GOMB ===============================
+   A gomb a mindig látható gombsorban van; feltöltés után ugyanúgy
+   bezöldül, mint az admin buborékon. A mobilos gombstílus !important
+   hátteret ad, ezért itt erősebb szabály kell. */
+.v57-row-actions button.has-photos,
+.mode-driver .v57-row-actions button.has-photos{background:linear-gradient(145deg,#eef9ea,#cfeec4)!important;border:1px solid #4f9a3f!important;color:#1d4d14!important;box-shadow:0 3px 10px #3d8b2f26}
+.v57-row-actions button.has-photos::before{background:#2f8a22!important}
+.v57-row-actions button.v133-saved-photos{--v67-action-icon:var(--v67-camera)}
+
+/* Archivált szállítólevelek a galériában */
+.v133-archived-note{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:10px 0 0;padding:11px 13px;border:1px solid #c9b48a;border-left:4px solid #b7862b;border-radius:10px;background:#fff7e6;color:#5e4413;font-size:13px}
+.v133-archived-note b{color:#7a5410}
+.v133-archived-note small{flex-basis:100%;color:#7d6638;font-size:11.5px}
+
+/* ===== V133 – ÉLÉNKEBB, ÉLESEBB NAPTÁR ================================ */
+.v122-cal{gap:6px}
+.v122-cal-head{color:#1f3b57;font-weight:900;background:#dfe9f5;border-radius:7px}
+.v122-cal-cell{border:1.5px solid #9fb4c8;background:#ffffff;color:#14283c;box-shadow:0 2px 6px #12345622}
+.v122-cal-cell:hover{background:#e6f1ff;border-color:#2f7fd8;box-shadow:0 4px 12px #2f7fd833}
+.v122-cal-weekend{background:#eceff3;border-color:#aab6c3}
+.v122-cal-today{border:2.5px solid #0a6fe0;background:#dcecff;box-shadow:0 0 0 3px #0a6fe022}
+.v122-cal-today .v122-cal-date-row>b{color:#0a5cc0}
+.v122-cal-date-row>b{font-size:13px;color:#0f2238;font-weight:900}
+.v122-cal-count{color:#fff;background:#2563c9;border-radius:9px;padding:2px 6px;font-size:9.5px}
+.v122-cal-note{color:#c26a00;font-weight:900}
+.v122-cal-dot[data-driver="mario"],.v122-cal-trip[data-driver="mario"],.v122-cal-detail[data-driver="mario"]{--driver-dot:#0b8f9c;--driver-bg:#d8f3f5}
+.v122-cal-dot[data-driver="patrik"],.v122-cal-trip[data-driver="patrik"],.v122-cal-detail[data-driver="patrik"]{--driver-dot:#d68a00;--driver-bg:#fdeccc}
+.v122-cal-dot[data-driver="martin"],.v122-cal-trip[data-driver="martin"],.v122-cal-detail[data-driver="martin"]{--driver-dot:#8a3fc8;--driver-bg:#efe1fb}
+.v122-cal-trip{border-left:4px solid var(--driver-dot,#5d7b96);background:var(--driver-bg,#e8eef4);color:#13283d}
+.v122-cal-trip>b{color:#0f2238;font-weight:900}
+.v122-cal-trip>span{color:#33495e}
+.v122-cal-more{color:#1d5fb8}
+.v122-cal-nav button{border-color:#8fa8c2;color:#16406b;background:#fff}
+.v122-cal-nav button:hover{background:#e6f1ff;border-color:#2f7fd8}
+.v122-cal-nav b{color:#14283c;font-weight:900}
+.v122-cal-detail{border-color:#b9c9d8;border-left:5px solid var(--driver-dot,#5d7b96)}
+.v122-cal-detail>header>b{color:#0f2238}
+.v122-cal-detail>p{color:#24394d}
+.v122-cal-notes{border-color:#e2c27c;background:#fff3d6;color:#5e4413}
+.v122-cal-detail[data-driver]{border-left-color:var(--driver-dot,#5d7b96)}

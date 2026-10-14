@@ -268,9 +268,10 @@ async function run(test) {
   await test('V132: a Mentett fotók gomb a fájltáblából is bezöldül', () => {
     const src = fs.readFileSync(__dirname + '/app.js', 'utf8');
     const start = src.indexOf('function deliveryPhotoCountV132');
+    assert.ok(src.indexOf('function liveDeliveryReportsV133') < start);
     const c = { Map, Math, String, window: null };
     c.window = c; vm.createContext(c);
-    vm.runInContext(src.slice(start, src.indexOf('window.deliveryPhotoCountV132', start)), c);
+    vm.runInContext(src.slice(src.indexOf('function liveDeliveryReportsV133'), src.indexOf('window.deliveryPhotoCountV132', start)), c);
     assert.equal(c.deliveryPhotoCountV132({ id: 'o1', deliveryReports: [] }), 0);
     c.deliveryFileCountsV132 = new Map([['o1', 2]]);
     assert.equal(c.deliveryPhotoCountV132({ id: 'o1', deliveryReports: [] }), 2, 'elveszett jelölésnél a fájl sem zöldíti');
@@ -294,14 +295,14 @@ async function run(test) {
   });
 
   await test('V132: a szerveroldali védelem SQL-je a csomagban van', () => {
-    const sql = fs.readFileSync(__dirname + '/SUPABASE_SOFOR_MEZOK_V132.sql', 'utf8');
-    for (const part of ['set_driver_fields_v132', 'orders_keep_driver_fields_v132', 'before update on public.orders', 'union_reports_v132', 'completedUndoneAtV132']) {
+    const sql = fs.readFileSync(__dirname + '/SUPABASE_SOFOR_MEZOK_V133.sql', 'utf8');
+    for (const part of ['set_driver_fields_v132', 'orders_keep_driver_fields_v132', 'before update on public.orders', 'union_reports_v133', 'completedUndoneAtV132']) {
       assert.ok(sql.includes(part), 'hiányzik: ' + part);
     }
   });
 }
 
-module.exports = { run };
+module.exports = { run, createEnv };
 
 if (require.main === module) {
   (async () => {

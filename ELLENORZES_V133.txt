@@ -1,0 +1,27 @@
+FUVARSZERVEZŐ V133 – HELYI ELLENŐRZÉS
+
+Futtatott parancsok:
+  node --check (minden .js fájl)
+  node TEST_V133.js     (a TEST_V132_SYNC.js és a TEST_V133_FEATURES.js
+                         teszteket is futtatja)
+
+Eredmény:
+  Szintaktikai ellenőrzés: sikeres.
+  Elfogadási tesztek: 470/470 sikeres (463 korábbi + 7 új).
+  Régebbi tesztek: TEST_V33–V49 sikeres. A TEST_V52/V53/V54 1–2 hibája
+  változatlan a V131 óta (nem a V133 okozza).
+
+Új tesztek:
+  - a napi lista frissül és a fejléc dátuma követi a kiválasztott napot;
+  - a törölt szállítólevél egyik irányból sem jön vissza, az archivált
+    jelölés megmarad;
+  - galériából törölt utolsó fájl leveszi a jelölést, részleges törlésnél
+    csökken a szám;
+  - archivált fájl törlésekor „archiválva” marad; a tömeges törlés pótolja
+    a hiányzó jelölést, az Outlook-forrásmellékletből nem;
+  - a galéria, az admin és a sofőri gomb jelzi az archiválást;
+  - a naptár új színszabályai és a szerveroldali SQL.
+
+SQL: a SUPABASE_SOFOR_MEZOK_V133.sql PostgreSQL-motoron (PGlite) tesztelve,
+friss telepítésen és a V132-ről frissítve is, kétszeri futtatással:
+14/14 eset sikeres.

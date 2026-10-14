@@ -1,0 +1,40 @@
+FUVARSZERVEZŐ V133
+
+NAPI FUVARLISTA
+- A napi fuvarlista követi a „Fuvar napja és műveletek” panel dátumváltását
+  (dátummező és nyilak). Eddig a főoldal átváltott, a nyitott napi lista
+  viszont a régi napon maradt, mert a ténylegesen futó útvonal-rajzolóból
+  (planner-v37.js) kimaradt a frissítése.
+- A napi lista fejlécének dátummezője is mindig a kiválasztott napot mutatja.
+
+SZÁLLÍTÓLEVÉL TÖRLÉSE ÉS ARCHIVÁLÁSA
+- Galériából törölt, soha nem archivált fájl: a szállítólevél-bejegyzés
+  darabszáma csökken; ha az utolsó fájlja is törlődött, a jelölés eltűnik,
+  és a Mentett fotók gomb visszaszürkül.
+- A törölt bejegyzés „törölt” listára kerül (deliveryReportsDeletedV133),
+  így egy másik eszköz régi adatpéldánya sem hozhatja vissza.
+- Archiválás utáni törlés (az „Archiváltak törlése” gomb, vagy egy már
+  archivált fájl egyenkénti törlése): a jelölés megmarad, a gomb felirata
+  „Mentett fotók (N) · archiválva” lesz (részben archivált fuvarnál
+  „· X archiválva”). A galéria „Archiválva · N fájl · dátum” sort mutat a
+  „nincs elmentett fotó” helyett. Ha egy fuvar jelölése korábban elveszett,
+  a tömeges törlés a fájlokból pótolja – az Outlook-forrásmellékletekből nem.
+- Az archiválás ténye a fuvar adatába kerül (archivedAtV133), így minden
+  eszköz látja – nem csak az admin gépének böngészője.
+
+SOFŐRI FELÜLET
+- A Mentett fotók gomb a mindig látható gombsorba került (eddig a lenyitható
+  részletekben volt, ezért nem látszott). Feltöltés után azonnal bezöldül,
+  és zárójelben mutatja a mellékletek számát, ugyanúgy számolva, mint az
+  admin buborékon.
+
+NAPTÁR
+- Élénkebb, kontrasztosabb színek: sötétebb cellaszegély és szöveg, jól
+  elkülönülő hétvége, élénkkék mai nap, telített sofőrszínek (Márió türkiz,
+  Patrik borostyán, Martin lila), kék fuvarszám-jelvény, erős hover.
+
+SUPABASE
+- A SUPABASE_SOFOR_MEZOK_V133.sql a V132-es fájl utódja: a trigger és a
+  sofőri függvény kezeli a törölt és az archivált jelölést. A V132-es SQL
+  nélküle nem engedné levenni a törölt szállítólevél jelölését, ezért ezt
+  le kell futtatni.

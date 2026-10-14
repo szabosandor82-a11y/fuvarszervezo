@@ -361,7 +361,12 @@
   function userBubble(order, index) {
     const items = order.items || [];
     const received = items.filter(item => item.received).length;
-    const reportPhotos = (order.deliveryReports || []).reduce((sum, report) => sum + (+report.photoCount || +report.fileCount || 0), 0);
+    /* V133: ugyanaz a számolás, mint az admin buborékon (törölt bejegyzés
+       nélkül, a hangjegyzetet is beleértve). */
+    const reportPhotos = typeof global.deliveryPhotoCountV132 === 'function'
+      ? global.deliveryPhotoCountV132(order)
+      : (order.deliveryReports || []).reduce((sum, report) => sum + (+report.photoCount || +report.fileCount || 0), 0);
+    const archiveSuffix = typeof global.deliveryArchiveSuffixV133 === 'function' ? global.deliveryArchiveSuffixV133([order]) : '';
     const canTransfer = !order.completed && !transferForOrder(order.id);
     const commentClass = global.userCommentClass ? global.userCommentClass(order) : '';
     const hasSourceMail = order.sourceMail ? true : hasOutlookSource(order);
@@ -386,6 +391,7 @@
           onclick="openThreadV115('${safe(order.id)}')">✉ Üzenetek${(global.orderThreadV115?.(order) || []).length
             ? ` (${(global.orderThreadV115?.(order) || []).length})` : ''}</button>
         <button type="button" class="camera-action${locked ? ' is-locked' : ''}" ${locked ? `disabled title="Csak az aktuális munkanapon tölthető fel"` : ''} onclick="openCamera('${safe(order.id)}')">Szállítólevél</button>
+        <button type="button" class="secondary v133-saved-photos${reportPhotos ? ' has-photos' : ''}" onclick="openMediaGallery('${safe(order.id)}')">Mentett fotók${reportPhotos ? ` (${reportPhotos})${safe(archiveSuffix)}` : ''}</button>
         ${hasSourceMail ? `<button type="button" class="mail-action" onclick="openSourceMail('${safe(order.id)}')">Csatolmány</button>` : ''}
         ${canTransfer ? `<button type="button" class="transfer-action${locked ? ' is-locked' : ''}" ${locked ? `disabled title="Csak az aktuális munkanapon adható át"` : ''} onclick="openTransferDialog('${safe(order.id)}')">Fuvar átadása</button>` : ''}
       </div>
@@ -397,7 +403,6 @@
         ${order.note ? `<p><b>Fuvar megjegyzés:</b> ${safe(order.note)}</p>` : ''}
         ${order.recipientName || order.recipientPhone ? `<p><b>Átvevő:</b> ${safe(order.recipientName || '')}${order.recipientPhone ? ` · <a href="tel:${safe(order.recipientPhone)}">${safe(order.recipientPhone)}</a>` : ''}</p>` : ''}
         <div class="mobile-bubble-tags"><span>${items.length} tétel</span>${global.movedBubbleDateV124?.(order)||''}${order.longMaterialReason ? `<span>${safe(order.longMaterialReason)}</span>` : ''}${reportPhotos ? `<span>📎 ${reportPhotos} fájl</span>` : ''}</div>
-        <div class="v57-row-actions"><button type="button" class="secondary ${reportPhotos ? 'has-photos' : ''}" onclick="openMediaGallery('${safe(order.id)}')">Mentett fotók${reportPhotos ? ` (${reportPhotos})` : ''}</button></div>
       </div>
     </article>`;
   }
@@ -644,16 +649,22 @@
     const egyesult = { ...nyertes };
 
     // szállítólevelek: minden fotó megmarad, azonosító szerint egyszer
-    const jelentesek = new Map();
-    for (const forras of [vesztes.deliveryReports, nyertes.deliveryReports]) {
-      for (const jelentes of forras || []) {
-        const kulcs = String(jelentes?.id || jelentes?.at || JSON.stringify(jelentes));
-        jelentesek.set(kulcs, jelentes);
+    // V133: a törölt bejegyzés nem jön vissza, az archiválás jelölése marad
+    const onlineV133 = (typeof globalThis !== 'undefined' && globalThis.V44Online) || null;
+    if (onlineV133?.mergeReportsV133) {
+      onlineV133.applyReportsV133(egyesult, onlineV133.mergeReportsV133(vesztes, nyertes));
+    } else {
+      const jelentesek = new Map();
+      for (const forras of [vesztes.deliveryReports, nyertes.deliveryReports]) {
+        for (const jelentes of forras || []) {
+          const kulcs = String(jelentes?.id || jelentes?.at || JSON.stringify(jelentes));
+          jelentesek.set(kulcs, jelentes);
+        }
       }
-    }
-    if (jelentesek.size) {
-      egyesult.deliveryReports = [...jelentesek.values()]
-        .sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
+      if (jelentesek.size) {
+        egyesult.deliveryReports = [...jelentesek.values()]
+          .sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
+      }
     }
 
     /* Tételek: az admin SOHA nem veszi vissza az átvételt, csak a sofőr
@@ -1304,14 +1315,109 @@
       global.__galleryFilesV119 = (global.__galleryFilesV119 || []).filter(item => String(item.id) !== String(fileId));
       const szamlalo = global.deliveryFileCountsV132, fuvarId = String(file.order_id || '');
       if (szamlalo?.has?.(fuvarId)) szamlalo.set(fuvarId, Math.max(0, szamlalo.get(fuvarId) - 1));
-      /* A fuvar JELÖLÉSE megmarad: a Mentett fotók gomb továbbra is mutatja,
-         hogy volt feltöltve szállítólevél – csak a kép nem nyílik meg. */
+      /* V133: a jelölés a törléshez igazodik. Archivált fájl törlésekor a
+         jelölés megmarad „archiválva” felirattal; soha nem archivált fájl
+         törlésekor a szállítólevél-bejegyzés fogy, és ha az utolsó fájlja is
+         elment, a jelölés eltűnik – a buborék gombja visszaszürkül. */
+      updateReportAfterDeleteV133(file, global.__galleryFilesV119 || []);
       await openMediaGallery(String(file.order_id || ''));
     } catch (error) {
       alert(`A törlés nem sikerült: ${error.message}`);
     }
   }
   global.deleteGalleryFileV119 = deleteGalleryFileV119;
+
+  function wasArchivedV133(fileId) {
+    try { return typeof global.archivedMapV119 === 'function' && !!global.archivedMapV119()[String(fileId)]; }
+    catch (_) { return false; }
+  }
+
+  function updateReportAfterDeleteV133(file, remainingFiles) {
+    const order = (state.orders || []).find(item => String(item.id) === String(file.order_id || ''));
+    if (!order) return false;
+    const reportId = String(file.report_id || '');
+    const reports = order.deliveryReports || [];
+    const report = reports.find(item => String(item?.id || '') === reportId);
+    const now = new Date().toISOString();
+    if (wasArchivedV133(file.id)) {
+      if (report) report.archivedAtV133 = report.archivedAtV133 || now;
+      else order.deliveryReports = [...reports, { id: reportId, at: file.created_at || now, fileCount: 1, photoCount: /^audio\//.test(file.mime_type || '') ? 0 : 1, archivedAtV133: now }];
+    } else if (report) {
+      const left = (remainingFiles || []).filter(item => String(item.report_id || '') === reportId && String(item.id) !== String(file.id));
+      if (!left.length) {
+        order.deliveryReports = reports.filter(item => item !== report);
+        order.deliveryReportsDeletedV133 = [...new Set([...(order.deliveryReportsDeletedV133 || []), reportId])];
+      } else {
+        report.fileCount = left.length;
+        report.photoCount = left.filter(item => !/^audio\//.test(item.mime_type || '')).length;
+      }
+    } else return false;
+    order.localUpdatedAt = now;
+    if (typeof save === 'function') save();
+    return true;
+  }
+  global.updateReportAfterDeleteV133 = updateReportAfterDeleteV133;
+
+  /* V133 – ARCHIVÁLT FÁJLOK TÖMEGES TÖRLÉSE UTÁN
+
+     A „Archiváltak törlése” után a fuvar jelölése megmarad, de „archiválva”
+     felirattal. Ha egy fuvarról a jelölés korábban elveszett, a fájlokból
+     pótoljuk – az Outlook-forrásmellékletekből nem. */
+  async function markArchivedReportsV133(files) {
+    const list = (files || []).filter(file => file?.order_id && file?.report_id);
+    if (!list.length) return 0;
+    const now = new Date().toISOString();
+    const byOrder = new Map();
+    for (const file of list) {
+      const key = String(file.order_id);
+      if (!byOrder.has(key)) byOrder.set(key, []);
+      byOrder.get(key).push(file);
+    }
+    const missing = [];
+    for (const [orderId, orderFiles] of byOrder) {
+      const order = (state.orders || []).find(item => String(item.id) === orderId);
+      if (!order) continue;
+      for (const file of orderFiles) if (!(order.deliveryReports || []).some(report => String(report?.id || '') === String(file.report_id))) missing.push(String(file.report_id));
+    }
+    let notes = new Map();
+    if (missing.length && global.V44Online?.fetchReportNotesV133) {
+      try { notes = await global.V44Online.fetchReportNotesV133(missing); }
+      catch (error) { console.warn('[V133] a jelentések megjegyzése nem tölthető be', error); }
+    }
+    let changed = 0;
+    for (const [orderId, orderFiles] of byOrder) {
+      const order = (state.orders || []).find(item => String(item.id) === orderId);
+      if (!order) continue;
+      const byReport = new Map();
+      for (const file of orderFiles) {
+        const key = String(file.report_id);
+        if (!byReport.has(key)) byReport.set(key, []);
+        byReport.get(key).push(file);
+      }
+      for (const [reportId, reportFiles] of byReport) {
+        const reports = order.deliveryReports || [];
+        const report = reports.find(item => String(item?.id || '') === reportId);
+        if (report) {
+          if (/^outlook\s*forr/i.test(String(report.note || ''))) continue;
+          if (!report.archivedAtV133) { report.archivedAtV133 = now; changed++; }
+          continue;
+        }
+        const note = notes.get(reportId);
+        if (!note || /outlook\s*forr/i.test(String(note.note || ''))) continue;
+        order.deliveryReports = [...reports, {
+          id: reportId, at: note.created_at || reportFiles[0].created_at || now, note: note.note || '',
+          fileCount: reportFiles.length,
+          photoCount: reportFiles.filter(file => !/^audio\//.test(file.mime_type || '')).length,
+          archivedAtV133: now
+        }];
+        changed++;
+      }
+      order.localUpdatedAt = now;
+    }
+    if (changed && typeof save === 'function') save();
+    return changed;
+  }
+  global.markArchivedReportsV133 = markArchivedReportsV133;
 
 
   /* ===== V121 – A FUVARÁTADÁSOK SAJÁT MENÜPONTOT KAPTAK ==============
@@ -1342,6 +1448,23 @@
   global.renderTransfersPageV121 = renderTransfersPageV121;
 
   global.openSourceMail = openSourceMail;
+
+  /* ===== V133 – ARCHIVÁLT SZÁLLÍTÓLEVELEK ============================ */
+  function archivedReportsV133(orders) {
+    return (orders || []).flatMap(order => (order?.deliveryReports || []).filter(report => report?.archivedAtV133));
+  }
+  function formatDayV133(value) {
+    const nap = String(value || '').slice(0, 10);
+    return nap ? nap.replace(/-/g, '. ') + '.' : '';
+  }
+  function archivedReportsNoteV133(orders) {
+    const reports = archivedReportsV133(orders);
+    if (!reports.length) return '';
+    const count = reports.reduce((sum, report) => sum + (+report.photoCount || +report.fileCount || 1), 0);
+    const latest = reports.map(report => String(report.archivedAtV133)).sort().pop();
+    return `<div class="v133-archived-note"><b>Archiválva</b> · ${count} fájl${latest ? ` · ${safe(formatDayV133(latest))}` : ''}<small>A fájlok a ZIP-archívumban vannak, a tárhelyről törölve.</small></div>`;
+  }
+  global.archivedReportsV133 = archivedReportsV133;
 
   async function openMediaGallery(orderIds) {
     const ids = String(orderIds || '').split(',').map(id => id.trim()).filter(Boolean);
@@ -1404,7 +1527,10 @@
          csak a listából – archiválás után ne foglaljon helyet. Csak admin
          törölhet. */
       global.__galleryFilesV119 = files;
-      if (host) host.innerHTML = files.length ? files.map(file => file.mime_type?.startsWith('audio/') ? `<article><audio controls src="${safe(file.url)}"></audio><small>${safe(file.orderNo)} · ${safe(napja(file))} · ${safe(file.file_name || 'Hangjegyzet')}</small></article>` : `<article><a href="${safe(file.url)}" target="_blank" rel="noopener"><img src="${safe(file.url)}" alt="Szállítólevél"></a><small><b>${safe(napja(file))}</b> · ${safe(file.orderNo)} · ${safe(file.file_name || 'Fotó')}${isAdmin() ? `<button type="button" class="v119-del" title="Törlés a tárhelyről is" onclick="deleteGalleryFileV119('${safe(file.id)}')">🗑</button>` : ''}</small></article>`).join('') : '<div class="mobile-empty">Ehhez a fuvarhoz még nincs elmentett fotó.</div>';
+      /* V133: az archiválás után törölt szállítólevelek nem tűnnek el
+         nyomtalanul – a galéria jelzi, hogy archiválva vannak. */
+      const archivedNoteV133 = archivedReportsNoteV133(orders);
+      if (host) host.innerHTML = (files.length ? files.map(file => file.mime_type?.startsWith('audio/') ? `<article><audio controls src="${safe(file.url)}"></audio><small>${safe(file.orderNo)} · ${safe(napja(file))} · ${safe(file.file_name || 'Hangjegyzet')}</small></article>` : `<article><a href="${safe(file.url)}" target="_blank" rel="noopener"><img src="${safe(file.url)}" alt="Szállítólevél"></a><small><b>${safe(napja(file))}</b> · ${safe(file.orderNo)} · ${safe(file.file_name || 'Fotó')}${isAdmin() ? `<button type="button" class="v119-del" title="Törlés a tárhelyről is" onclick="deleteGalleryFileV119('${safe(file.id)}')">🗑</button>` : ''}</small></article>`).join('') : (archivedNoteV133 ? '' : '<div class="mobile-empty">Ehhez a fuvarhoz még nincs elmentett fotó.</div>')) + archivedNoteV133;
     } catch (error) { if (host) host.innerHTML = `<div class="mobile-empty">Betöltési hiba: ${safe(error.message)}</div>`; }
   }
   global.openMediaGallery = openMediaGallery;
@@ -1564,7 +1690,7 @@
       if ((missingReport || wrongCompletion) && !global.__driverFieldsWarnedV132) {
         global.__driverFieldsWarnedV132 = true;
         console.warn('[V132] a szerver nem tárolta el a sofőri mezőt', { order: order.orderNo, missingReport, wrongCompletion });
-        alert('A szerver nem tárolta el a teljesítést vagy a szállítólevél jelölését. Az adminnak le kell futtatnia a SUPABASE_SOFOR_MEZOK_V132.sql fájlt a Supabase-ben. A változás a telefonon megmarad, és újra megpróbáljuk felküldeni.');
+        alert('A szerver nem tárolta el a teljesítést vagy a szállítólevél jelölését. Az adminnak le kell futtatnia a SUPABASE_SOFOR_MEZOK_V133.sql fájlt a Supabase-ben. A változás a telefonon megmarad, és újra megpróbáljuk felküldeni.');
       }
       if (missingReport || wrongCompletion) throw new Error('A szerver nem tárolta el a változást.');
     } catch (error) {
