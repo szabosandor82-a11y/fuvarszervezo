@@ -985,6 +985,18 @@
 
   /* Minden feltöltött fájl, fuvarra bontva – az archiváláshoz és a
      tárhely-összesítéshez. */
+  /* V144: az „Outlook forrás” (levélmelléklet) bejegyzések azonosítói –
+     ezek NEM szállítólevelek, az archiválás nem nyúlhat hozzájuk. */
+  async function fetchSourceReportIdsV144() {
+    const ids = new Set();
+    for (let offset = 0; offset < 200000; offset += 1000) {
+      const page = await dbRequest(`delivery_reports?${qs({ select: 'id', note: 'ilike.*outlook*forr*', order: 'id.asc', limit: '1000', offset: String(offset) })}`);
+      for (const row of page || []) ids.add(String(row.id));
+      if (!page || page.length < 1000) break;
+    }
+    return ids;
+  }
+
   async function listAllDeliveryFiles() {
     return dbRequest(`delivery_report_files?${qs({
       select: 'id,report_id,order_id,storage_path,file_name,mime_type,file_size,created_at',
@@ -1078,7 +1090,7 @@
     /* V134 */
     fetchDeliveryFileCountsForOrdersV134,
     /* V135 */
-    fetchSourceMailCoverageV135,
+    fetchSourceMailCoverageV135, fetchSourceReportIdsV144,
     /* V136 */
     mimeForFileV136, cleanupEmptySourceReportsV136, removeStoragePathsV136,
     /* V138 */

@@ -1915,12 +1915,46 @@ function bindArchiveButtonsV119(){
 }
 window.bindArchiveButtonsV119=bindArchiveButtonsV119;
 
+/* ===== V144 – AZ ARCHIVÁLÁS CSAK A SZÁLLÍTÓLEVELEKRE VONATKOZIK =========
+
+   A delivery_report_files táblában két különböző dolog van: a sofőrök által
+   feltöltött szállítólevelek (ezek a Mentett fotókban látszanak), és az
+   Outlook-importból származó levélmellékletek (a sofőr Csatolmány gombja
+   mögött). Az archiválás eddig MINDKETTŐT kezelte – a „Archiváltak törlése”
+   a levélmellékleteket is törölte a tárhelyről, és a sofőr utána nem tudta
+   megnyitni a megrendelést. Most ugyanaz a szabály érvényes, mint a Mentett
+   fotók ablakban: kimarad, aminek a bejegyzése „Outlook forrás”, és amit a
+   fuvar levélmellékletként tart nyilván. Ha a levélmellékletek nem
+   azonosíthatók (hálózati hiba), az archiválás NEM indul el. */
+async function deliveryNoteFilesV144(){
+  const mind=(await window.V44Online.listAllDeliveryFiles())||[];
+  if(typeof window.V44Online.fetchSourceReportIdsV144!=='function')throw new Error('a levélmellékletek nem azonosíthatók');
+  const forras=await window.V44Online.fetchSourceReportIdsV144();
+  for(const o of state.orders||[])for(const id of o.sourceMailReportIdsV135||[])forras.add(String(id));
+  const levelMelleklet=f=>forras.has(String(f.report_id||''));
+  return{notes:mind.filter(f=>!levelMelleklet(f)),sources:mind.filter(levelMelleklet)};
+}
+window.deliveryNoteFilesV144=deliveryNoteFilesV144;
+/* A szállítólevél szöveges megjegyzése a tartalomjegyzékbe. */
+function csvCellV144(v){return `"${String(v??'').replace(/[\r\n]+/g,' ').replace(/"/g,'""')}"`}
+async function reportNotesForV144(files){
+  const ids=[...new Set(files.map(f=>String(f.report_id||'')).filter(Boolean))];
+  const map=new Map();
+  for(const o of state.orders||[])for(const r of o.deliveryReports||[])if(r?.id&&r.note)map.set(String(r.id),String(r.note));
+  const hianyzik=ids.filter(id=>!map.has(id));
+  if(hianyzik.length&&window.V44Online?.fetchReportNotesV133){
+    try{for(const [id,row] of await window.V44Online.fetchReportNotesV133(hianyzik))if(row?.note)map.set(String(id),String(row.note))}
+    catch(error){console.warn('[V144] megjegyzések',error)}
+  }
+  return map;
+}
+
 async function renderArchiveSummaryV119(){
   bindArchiveButtonsV119();
   const host = $('#v119Summary'); if (!host) return;
   if (!window.V44Online?.listAllDeliveryFiles) { host.textContent = 'Nincs online kapcsolat.'; return; }
   try {
-    const mind = (await window.V44Online.listAllDeliveryFiles()) || [];
+    const { notes: mind, sources } = await deliveryNoteFilesV144();
     const terkep = archivedMapV119();
     const archivalhato = mind.filter(f => !terkep[String(f.id)]);
     const archivalt = mind.filter(f => terkep[String(f.id)]);
@@ -1931,7 +1965,8 @@ async function renderArchiveSummaryV119(){
       <div class="v119-row"><span>Összes szállítólevél</span><b>${mind.length} fájl · ${humanSizeV119(meret(mind))}</b></div>
       <div class="v119-row"><span>Archiválásra vár</span><b>${archivalhato.length} fájl · ${humanSizeV119(meret(archivalhato))}</b></div>
       <div class="v119-row"><span>Archiválva, várakozik törlésre</span><b>${varakozik.length} fájl · ${humanSizeV119(meret(varakozik))}</b></div>
-      <div class="v119-row"><span>Archiválva, törölhető</span><b>${torolheto.length} fájl · ${humanSizeV119(meret(torolheto))}</b></div>`;
+      <div class="v119-row"><span>Archiválva, törölhető</span><b>${torolheto.length} fájl · ${humanSizeV119(meret(torolheto))}</b></div>
+      <div class="v119-row v144-info"><span>Levélmellékletek (nem archiválódnak, a sofőr Csatolmány gombjához kellenek)</span><b>${sources.length} fájl · ${humanSizeV119(meret(sources))}</b></div>`;
     const archGomb = $('#v119Archive'), purgeGomb = $('#v119Purge');
     if (archGomb) { archGomb.disabled = !archivalhato.length; archGomb.textContent = archivalhato.length ? `Archiválás (${archivalhato.length})` : 'Nincs mit archiválni'; }
     if (purgeGomb) { purgeGomb.disabled = !torolheto.length; purgeGomb.textContent = torolheto.length ? `Archiváltak törlése (${torolheto.length})` : 'Nincs archivált fájl'; }
@@ -1946,13 +1981,14 @@ async function runArchiveV119(){
   host.classList.remove('hidden');
   host.textContent = 'Fájlok összegyűjtése…';
   try {
-    const mind = (await window.V44Online.listAllDeliveryFiles()) || [];
+    const { notes: mind } = await deliveryNoteFilesV144();
     const terkep = archivedMapV119();
     const lista = mind.filter(f => !terkep[String(f.id)]);
     if (!lista.length) { host.textContent = 'Nincs archiválandó fájl.'; return; }
 
     const zip = new JSZip();
-    const sorok = ['rendelés;archív fájlnév;eredeti fájlnév;feltöltve;méret'];
+    const megjegyzesek = await reportNotesForV144(lista);
+    const sorok = ['rendelés;archív fájlnév;eredeti fájlnév;feltöltve;méret;sofőr megjegyzése'];
     const hasznaltFajlnevek = new Set();
     let kesz = 0, sikertelen = 0;
 
@@ -1995,7 +2031,7 @@ async function runArchiveV119(){
       const fuvar = (state.orders || []).find(o => String(o.id) === String(file.order_id));
       const nev = archiveFileNameV123(file, fuvar, hasznaltFajlnevek);
       zip.file(nev, adat);
-      sorok.push(`${fuvar?.orderNo || ''};${nev};${file.file_name || ''};${String(file.created_at || '').slice(0, 16)};${file.file_size || 0}`);
+      sorok.push([fuvar?.orderNo || '', nev, file.file_name || '', String(file.created_at || '').slice(0, 16), file.file_size || 0, megjegyzesek.get(String(file.report_id || '')) || ''].map(csvCellV144).join(';'));
       file.__archived = true;
     };
 
@@ -2033,7 +2069,9 @@ async function runArchiveV119(){
 async function runPurgeV119(){
   const host = $('#v119Progress'); if (!host) return;
   try {
-    const mind = (await window.V44Online.listAllDeliveryFiles()) || [];
+    /* V144: csak szállítólevél törölhető – levélmelléklet akkor sem, ha egy
+       korábbi archiválás „archiváltnak” jelölte. */
+    const { notes: mind } = await deliveryNoteFilesV144();
     const terkep = archivedMapV119();
     const lista = mind.filter(f => terkep[String(f.id)] && purgeEligibleV122(f));
     if (!lista.length) return alert('Nincs archivált fájl, amit törölni lehetne.');
