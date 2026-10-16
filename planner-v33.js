@@ -388,7 +388,7 @@
 
   function renderGroupBubble(group, index, vehicleId) {
     const ids = groupIdsAttribute(group);
-    const orderNos = [...new Set(group.orders.map(order => order.orderNo).filter(Boolean))];
+    const orderNos = [...new Set(group.orders.map(order => (typeof global.orderLabelV145==='function'?global.orderLabelV145(order):order.orderNo)).filter(Boolean))];
     const itemCount = group.orders.reduce((sum, order) => sum + (order.items?.length || 0), 0);
     const longReasons = [...new Set(group.orders.map(order => order.longMaterialReason).filter(Boolean))];
     const complete = group.orders.every(order => order.completed);
@@ -542,7 +542,7 @@
     }
     document.querySelector('#v33DropoffTitle').textContent = `${vehicle?.driverName || 'Sofőr'} · lerakók`;
     document.querySelector('#v33DropoffBody').innerHTML = drops.length ? `<div class="dropoff-summary-list">${drops.map((event, index) => {
-      const orderNos = [...new Set((event.orders || []).map(id => state.orders.find(order => order.id === id)?.orderNo).filter(Boolean))];
+      const orderNos = [...new Set((event.orders || []).map(id => { const order = state.orders.find(item => item.id === id); return order ? (typeof global.orderLabelV145==='function'?global.orderLabelV145(order):order.orderNo) : ''; }).filter(Boolean))];
       return `<div class="dropoff-stop"><b>${index + 1}. ${escHtml(event.name)}</b><span>${escHtml(event.address || '')}</span><span>Rendelés: ${escHtml(orderNos.join(', '))}</span>${event.fullLoad ? '<span class="full-load-panel-note">Teljes autós, azonnali lerakás</span>' : ''}</div>`;
     }).join('')}</div>` : '<div class="notice">Nincs lerakó az adott napon.</div>';
     document.querySelector('#v33DropoffDialog').showModal();
@@ -609,7 +609,7 @@
       `${orders[0].pickupName || 'A felrakó'} · ${orders.length} rendelés. Jelöld ki, melyiket törlöd.`;
     document.getElementById('deletePickList').innerHTML = orders.map(order => `<label class="v109-row">
       <input type="checkbox" value="${escHtml(order.id)}">
-      <span><b>${escHtml(order.orderNo || 'Rendelésszám nélkül')}</b>
+      <span><b>${escHtml((typeof global.orderLabelV145==='function'?global.orderLabelV145(order):order.orderNo) || 'Rendelésszám nélkül')}</b>
         <small>${escHtml(order.projectName || order.dropAddress || 'Egyedi úticél')} · ${(order.items || []).length} tétel</small></span></label>`).join('');
 
     const szamlalo = () => {
@@ -668,7 +668,7 @@
           : '<span class="item-dash">—</span>';
         return `<div class="item-row item-grid ${item.received ? 'done' : ''} ${open ? 'shortage' : ''}"><input type="checkbox" ${item.received ? 'checked' : ''} title="Hiánytalanul megkapta" onchange="toggleItem('${escHtml(order.id)}',${index},this.checked)"><div class="item-main"><b class="item-name">${escHtml(item.description || item.productName || item.name || 'Tétel')}</b><div class="item-sub"><span class="v56-item-code">${escHtml(item.code || 'Cikkszám nélkül')}</span> · ${escHtml(item.qty)} ${escHtml(item.unit)}${item.longMaterial ? ' · hosszú szál' : ''}</div><label class="item-note-edit"><textarea placeholder="Tétel megjegyzés" oninput="updateItemNote('${escHtml(order.id)}',${index},this.value)">${escHtml(typeof itemNoteValue === 'function' ? itemNoteValue(item) : item.itemNote || '')}</textarea></label></div>${qtyCell}${dateCell}</div>`;
       }).join('');
-      return `<section class="group-order-section"><div class="group-order-head"><div><b>Rendelés: ${escHtml(order.orderNo || 'Nincs szám')}</b><small>${escHtml(order.pickupName || '')} → ${escHtml(order.projectName || order.dropAddress || '')}</small></div><button type="button" class="secondary" onclick="openItems('${escHtml(order.id)}')">Megnyitás külön</button></div>${rows ? `<div class="item-grid-head"><span></span><span>Tétel</span><span>Hiányzik</span><span>Hátralék napja</span></div>${rows}` : '<div class="notice">Nincs tétel.</div>'}</section>`;
+      return `<section class="group-order-section"><div class="group-order-head"><div><b>Rendelés: ${escHtml((typeof global.orderLabelV145==='function'?global.orderLabelV145(order):order.orderNo) || 'Nincs szám')}</b><small>${escHtml(order.pickupName || '')} → ${escHtml(order.projectName || order.dropAddress || '')}</small></div><button type="button" class="secondary" onclick="openItems('${escHtml(order.id)}')">Megnyitás külön</button></div>${rows ? `<div class="item-grid-head"><span></span><span>Tétel</span><span>Hiányzik</span><span>Hátralék napja</span></div>${rows}` : '<div class="notice">Nincs tétel.</div>'}</section>`;
     }).join('');
     if (!document.querySelector('#itemsDialog').open) document.querySelector('#itemsDialog').showModal();
     if (typeof global.renderOrderPdfAttachments === 'function') global.renderOrderPdfAttachments(orders.map(order => order.id), 'groupItemAttachments');

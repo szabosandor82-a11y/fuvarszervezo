@@ -1,4 +1,4 @@
-/* Fuvarszervező V144
+/* Fuvarszervező V145
    Sáv-alapú szétosztás és lánc-optimalizált felrakási sorrend.
 
    Kemény szabályok:
@@ -23,7 +23,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '144';
+  const VERSION = '145';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   // Alapértelmezett indulási pontok. A törzsadat (SEED_DATA.vehicles) felülírja
   // őket, ha ott meg van adva a sofőr lakóhelye.
@@ -1219,7 +1219,7 @@
       await persistOnlineV49(date);
       if (typeof render === 'function') render();
       const conflictText = result.conflicts.length ? `\nFigyelem: ${result.conflicts.length} felrakóhelyen egymással ütköző fix sofőrjelölés maradt.` : '';
-      alert(`Fuvarok V144 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
+      alert(`Fuvarok V145 szerint szétosztva és felrakási sorrendbe rendezve.\n${result.summary}${conflictText}\nAzonos beszállító egy sofőrnél marad. A lerakók nem részei az optimalizálásnak.`);
       return result;
     } catch (error) {
       console.error('[V121] Szétosztási hiba', error);
@@ -1240,7 +1240,7 @@
       if (changed.length) throw new Error('Az optimalizálás sofőrt változtatott.');
       await persistOnlineV49(date);
       if (typeof render === 'function') render();
-      alert('V144 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
+      alert('V145 optimalizálás elkészült: kizárólag a felrakók sorrendje változott. Lerakó és sofőr nem változott.');
       return true;
     } catch (error) {
       console.error('[V121] Optimalizálási hiba', error);
@@ -1255,7 +1255,9 @@
     const projects = (global.SEED_DATA?.projects || []).map((item, index) => ({ ...item, id: makeId('p', index), defaultRecipientId: '', active: item.active !== false }));
     const suppliers = (global.SEED_DATA?.suppliers || []).map((item, index) => ({ ...item, id: makeId('s', index), pickupNote: item.pickupNote || item.note || '', isCentral: !!item.isCentral || nrm(item.site) === 'kozpont', active: item.active !== false }));
     projects.forEach(project => {
-      const receiver = recipients.find(item => nrm(item.project) === nrm(project.name)) || recipients.find(item => nrm(item.name) === nrm(project.receiver));
+      /* V145: a megjelölt alapértelmezett átvevő az első, nem a projekt első átvevője */
+      const receiver = (project.receiver && (recipients.find(item => nrm(item.name) === nrm(project.receiver) && nrm(item.project) === nrm(project.name)) || recipients.find(item => nrm(item.name) === nrm(project.receiver))))
+        || recipients.find(item => nrm(item.project) === nrm(project.name));
       project.defaultRecipientId = receiver?.id || '';
     });
     return { recipients, projects, suppliers };
@@ -1282,6 +1284,7 @@
     state.recipients = data.recipients;
     state.aliases = { projects: {}, suppliers: {} };
     state.masterDataVersion = 'v44-built-in';
+    state.masterDataSeedV145 = global.SEED_DATA?.masterDataVersion || '';
     if (global.V43Planner?.mergeSeedMasterData) global.V43Planner.mergeSeedMasterData();
     for (const order of state.orders || []) if (typeof syncOrderFromMasters === 'function') syncOrderFromMasters(order);
     state.routePlans = {}; state.routeStats = {}; state.geo = {};
@@ -1481,12 +1484,12 @@
     if (balanceButton) {
       balanceButton.onclick = event => { event.preventDefault(); return balanceActionV44(); };
       balanceButton.dataset.algorithmVersion = VERSION;
-      balanceButton.title = 'V144: csak a megnyitott nap szétosztása; a többi nap nem módosul';
+      balanceButton.title = 'V145: csak a megnyitott nap szétosztása; a többi nap nem módosul';
     }
     if (optimizeButton) {
       optimizeButton.onclick = event => { event.preventDefault(); return optimizeActionV44(); };
       optimizeButton.dataset.algorithmVersion = VERSION;
-      optimizeButton.title = 'V144: csak a megnyitott nap optimalizálása; a többi nap nem módosul';
+      optimizeButton.title = 'V145: csak a megnyitott nap optimalizálása; a többi nap nem módosul';
     }
     document.getElementById('clearAllMastersBtn')?.addEventListener('click', clearAllMasterDataV44);
     document.getElementById('loadBuiltInMastersBtn')?.addEventListener('click', loadBuiltInMasterDataV44);
@@ -1639,6 +1642,110 @@
   global.V50Planner = global.V121Planner;
   global.V49Planner = global.V121Planner;
   global.V44Planner = global.V121Planner;
+
+  /* ===== V145 – A TÖRZSADAT EGYSZERI FRISSÍTÉSE MINDEN ESZKÖZÖN ==========
+
+     A beépített törzsadat (data.js) a 2026-10-16-i törzsadat-export
+     tartalma, változtatás nélkül. Új eszköz ezt kapja; a meglévő eszközök
+     (amelyek a saját korábbi törzsadatukat tartották meg) EGYSZER, név
+     szerint egyeztetve frissülnek:
+       - a meglévő tételek azonosítója megmarad (a fuvarok hivatkozásai nem
+         sérülnek), az adataik a fájl szerintiek lesznek;
+       - az újak bekerülnek, a fájlból hiányzók kikerülnek – kivéve a
+         „Központi raktár” projektet és a „Szigetszentmiklósi Központi
+         Raktár” beszállítót, mert a program működése ezekre épül;
+       - a fuvarok nem változnak; a kikerült törzsadatra mutató fuvar a
+         név (és cím) alapján az új tételhez kötődik, ha van ilyen. */
+  const MASTER_MARK_V145 = 'torzs-20261016';
+  const addrKeyV145 = value => nrm(value).replace(/(\d+)\s*([a-z])\b/g, '$1$2').replace(/\s+/g, ' ').trim();
+  function applyMasterDataV145(target = state, seed = global.SEED_DATA, { force = false } = {}) {
+    if (!target || !seed || seed.masterDataVersion !== MASTER_MARK_V145) return { applied: false, reason: 'nincs új törzsadat' };
+    if (!force && target.masterDataSeedV145 === MASTER_MARK_V145) return { applied: false, reason: 'már frissítve' };
+    const newId = prefix => (typeof uid === 'function' ? uid() : `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`);
+    const keepProject = name => nrm(name) === nrm('Központi raktár');
+    const keepSupplier = name => nrm(name) === nrm('Szigetszentmiklósi Központi Raktár');
+    const counts = { projects: { updated: 0, added: 0, removed: 0 }, suppliers: { updated: 0, added: 0, removed: 0 }, recipients: { updated: 0, added: 0, removed: 0 } };
+
+    // átvevők: név + projekt szerint
+    const oldRecipients = target.recipients || [];
+    const usedRecipients = new Set();
+    const recipients = (seed.recipients || []).map(item => {
+      const found = oldRecipients.find(r => !usedRecipients.has(r) && nrm(r.name) === nrm(item.name) && nrm(r.project || '') === nrm(item.project || ''))
+        || oldRecipients.find(r => !usedRecipients.has(r) && nrm(r.name) === nrm(item.name) && !r.project);
+      if (found) { usedRecipients.add(found); counts.recipients.updated++; return { ...found, name: item.name, project: item.project || '', phone: item.phone || '', email: item.email || '' }; }
+      counts.recipients.added++;
+      return { id: newId('r'), name: item.name, project: item.project || '', phone: item.phone || '', email: item.email || '' };
+    });
+    counts.recipients.removed = oldRecipients.length - usedRecipients.size;
+    const receiverFor = item => recipients.find(r => nrm(r.name) === nrm(item.receiver) && nrm(r.project) === nrm(item.name))
+      || recipients.find(r => nrm(r.name) === nrm(item.receiver)) || null;
+
+    // projektek: név szerint
+    const oldProjects = target.projects || [];
+    const usedProjects = new Set();
+    const projects = (seed.projects || []).map(item => {
+      const found = oldProjects.find(p => !usedProjects.has(p) && nrm(p.name) === nrm(item.name));
+      const receiver = item.receiver ? receiverFor(item) : null;
+      if (found) {
+        usedProjects.add(found); counts.projects.updated++;
+        const moved = addrKeyV145(found.address) !== addrKeyV145(item.address);
+        const next = { ...found, name: item.name, address: item.address || '', active: true, receiver: item.receiver || '', defaultRecipientId: receiver?.id || '' };
+        if (moved) { if (item.point) next.point = item.point; else delete next.point; }
+        return next;
+      }
+      counts.projects.added++;
+      return { ...item, id: newId('p'), defaultRecipientId: receiver?.id || '', active: true };
+    });
+    for (const p of oldProjects) if (!usedProjects.has(p) && keepProject(p.name)) { projects.push(p); usedProjects.add(p); }
+    counts.projects.removed = oldProjects.length - usedProjects.size;
+
+    // beszállítói telephelyek: név + cím szerint
+    const oldSuppliers = target.suppliers || [];
+    const usedSuppliers = new Set();
+    const suppliers = (seed.suppliers || []).map(item => {
+      const found = oldSuppliers.find(x => !usedSuppliers.has(x) && nrm(x.name) === nrm(item.name) && addrKeyV145(x.address) === addrKeyV145(item.address));
+      if (found) {
+        usedSuppliers.add(found); counts.suppliers.updated++;
+        return { ...found, name: item.name, address: item.address || '', pickupNote: item.pickupNote || '', isCentral: !!item.isCentral, active: item.active !== false, site: found.site || item.site || '' };
+      }
+      counts.suppliers.added++;
+      return { ...item, id: newId('s'), pickupNote: item.pickupNote || '', isCentral: !!item.isCentral, active: item.active !== false };
+    });
+    for (const x of oldSuppliers) if (!usedSuppliers.has(x) && keepSupplier(x.name)) { suppliers.push(x); usedSuppliers.add(x); }
+    counts.suppliers.removed = oldSuppliers.length - usedSuppliers.size;
+
+    target.recipients = recipients;
+    target.projects = projects;
+    target.suppliers = suppliers;
+
+    // a fuvarok hivatkozásai: ami eltűnt, az név (és cím) alapján újrakötődik
+    const supplierIds = new Set(suppliers.map(x => x.id)), projectIds = new Set(projects.map(p => p.id)), recipientIds = new Set(recipients.map(r => r.id));
+    for (const order of target.orders || []) {
+      if (order.supplierId && !supplierIds.has(order.supplierId)) {
+        const same = suppliers.filter(x => nrm(x.name) === nrm(order.pickupName));
+        order.supplierId = (same.find(x => addrKeyV145(x.address) === addrKeyV145(order.pickupAddress)) || (same.length === 1 ? same[0] : null))?.id || '';
+      }
+      if (order.projectId && !projectIds.has(order.projectId)) order.projectId = projects.find(p => nrm(p.name) === nrm(order.projectName))?.id || '';
+      if (order.recipientId && !recipientIds.has(order.recipientId)) order.recipientId = recipients.find(r => nrm(r.name) === nrm(order.recipientName))?.id || '';
+    }
+    target.masterDataSeedV145 = MASTER_MARK_V145;
+    if (!target.masterDataVersion) target.masterDataVersion = 'v145-torzs';
+    return { applied: true, counts };
+  }
+  global.applyMasterDataV145 = applyMasterDataV145;
+
+  /* Indításkor egyszer lefut (új és meglévő eszközön is). */
+  try {
+    if (typeof state !== 'undefined' && state && Array.isArray(state.orders)) {
+      const result = applyMasterDataV145(state);
+      if (result.applied) {
+        console.info('[V145] törzsadat frissítve a 2026-10-16-i export szerint', result.counts);
+        if (typeof KEY !== 'undefined' && typeof localStorage !== 'undefined') {
+          try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (error) { console.warn('[V145] a törzsadat mentése', error); }
+        }
+      }
+    }
+  } catch (error) { console.warn('[V145] a törzsadat frissítése', error); }
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(bindV44, 0), { once: true });

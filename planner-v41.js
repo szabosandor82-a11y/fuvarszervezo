@@ -47,6 +47,73 @@
 
 
   const CENTRAL_WAREHOUSE = { name: 'Szigetszentmiklósi Központi Raktár', address: '2310 Szigetszentmiklós, Kereskedő utca 2.' };
+
+  /* ===== V145 – SERPA BIZONYLATTÍPUSOK ===================================
+     A szállítói rendelésen (SR0) kívüli SERPA-bizonylatoknál a felrakó
+     MINDIG a központi raktár (KRPR):
+       - raktárközi / belső rendelés (Forrás raktár / Cél raktár hasábbal):
+         KRPR, NRPR, BR0, BRN – a lerakó a Cél raktár;
+       - vevő rendelés: NRI, PRI – a lerakó a „Projekt név” / „Raktár:”. */
+  const INTERNAL_TYPES_V145 = new Set(['KRPR', 'NRPR', 'BR0', 'BRN']);
+  const CUSTOMER_TYPES_V145 = new Set(['NRI', 'PRI']);
+  const isInternalTypeV145 = type => INTERNAL_TYPES_V145.has(String(type || '').toUpperCase());
+  const isCustomerTypeV145 = type => CUSTOMER_TYPES_V145.has(String(type || '').toUpperCase());
+  /* A központi raktár a beszállítói törzsből: a „KRPR” nevű (központi)
+     telephely; ha nincs, bármely központinak jelölt Kereskedő utcai; végső
+     esetben a beépített adat. */
+  const CENTRAL_ALIASES_V145 = ['krpr', 'kozponti raktar', 'szigetszentmiklosi kozponti raktar', 'uj kozponti raktar'];
+  function isCentralAliasV145(name = '') { return CENTRAL_ALIASES_V145.includes(nrm(name)); }
+  function centralSupplierV145() {
+    const suppliers = typeof state !== 'undefined' ? (state.suppliers || []).filter(item => item.active !== false) : [];
+    const krpr = suppliers.filter(item => nrm(item.name) === 'krpr');
+    const pick = krpr.find(item => item.isCentral) || krpr[0]
+      || suppliers.find(item => item.isCentral && /keresked/i.test(item.address || ''))
+      || suppliers.find(item => nrm(item.name) === nrm(CENTRAL_WAREHOUSE.name));
+    return pick
+      ? { id: pick.id || '', name: pick.name, address: pick.address || '', pickupNote: pick.pickupNote || pick.note || '' }
+      : { ...CENTRAL_WAREHOUSE, id: '' };
+  }
+  /* Vevő rendelés: a „Projekt név” oszlop alatti érték, az x-koordináta
+     alapján (a sor elején a fizetési mód és határidő áll). */
+  function customerProjectNameV145(rows = []) {
+    for (let i = 0; i < rows.length - 1; i++) {
+      const head = (rows[i].parts || []).find(part => /^projekt\s*n[eé]v$/i.test(String(part.str || '').trim()));
+      if (!head) continue;
+      const fuvar = (rows[i].parts || []).find(part => /^fuvar$/i.test(String(part.str || '').trim()));
+      const next = rows[i + 1];
+      if (!next || next.page !== rows[i].page) continue;
+      const parts = (next.parts || []).filter(part => part.x >= head.x - 4 && (!fuvar || part.x < fuvar.x - 4));
+      const text = parts.map(part => part.str).join(' ').replace(/\s+/g, ' ').trim();
+      if (text) return text;
+    }
+    return '';
+  }
+  /* A Cél raktár hasáb első sora – a projekt neve úgy, ahogy a bizonylaton áll. */
+  function documentTargetNameV145(columnText = '', pdfText = '') {
+    const first = String(columnText || '').split(/\n/).map(line => line.trim()).filter(Boolean)[0] || String(columnText || '');
+    let name = first
+      .split(/\b(?:tel(?:efon)?\s*,?\s*fax|e-?mail|ad[oó]sz[aá]m|\d{3}[ÁA]LT)\b|\s\d{4}\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]/)[0]
+      .replace(/\s+/g, ' ').trim();
+    /* Ha a hasábokat csak szövegből (koordináta nélkül) lehetett szétválasztani,
+       a vágás szó közepére eshet („Stand 98 Kft. B|udapest_…”). A név ilyenkor
+       a szó elejétől indul. */
+    if (name && pdfText) {
+      for (const line of String(pdfText).split(/\n/)) {
+        const at = line.indexOf(name);
+        if (at <= 0) continue;
+        let start = at;
+        while (start > 0 && /[0-9A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű_]/.test(line[start - 1])) start--;
+        if (start < at) name = line.slice(start, at) + name;
+        break;
+      }
+    }
+    return name;
+  }
+  /* Azonosító jellegű szavak (K1, K6, A2…) – ha mindkét oldalon van ilyen,
+     egyezniük kell, különben a „Kincsem K1” a „Kincsem K6”-ra illeszkedne. */
+  function idTokensV145(value = '') {
+    return new Set(nrm(value).split(/[\s_\/.-]+/).filter(token => /^[a-z]{1,3}\d{1,3}$/.test(token)));
+  }
   const ADDRESS_RE = /\b(\d{4})\s+([A-ZÁÉÍÓÖŐÚÜŰa-záéíóöőúüű][^\n;]{2,90}?\b(?:utca|út|u\.|köz|tér|körút|sor|park|rakpart|útja)\s*\d+[A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű0-9.\/-]*)/i;
 
   function linesOf(...sources) {
@@ -68,7 +135,7 @@
     const refs = [];
     // V63: a BR0 (belső rendelés) eddig kimaradt, ezért az ilyen bizonylatokról
     // a program semmit nem ismert fel – sem a rendelésszámot, sem a tételeket.
-    for (const match of text.matchAll(/\b(20\d{2})\s*-\s*(SR0|BR0|KRPR|NRPR|PRPR)\s*\/\s*([0-9]{4,12})\b/gi)) {
+    for (const match of text.matchAll(/\b(20\d{2})\s*-\s*(SR0|BR0|BRN|KRPR|NRPR|PRPR|NRI|PRI)\s*\/\s*([0-9]{4,12})\b/gi)) {
       const ref = { year: match[1], type: match[2].toUpperCase(), no: match[3], full: `${match[1]}-${match[2].toUpperCase()}/${match[3]}`, index: match.index ?? -1 };
       if (!refs.some(existing => existing.full === ref.full)) refs.push(ref);
     }
@@ -94,7 +161,7 @@
     const raw = String(text || '');
     const firstItem = raw.search(/^\s*(?:\d+\s*\.|Rendel[eé]s\s*:)/m);
     const head = firstItem > 0 ? raw.slice(0, firstItem) : raw.slice(0, 1500);
-    const inHead = head.match(/\b20\d{2}\s*-\s*(SR0|BR0|KRPR|NRPR|PRPR)\s*\/\s*[0-9]{4,12}\b/i);
+    const inHead = head.match(/\b20\d{2}\s*-\s*(SR0|BR0|BRN|KRPR|NRPR|PRPR|NRI|PRI)\s*\/\s*[0-9]{4,12}\b/i);
     if (inHead) return inHead[1].toUpperCase();
     return String(refs[0].type || '').toUpperCase();
   }
@@ -418,6 +485,11 @@
   }
 
   function transferNameMatch(columnText, projectName) {
+    /* V145: ha a bizonylaton és a projektnévben is van azonosító (K1/K6),
+       és nincs közös, a projekt nem lehet ez. */
+    const idCol = idTokensV145(columnText), idName = idTokensV145(projectName);
+    if (idCol.size && idName.size && ![...idName].some(token => idCol.has(token))) return 0;
+    const commonId = idName.size && [...idName].some(token => idCol.has(token));
     const columnKeys = transferNameKeys(columnText);
     const nameKeys = transferNameKeys(projectName);
     let best = 0;
@@ -437,6 +509,12 @@
         if (tokens.every(token => tokenInColumnV71(token, column))
             && tokens.some(token => token.length >= 6)) {
           best = Math.max(best, tokens.join('').length);
+        }
+        /* V145: közös azonosítónál elég, ha a jellemző szavak többsége
+           egyezik („Budapest Kincsem K1” → „Budapest_Kincsem_Park_K1”). */
+        if (commonId && tokens.length) {
+          const hits = tokens.filter(token => column.includes(token));
+          if (hits.length >= Math.max(1, Math.ceil(tokens.length / 2))) best = Math.max(best, hits.join('').length * 2 + 4);
         }
       }
     }
@@ -874,7 +952,7 @@
 
   function projectLabelWindow(pdfText = '', pdfLines = [], mode = 'SR0') {
     const lines = (pdfLines?.length ? pdfLines : linesOf(pdfText));
-    const target = mode === 'KRPR' || mode === 'NRPR' || mode === 'BR0' || mode === 'PRPR'
+    const target = isInternalTypeV145(mode) || mode === 'PRPR'
       ? /c[eé]l\s*rakt[aá]r/i
       : /projekt\s*n[eé]v|(?:^|\s)rakt[aá]r\s*:/i;
     const found = [];
@@ -935,9 +1013,11 @@
     const supplierOrder = /szallito\s+rendeles/.test(head);
     // V64: a belső rendelés (BR0) mindenben a raktárközivel azonos.
     const warehouseTransfer = /raktarkozi|belso rendeles/.test(head)
-      || refs.some(ref => ref.type === 'KRPR' || ref.type === 'NRPR' || ref.type === 'BR0' || ref.type === 'PRPR');
-    const confirmation = /visszaigazolas|rendeles\s+visszaigazolas|megrendeles\s+visszaigazolasa|ajanlat/.test(head) && !supplierOrder && !warehouseTransfer;
-    return { primary: supplierOrder || warehouseTransfer, supplierOrder, warehouseTransfer, confirmation, refs };
+      || refs.some(ref => isInternalTypeV145(ref.type) || ref.type === 'PRPR');
+    /* V145: a vevő rendelés (NRI, PRI) is elsődleges bizonylat. */
+    const customerOrder = /vevo rendeles/.test(head) || refs.some(ref => isCustomerTypeV145(ref.type));
+    const confirmation = /visszaigazolas|rendeles\s+visszaigazolas|megrendeles\s+visszaigazolasa|ajanlat/.test(head) && !supplierOrder && !warehouseTransfer && !customerOrder;
+    return { primary: supplierOrder || warehouseTransfer || customerOrder, supplierOrder, warehouseTransfer, customerOrder, confirmation, refs };
   }
 
   function splitPdfDocumentByOrders(pdf = {}) {
@@ -1005,7 +1085,10 @@
   function joinThousandsV71(line) {
     let out = String(line || '');
     for (let i = 0; i < 3; i++) {
-      const next = out.replace(/(?<![.,]\d{0,6})(\d)[ \u00a0](\d{3})(?![0-9])/g, '$1$2');
+      /* V145: csak önálló számot vonunk össze („2 000 db” → 2000). Ha a szám
+         előtt betű vagy jel áll („SW P3 400 db”, „M8x25 300 db”), az a név
+         része – eddig összeolvadt a mennyiséggel, és a tétel kimaradt. */
+      const next = out.replace(/(?<![.,]\d{0,6})(?<![A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű\/x*×+])(\b\d{1,3})[ \u00a0](\d{3})(?![0-9])/g, '$1$2');
       if (next === out) break;
       out = next;
     }
@@ -1043,7 +1126,11 @@
        előző tétel megjegyzésévé válnak. Ha nincs számozás (más beszállító
        más formátuma), marad a korábbi viselkedés. */
     const tisztit = raw => joinThousandsV71(String(raw || '').replace(/\s+/g, ' ').trim());
-    const szamozott = sor => /^\s*\d+\s*[.)]?\s+[A-ZÁÉÍÓÖŐÚÜŰ0-9._\/-]/.test(sor);
+    /* V145: a fejléc „1 / 1 példány” sora nem számozott tétel – eddig emiatt
+       a raktárközi bizonylat (szám nélküli) tételsorai mind kimaradtak. */
+    /* V145: a sorszám legfeljebb háromjegyű – a négyjegyű irányítószámmal
+       kezdődő címsor („1239 Budapest Láva u 7.”) nem tétel. */
+    const szamozott = sor => /^\s*\d{1,3}\s*[.)]?\s+[A-ZÁÉÍÓÖŐÚÜŰ0-9._\/-]/.test(sor) && !/^\s*\d+\s*\/\s*\d+\b/.test(sor) && !/p[eé]ld[aá]ny/i.test(sor);
     const vanSorszam = (lines || []).some(raw => szamozott(tisztit(raw)));
     const arSor = sor => /^(HUF|EUR|USD)\b/i.test(sor) || /^[\d\s.,-]+$/.test(sor);
 
@@ -1157,8 +1244,9 @@
     // V63: a belső rendelés (BR0) szerkezetileg ugyanaz, mint a raktárközi:
     // Forrás raktár / Cél raktár hasáb. A felrakó a központi raktár, a lerakó
     // a cél oszlopban álló projekt.
-    if (orderType === 'KRPR' || orderType === 'NRPR' || orderType === 'BR0') {
-      pickup = { ...CENTRAL_WAREHOUSE, reason: `${orderType}: felrakó a központi raktár` };
+    if (isInternalTypeV145(orderType)) {
+      /* V145: a felrakó a törzsadat KRPR beszállítója (központi raktár). */
+      pickup = { ...centralSupplierV145(), reason: `${orderType}: felrakó a központi raktár (KRPR)` };
       // A lerakó KIZÁRÓLAG a Cél raktár hasábjából jöhet. A bal hasábban álló
       // "Stand 98 Kft. Új Központi Raktár" korábban minden KRPR-nél megnyerte
       // a lerakó helyét, mert szó szerint egyezett egy projektnévvel.
@@ -1169,10 +1257,29 @@
       project = projectMasterByIdentity(target)
         || (hint ? bestProject(hint, hint) : null);
       if (project && isCentralWarehouseName(project.name)) project = null;
+      /* V145: a projekt NEVE úgy, ahogy a bizonylat Cél raktár hasábjában
+         áll; a címe és az átvevője a megtalált törzsadatból. */
+      const docName = documentTargetNameV145(transfer.columns?.target || '', pdfText || body || combined);
+      if (docName && !isCentralWarehouseName(docName)) {
+        if (project && nrm(project.name) !== nrm(docName)) project = { ...project, name: docName, masterNameV145: project.name };
+        else if (!project) project = { id: '', name: docName, address: '', reason: 'a bizonylat szerinti név – nincs a projekttörzsben' };
+      }
       drop = project;
       if (!drop) reasons.push(`${orderType}: a cél raktár nem azonosítható, ellenőrizd`);
       else reasons.push(`${orderType}: lerakó a Cél raktár hasábból`);
-      pickupRole = 'warehouse'; dropRole = 'project';
+      pickupRole = 'supplier'; dropRole = 'project';
+    } else if (isCustomerTypeV145(orderType)) {
+      /* V145: vevő rendelés – felrakó a KRPR, lerakó a „Projekt név”. */
+      pickup = { ...centralSupplierV145(), reason: `${orderType}: felrakó a központi raktár (KRPR)` };
+      project = projectFromPdfMaster(pdfText || combined, pdfLines, hint, 'SR0') || bestProject(combined, hint);
+      project = projectMasterByIdentity(project);
+      /* A „Projekt név” oszlop: a fejléc alatti sorban az oszlop x-helyzete
+         szerint – szöveg szerint nem választható le a fizetési határidőről. */
+      const docName = customerProjectNameV145(pdfRows) || '';
+      if (docName && project && nrm(project.name) !== nrm(docName)) project = { ...project, name: docName, masterNameV145: project.name };
+      drop = project;
+      reasons.push(`${orderType}: lerakó a Projekt név mezőből`);
+      pickupRole = 'supplier'; dropRole = 'project';
     } else if (orderType === 'PRPR') {
       // Projektről projektre: a felrakó a Forrás, a lerakó a Cél hasáb.
       const transfer = extractTransferWarehouses(pdfText || body || combined, pdfRows);
@@ -1225,6 +1332,7 @@
       scheduleDate, scheduleDateManual: false, requestedDate: requested, orderNo, sourceOrderNos, fullOrderRefs: refs.map(ref => ref.full), orderType, isReturn: returnMode,
       pickupName: pickupSite?.name || pickup?.name || '', pickupAddress: pickupSite?.address || pickup?.address || '', supplierId: pickupRole === 'supplier' ? (pickupSite?.id || pickup?.id || '') : '', pickupNote: pickup?.pickupNote || '', pickupRole,
       projectName: drop?.name || hint || '', projectId: dropRole === 'project' ? (drop?.id || '') : '', dropAddress: drop?.address || '', dropRole,
+      projectDocNameV145: drop?.masterNameV145 || (drop && !drop.id && drop.name) ? drop.name : '',
       returnSourceProjectId: returnMode ? (project?.id || '') : '', returnDestinationSupplierId: returnMode ? (supplier?.id || '') : '',
       newSupplierData: null,
       ...recipientFromProject(dropRole === 'project' ? drop : null), items, warnings, duplicate: false, existingOrderNos,
@@ -1682,7 +1790,7 @@
       <div class="v38-fields">
         <label>Felvétel dátuma<input data-field="scheduleDate" type="date" value="${htmlEsc(entry.scheduleDate)}"></label>
         ${entry.messageOrderNos?.length > 1 ? `<label class="v43-all-order-nos">Rendelésszámok a levélben<input value="${htmlEsc(entry.messageOrderNos.join(', '))}" readonly></label>` : ''}
-        <label>${entry.messageOrderNos?.length > 1 ? 'Aktuális rendelés száma' : 'Rendelésszám'}<input data-field="orderNo" value="${htmlEsc(entry.orderNo)}" placeholder="pl. 004911"></label>
+        <label>${entry.messageOrderNos?.length > 1 ? 'Aktuális rendelés száma' : 'Rendelésszám'}<input data-field="orderNo" value="${htmlEsc(entry.orderNo)}" placeholder="pl. 004911">${(entry.fullOrderRefs || []).length ? `<small class="v145-ref">Bizonylat: ${htmlEsc(entry.fullOrderRefs.join(', '))}</small>` : ''}</label>
         <label>Felrakó neve${supplierNameSelect(entry)}</label>
         <label>Felrakó címe${supplierAddressSelect(entry)}</label>
         <label>Lerakó / projekt${projectNameSelect(entry)}</label>
@@ -1764,12 +1872,30 @@
       card.querySelectorAll('[data-field]').forEach(input => input.addEventListener('change', () => {
         const field = input.dataset.field;
         entry[field] = input.value.trim();
+        /* V145: a kézzel átírt rendelésszámhoz a bizonylat szerinti teljes
+           szám is igazodik (az év és a típus az eredeti bizonylatból). */
+        if (field === 'orderNo') {
+          const first = String((entry.fullOrderRefs || [])[0] || '');
+          const head = first.match(/^(20\d{2})-([A-Z0-9]+)\//);
+          const numbers = orderNumbersOf(entry.orderNo);
+          entry.fullOrderRefs = head ? numbers.map(no => `${head[1]}-${head[2]}/${no}`) : [];
+        }
         if (field === 'scheduleDate') entry.scheduleDateManual = true;
 
         if (input.dataset.kind === 'supplier-name') {
           /* V88: a FELRAKÓ lehet PROJEKT is (visszáru forrása). Ilyenkor a
              projekt címét töltjük be, nem a beszállítói törzsből keresünk. */
-          const asProject = (state.projects || []).find(item => nrm(item.name) === nrm(entry.pickupName));
+          /* V145: a BESZÁLLÍTÓ az első. Projektként (visszáru forrása) csak
+             akkor kezeljük, ha ilyen nevű beszállító nincs – a KRPR projekt-
+             ként is létezik, ezért eddig a hiányos projektcímet kapta, és
+             importáláskor a felrakó kiürült. A központi raktár minden szokásos
+             neve a KRPR beszállítót adja. */
+          if (isCentralAliasV145(entry.pickupName)) {
+            const central = centralSupplierV145();
+            if (central.id) entry.pickupName = central.name;
+          }
+          const hasSupplier = (state.suppliers || []).some(item => nrm(item.name) === nrm(entry.pickupName));
+          const asProject = hasSupplier ? null : (state.projects || []).find(item => nrm(item.name) === nrm(entry.pickupName));
           /* V89 JAVÍTÁS: itt korábban egy nem létező renderPreview() hívás állt,
              ami hibára futott – a kezelő megszakadt, és a kártya nem frissült.
              A helyes név renderPending(), és azt a kezelő VÉGE úgyis meghívja,
@@ -1780,8 +1906,11 @@
             entry.pickupAddress = asProject.address || entry.pickupAddress || '';
             entry.pickupNote = '';
             entry.newSupplierData = null;
+            entry.pickupRole = 'project';
+            entry.returnSourceProjectId = asProject.id || '';
           }
           if (!asProject) {
+            entry.pickupRole = 'supplier';
             const preferred = locations.find(item => item.isCentral) || locations.find(item => nrm(item.pickupNote || item.note).includes('kozpont')) || locations[0] || null;
             entry.supplierId = preferred?.id || '';
             entry.pickupAddress = preferred?.address || '';
@@ -1900,15 +2029,33 @@
       || (typeof activeVehicles === 'function' ? activeVehicles()[0] : (state.vehicles || []).find(vehicle => vehicle.active !== false));
   }
 
+  /* V145: a házszámot egybeolvasva hasonlítunk („3/b” = „3B”). */
+  const addrKeyV145 = value => nrm(value).replace(/(\d+)\s*[\/\-]?\s*([a-z])(?![a-z0-9])/g, '$1$2').replace(/\s+/g, ' ').trim();
   function masterIdsForEntry(entry) {
-    const supplier = (state.suppliers || []).find(item => nrm(item.name) === nrm(entry.pickupName) && (!entry.pickupAddress || nrm(item.address) === nrm(entry.pickupAddress)))
-      || (state.suppliers || []).find(item => nrm(item.address) === nrm(entry.pickupAddress));
+    const sameName = (state.suppliers || []).filter(item => nrm(item.name) === nrm(entry.pickupName));
+    let supplier = sameName.find(item => !entry.pickupAddress || addrKeyV145(item.address) === addrKeyV145(entry.pickupAddress))
+      || (state.suppliers || []).find(item => entry.pickupAddress && addrKeyV145(item.address) === addrKeyV145(entry.pickupAddress))
+      || null;
+    /* V145: ha a név egyezik, de a cím nem pontosan, a cég telephelyei közül
+       választunk (részleges egyezés, aztán a központi) – DE csak akkor, ha a
+       beírt cím hiányos (nincs benne irányítószám). Egy teljes, kézzel beírt
+       egyedi címet megtartunk. */
+    const fullTyped = /\b\d{4}\b/.test(String(entry.pickupAddress || ''));
+    if (!supplier && !fullTyped) {
+      supplier = (entry.pickupAddress ? sameName.find(item => addrKeyV145(item.address).includes(addrKeyV145(entry.pickupAddress)) || addrKeyV145(entry.pickupAddress).includes(addrKeyV145(item.address))) : null)
+        || sameName.find(item => item.isCentral) || sameName[0]
+        || (isCentralAliasV145(entry.pickupName) ? (state.suppliers || []).find(item => item.id && item.id === centralSupplierV145().id) : null)
+        || null;
+    }
     const exactProjects = (state.projects || []).filter(item => nrm(item.name) === nrm(entry.projectName));
+    /* V145: cím alapján csak akkor párosítunk, ha EGYETLEN projektnek van
+       ilyen címe – a Kincsem-projekteknek közös a címe, ott rossz átvevő jött. */
+    const sameAddress = entry.dropAddress ? (state.projects || []).filter(item => nrm(item.address) === nrm(entry.dropAddress)) : [];
     let project = (state.projects || []).find(item => entry.projectId && item.id === entry.projectId)
       || exactProjects.find(item => String(item.address || '').trim())
       || exactProjects[0]
-      || (state.projects || []).find(item => entry.dropAddress && nrm(item.address) === nrm(entry.dropAddress));
-    if ((entry.orderType === 'KRPR' || entry.orderType === 'NRPR' || entry.orderType === 'BR0') && (!project?.address || !entry.dropAddress)) {
+      || (sameAddress.length === 1 ? sameAddress[0] : null);
+    if (isInternalTypeV145(entry.orderType) && (!project?.address || !entry.dropAddress)) {
       project = projectWithAddressFromMaster(project || { id: entry.projectId || '', name: entry.projectName || '' }, `${entry.sourcePdfText || ''}
 ${entry.sourceBody || ''}
 ${entry.subject || ''}`) || project;
@@ -1928,9 +2075,11 @@ ${entry.subject || ''}`) || project;
     const existingSupplier = ensureSupplierMaster(entry);
     const { supplier, project } = masterIdsForEntry(entry);
     const resolvedSupplier = supplier || existingSupplier;
-    if ((entry.orderType === 'KRPR' || entry.orderType === 'NRPR' || entry.orderType === 'BR0') && project?.address && !entry.dropAddress) {
+    if (isInternalTypeV145(entry.orderType) && project?.address && !entry.dropAddress) {
       entry.projectId = project.id || entry.projectId || '';
-      entry.projectName = project.name || entry.projectName || '';
+      /* V145: a bizonylat szerinti név marad, ha a bizonylatról ismert;
+         egyébként (pl. rövidített név) a törzsadat teljes neve kerül be. */
+      entry.projectName = entry.projectDocNameV145 || project.name || entry.projectName || '';
       entry.dropAddress = project.address;
       entry.warnings = (entry.warnings || []).filter(warning => !/Lerakó címe|Projekt címe/i.test(warning));
     }
@@ -1942,8 +2091,10 @@ ${entry.subject || ''}`) || project;
     return {
       id: id(), scheduleDate: normalizeWorkdayISO(entry.scheduleDate || selectedImportDate() || tomorrowISO()), vehicleId: isMartin ? (martin?.id || '') : (mario?.id || ''), sequence: 999,
       orderNo: entry.orderNo || sourceNos.join(', '), sourceOrderNos: sourceNos, fullOrderRefs: entry.fullOrderRefs || [], orderType: entry.orderType || 'SR0', isReturn: !!entry.isReturn,
-      topicName: entry.projectName, pickupName: entry.pickupRole === 'supplier' ? (resolvedSupplier?.name || '') : entry.pickupName, pickupAddress: entry.pickupRole === 'supplier' ? (resolvedSupplier?.address || '') : entry.pickupAddress, pickupNote: resolvedSupplier?.pickupNote || resolvedSupplier?.note || entry.pickupNote || '', supplierId: entry.pickupRole === 'supplier' ? (resolvedSupplier?.id || '') : '',
-      projectName: entry.projectName, projectId: entry.dropRole === 'project' ? (project?.id || entry.projectId || '') : '', dropAddress: entry.dropAddress,
+      /* V145: ha a felrakó nincs a törzsben, a beírt név és cím marad –
+         eddig ilyenkor kiürült, és a buborék „Nincs megadva” lett. */
+      topicName: entry.projectName, pickupName: entry.pickupRole === 'supplier' ? (resolvedSupplier?.name || entry.pickupName || '') : entry.pickupName, pickupAddress: entry.pickupRole === 'supplier' ? (resolvedSupplier?.address || entry.pickupAddress || '') : entry.pickupAddress, pickupNote: resolvedSupplier?.pickupNote || resolvedSupplier?.note || entry.pickupNote || '', supplierId: entry.pickupRole === 'supplier' ? (resolvedSupplier?.id || '') : '',
+      projectName: entry.projectName, projectId: (entry.dropRole || 'project') === 'project' ? (entry.projectId || project?.id || '') : '', dropAddress: entry.dropAddress,
       pickupRole: entry.pickupRole || 'supplier', dropRole: entry.dropRole || 'project', returnSourceProjectId: entry.returnSourceProjectId || '', returnDestinationSupplierId: entry.returnDestinationSupplierId || '',
       recipientId: recipient?.id || entry.recipientId || '', recipientName: recipient?.name || entry.recipientName || '', recipientPhone: recipient?.phone || entry.recipientPhone || '', recipientEmail: recipient?.email || entry.recipientEmail || '',
       requestedDeadline: entry.requestedDate || '',
@@ -2276,6 +2427,8 @@ ${entry.subject || ''}`) || project;
 
   const V41_API = {
     version: VERSION,
+    centralSupplierV145, documentTargetNameV145, customerProjectNameV145, idTokensV145, isInternalTypeV145, isCustomerTypeV145,
+    get pending() { return pending; },
     extractOrderNo,
     extractOrderRefs,
     orderNumbersOf,

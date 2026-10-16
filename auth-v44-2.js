@@ -416,7 +416,7 @@
       ${locked ? `<div class="locked-note">${order.scheduleDate < currentWorkday() ? 'Lezárt nap' : 'Következő nap – előnézet'} – csak megtekinthető</div>` : ''}
       <div class="v57-row-head">
         <span class="mobile-sequence">${index + 1}</span>
-        <div class="v57-row-title">${global.isFutureOrderV126?.(order) ? '<span class="v126-badge">Future</span>' : ''}${safe(order.orderNo)} — ${safe(pickup)} — ${safe(drop)}</div>
+        <div class="v57-row-title">${global.isFutureOrderV126?.(order) ? '<span class="v126-badge">Future</span>' : ''}${safe((global.orderLabelV145 ? global.orderLabelV145(order) : order.orderNo))} — ${safe(pickup)} — ${safe(drop)}</div>
         <button type="button" class="v57-detail-toggle" aria-expanded="false" title="Címek és megjegyzések"
           onclick="v57ToggleDriverDetail('${detailId}',this)">▾</button>
       </div>
@@ -481,7 +481,7 @@
     const tetelek = (order.items || [])
       .map(item => [item.code, item.description, item.name, item.note].filter(Boolean).join(' '))
       .join(' ');
-    return [order.orderNo, order.pickupName, order.pickupAddress, order.projectName,
+    return [order.orderNo, ...(order.fullOrderRefs || []), order.pickupName, order.pickupAddress, order.projectName,
             order.dropAddress, order.recipientName, order.note, tetelek]
       .filter(Boolean).join(' ').toLowerCase();
   }
@@ -504,7 +504,7 @@
     host.innerHTML = talalt.length
       ? `<div class="v113-results-head">${talalt.length} találat</div>` + talalt.map(order => `
           <button type="button" class="v113-result" onclick="openDriverSearchHitV113('${safe(order.id)}')">
-            <span class="v113-result-main"><b>${safe(order.orderNo || 'Rendelésszám nélkül')}</b>
+            <span class="v113-result-main"><b>${safe((global.orderLabelV145 ? global.orderLabelV145(order) : order.orderNo) || 'Rendelésszám nélkül')}</b>
               <small>${safe(order.pickupName || '')} → ${safe(order.projectName || order.dropAddress || '')}</small></span>
             <span class="v113-result-date">${safe(order.scheduleDate)}</span></button>`).join('')
       : '<div class="v113-results-empty">Nincs találat.</div>';
@@ -996,7 +996,7 @@
     const select = byId('transferTarget');
     if (select) select.innerHTML = Object.entries(DRIVER_LABELS).filter(([key]) => key !== fromKey).map(([key, label]) => `<option value="${key}">${safe(label)}</option>`).join('');
     if (byId('transferOrderId')) byId('transferOrderId').value = order.id;
-    if (byId('transferTitle')) byId('transferTitle').textContent = `${order.orderNo} · ${order.projectName || 'Fuvar'} átadása`;
+    if (byId('transferTitle')) byId('transferTitle').textContent = `${(global.orderLabelV145 ? global.orderLabelV145(order) : order.orderNo)} · ${order.projectName || 'Fuvar'} átadása`;
     if (byId('transferInfo')) byId('transferInfo').textContent = `Jelenlegi sofőr: ${DRIVER_LABELS[fromKey] || fromKey || 'nincs kiosztva'}. A fuvar csak a másik sofőr elfogadása után kerül át.`;
     byId('transferDialog')?.showModal();
   }
@@ -1155,7 +1155,7 @@
         <div class="mail-meta">
           ${mail.from ? `<div><b>Feladó:</b> ${safe(mail.from)}</div>` : ''}
           ${mail.fileName ? `<div><b>Fájl:</b> ${safe(mail.fileName)}</div>` : ''}
-          ${order.orderNo ? `<div><b>Rendelés:</b> ${safe(order.orderNo)}</div>` : ''}
+          ${order.orderNo ? `<div><b>Rendelés:</b> ${safe((global.orderLabelV145 ? global.orderLabelV145(order) : order.orderNo))}</div>` : ''}
         </div>
         ${(() => { const note = [order.note, order.manualItems].map(v => String(v || '').trim()).find(v => v && !/^outlook import/i.test(v)); return note ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${safe(note)}</div>` : ''; })()}
         <pre class="mail-body">${safe(readableMailBodyV73(mail.body) || '(A levélnek nincs mentett szöveges tartalma.)')}</pre>
@@ -1624,7 +1624,7 @@
         if (!kulcs || torolt.has(kulcs)) continue;
         const note = String(report.note || '').trim();
         if (/^outlook\s*forr/i.test(note)) continue;
-        bejegyzesek.set(kulcs, { kulcs, note, at: report.at || '', orderNo: order.orderNo || '', fuvarNap: order.scheduleDate || '', audio: [] });
+        bejegyzesek.set(kulcs, { kulcs, note, at: report.at || '', orderNo: (global.orderLabelV145 ? global.orderLabelV145(order) : order.orderNo) || '', fuvarNap: order.scheduleDate || '', audio: [] });
       }
     }
     for (const file of audioFiles || []) {
@@ -1685,7 +1685,7 @@
       orders = [...bovitett.values()].sort((a, b) =>
         String(a.scheduleDate || '').localeCompare(String(b.scheduleDate || '')));
     }
-    const orderNos = [...new Set(orders.map(order => order.orderNo).filter(Boolean))];
+    const orderNos = [...new Set(orders.map(order => (global.orderLabelV145 ? global.orderLabelV145(order) : order.orderNo)).filter(Boolean))];
     const host = byId('mediaGalleryBody');
     if (byId('mediaGalleryTitle')) byId('mediaGalleryTitle').textContent = `${orderNos.join(', ') || 'Fuvar'} · mentett fotók`;
     if (host) host.innerHTML = '<div class="mobile-empty">Fotók betöltése…</div>';
@@ -1697,7 +1697,7 @@
       const groups = await Promise.all(orders.map(async order => {
         const files = await global.V44Online.listDeliveryFiles(String(order.id));
         return (files || []).map(file => ({
-          ...file, orderNo: order?.orderNo || '', fuvarNap: order?.scheduleDate || ''
+          ...file, orderNo: (order && global.orderLabelV145 ? global.orderLabelV145(order) : order?.orderNo) || '', fuvarNap: order?.scheduleDate || ''
         }));
       }));
       /* V70: a Mentett fotók CSAK a sofőr által készített szállítóleveleket

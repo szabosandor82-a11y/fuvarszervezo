@@ -1574,3 +1574,4 @@ body .driver-account-actions #driverLogout{min-height:42px;width:auto;padding:9p
   body .topbar .account-bar{order:10;flex:1 0 100%;justify-content:flex-end;margin-top:8px}
   body .topbar #accountLogout{min-height:42px;padding:9px 18px;font-size:14px;font-weight:800}
 }
+.v145-ref{display:block;margin-top:3px;font-size:11px;font-weight:700;color:#2563c9}

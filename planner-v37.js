@@ -537,7 +537,8 @@
     const szalOsszes = global.groupThreadCountV117?.(group.orders) || 0;
     const szalOlvasatlan = global.groupThreadUnreadV117?.(group.orders) || false;
     const ids = groupIds(group);
-    const orderNos = [...new Set(group.orders.map(order => order.orderNo).filter(Boolean))];
+    /* V145: a rendelésszám úgy, ahogy a bizonylaton áll */
+    const orderNos = [...new Set(group.orders.map(order => (typeof global.orderLabelV145==='function'?global.orderLabelV145(order):order.orderNo)).filter(Boolean))];
     const itemCount = group.orders.reduce((sum, order) => sum + (order.items?.length || 0), 0);
     const longReasons = [...new Set(group.orders.map(order => order.longMaterialReason).filter(Boolean))];
     const complete = group.orders.every(order => order.completed);
