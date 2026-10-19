@@ -62,7 +62,24 @@
       requestHeaders['Content-Type'] = requestHeaders['Content-Type'] || 'application/json';
       requestBody = JSON.stringify(body);
     }
-    const response = await fetch(url, { method, headers: requestHeaders, body: requestBody });
+    let response;
+    try {
+      response = await fetch(url, { method, headers: requestHeaders, body: requestBody });
+    } catch (networkError) {
+      /* V146: hálózati hiba (nincs térerő, alagút, ébredés) – átmeneti */
+      const error = new Error(`Nincs kapcsolat a szerverrel (${networkError?.message || 'hálózati hiba'}).`);
+      error.transient = true;
+      throw error;
+    }
+    /* V146: ha a szerver lejárt bejelentkezési kulcs miatt utasít el, új
+       kulcsot kérünk, és a kérést EGYSZER megismételjük. */
+    if (response.status === 401 && auth && !arguments[1]?.__retriedV146 && session?.refresh_token) {
+      const peek = await response.clone().text().catch(() => '');
+      if (/jwt|expired|token/i.test(peek)) {
+        await refreshSession({ force: true });
+        return rawRequest(url, { ...(arguments[1] || {}), __retriedV146: true });
+      }
+    }
     const text = await response.text();
     let parsed = null;
     if (text && !expectText) {
@@ -73,6 +90,7 @@
       const error = new Error(message);
       error.status = response.status;
       error.payload = parsed;
+      if (response.status >= 500 || response.status === 429 || response.status === 408) error.transient = true;
       throw error;
     }
     return parsed;
@@ -85,23 +103,71 @@
     return rawRequest(`${baseUrl()}/rest/v1/${path}`, options);
   }
 
-  async function refreshSession() {
+  /* ===== V146 – A BEJELENTKEZÉS NEM VESZHET EL CSENDBEN ===============
+
+     Eddig a bejelentkezési kulcs frissítésének BÁRMILYEN hibája (pl. egy
+     pillanatnyi térerőhiány a telefon ébredésekor) véglegesen törölte a
+     bejelentkezést. Utána minden frissítés elbukott, a felület pedig a régi
+     állapotot mutatta – a sofőr nem látta az új fuvarokat, és semmi nem
+     jelezte. Ráadásul két párhuzamos kérés két frissítést is indíthatott.
+
+     Most:
+       - egyszerre csak EGY kulcsfrissítés fut, a többi kérés azt várja meg;
+       - átmeneti hibánál (hálózat, szerverhiba) a bejelentkezés megmarad, a
+         következő kérés újra próbálkozik;
+       - csak akkor töröljük, ha a szerver EGYÉRTELMŰEN érvénytelennek
+         mondja a frissítő kulcsot – és akkor sem csendben: a
+         'fuvar-session-expired' esemény a belépő képernyőre irányít. */
+  let refreshPromiseV146 = null;
+  function isDefinitiveAuthErrorV146(error) {
+    if (!error || error.transient) return false;
+    const status = +error.status || 0;
+    const text = `${error.message || ''} ${JSON.stringify(error.payload || '')}`;
+    return (status === 400 || status === 401 || status === 403)
+      && /invalid[_ ]grant|refresh[_ ]token|not[_ ]found|revoked|already[_ ]used|invalid/i.test(text);
+  }
+  function sessionExpiredV146(reason) {
+    saveSession(null); profile = null;
+    const error = new Error('A bejelentkezés lejárt, kérlek, lépj be újra.');
+    error.code = 'SESSION_EXPIRED';
+    try { global.dispatchEvent?.(new (global.CustomEvent || CustomEvent)('fuvar-session-expired', { detail: { reason: String(reason || '') } })); } catch (_) {}
+    return error;
+  }
+  async function refreshSession({ force = false } = {}) {
     if (!session?.refresh_token) return null;
-    try {
-      const data = await authRequest('token?grant_type=refresh_token', {
-        method: 'POST', body: { refresh_token: session.refresh_token }
-      });
-      saveSession({ ...data, expires_at: nowSeconds() + (+data.expires_in || 3600) });
-      return session;
-    } catch (error) {
-      saveSession(null); profile = null; throw error;
-    }
+    if (refreshPromiseV146) return refreshPromiseV146;
+    const usedToken = session.refresh_token;
+    refreshPromiseV146 = (async () => {
+      try {
+        const data = await authRequest('token?grant_type=refresh_token', {
+          method: 'POST', body: { refresh_token: usedToken }
+        });
+        saveSession({ ...data, expires_at: nowSeconds() + (+data.expires_in || 3600) });
+        return session;
+      } catch (error) {
+        if (isDefinitiveAuthErrorV146(error)) throw sessionExpiredV146(error.message);
+        /* átmeneti hiba: a bejelentkezés MEGMARAD */
+        error.transient = true;
+        throw error;
+      } finally {
+        refreshPromiseV146 = null;
+      }
+    })();
+    return refreshPromiseV146;
   }
   async function ensureSession() {
     if (!session) restoreSession();
-    if (!session?.access_token) throw new Error('Nincs aktív online munkamenet.');
+    if (!session?.access_token) { const error = new Error('Nincs aktív online munkamenet.'); error.code = 'NO_SESSION'; throw error; }
     const expiresAt = +session.expires_at || 0;
-    if (expiresAt && expiresAt < nowSeconds() + 90) await refreshSession();
+    if (expiresAt && expiresAt < nowSeconds() + 90) {
+      try { await refreshSession(); }
+      catch (error) {
+        /* V146: átmeneti hibánál, ha a régi kulcs még érvényes, azzal megyünk
+           tovább; ha már lejárt, a kérés hibát ad, de a bejelentkezés marad. */
+        if (error.code === 'SESSION_EXPIRED') throw error;
+        if (!(expiresAt > nowSeconds())) throw error;
+      }
+    }
     return session;
   }
 
@@ -1093,6 +1159,8 @@
     fetchSourceMailCoverageV135, fetchSourceReportIdsV144,
     /* V136 */
     mimeForFileV136, cleanupEmptySourceReportsV136, removeStoragePathsV136,
+    /* V146 */
+    isDefinitiveAuthErrorV146,
     /* V138 */
     chatMyEmailV138, chatFetchV138, chatSendV138, chatUpdateV138, chatReadsV138, chatMarkReadV138, chatUploadV138, chatSignV138
   };

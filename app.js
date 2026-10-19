@@ -127,8 +127,30 @@ function refreshMasterData(){if(state.masterDataVersion)return;state.recipients=
    - a hátralék NEM tűnik el csendben: ha a fuvara megszűnt, "árva" jelölést
      kap, és a Hátralék fülön külön látszik, mert ott adat veszne el
 */
+/* V146: sofőri eszközön a telefon csak a SAJÁT fuvarjait látja. A
+   „forrás nélküli” takarítás ott tévesen törölné azt a fuvart, amelynek a
+   forrása másik sofőré, és a hátralékot is – ezért sofőri eszközön az
+   állapot-rendező semmit nem töröl és nem ír át. Ezt csak az admin gépe
+   végezheti, ahol minden fuvar látszik. */
+function isDriverDeviceV146(){
+  try{
+    const role=(typeof window!=='undefined'&&window.V44Online?.getProfile?.()?.role)||(typeof localStorage!=='undefined'&&localStorage.getItem('fuvarszervezo_last_role_v146'))||'';
+    return !!role&&role!=='admin';
+  }catch(_){return false}
+}
 function reconcileState(reason = '') {
   const st = state || {};
+  let driverDeviceV146 = false;
+  try {
+    const role = (typeof window !== 'undefined' && window.V44Online?.getProfile?.()?.role)
+      || (typeof localStorage !== 'undefined' && localStorage.getItem('fuvarszervezo_last_role_v146')) || '';
+    driverDeviceV146 = !!role && role !== 'admin';
+  } catch (_) {}
+  if (driverDeviceV146) {
+    st.orders = st.orders || []; st.backlog = st.backlog || [];
+    st.resolvedBacklog = st.resolvedBacklog || []; st.routePlans = st.routePlans || {};
+    return { orphanBacklog: 0, clearedBacklog: 0, routeRefs: 0, movedFrom: 0, resolved: 0, derivedOrders: 0, emptyDerived: 0, skippedDriverDeviceV146: true };
+  }
   st.orders = st.orders || []; st.backlog = st.backlog || [];
   st.resolvedBacklog = st.resolvedBacklog || []; st.routePlans = st.routePlans || {};
   const orderIds = new Set(st.orders.map(o => o.id));

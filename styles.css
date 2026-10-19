@@ -1575,3 +1575,9 @@ body .driver-account-actions #driverLogout{min-height:42px;width:auto;padding:9p
   body .topbar #accountLogout{min-height:42px;padding:9px 18px;font-size:14px;font-weight:800}
 }
 .v145-ref{display:block;margin-top:3px;font-size:11px;font-weight:700;color:#2563c9}
+
+/* ===== V146 – NEM FRISS LISTA FIGYELMEZTETÉS =========================== */
+.v146-stale{position:fixed;left:0;right:0;top:0;z-index:7000;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:calc(var(--sat,0px) + 10px) 14px 10px;background:#b42318;color:#fff;font-size:14px;box-shadow:0 4px 14px #0003}
+.v146-stale b{font-size:15px}
+.v146-stale span{flex:1 1 220px;opacity:.95;font-size:13px}
+.v146-stale button{border:0;border-radius:8px;padding:8px 14px;background:#fff;color:#b42318;font-weight:800;cursor:pointer}

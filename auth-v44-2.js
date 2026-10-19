@@ -367,6 +367,10 @@
 
   async function applySession() {
     if (!currentSession || !currentProfile) return showLogin();
+    /* V146: a szerepkör megjegyzése – az állapot-rendező ebből tudja, hogy
+       sofőri eszközön fut (ott soha nem törölhet fuvart). */
+    try { localStorage.setItem('fuvarszervezo_last_role_v146', currentProfile.role || ''); } catch (_) {}
+    freshV146.lastOk = Date.now(); freshV146.lastFail = 0;
     if (isAdmin()) await showAdmin(); else await showDriver();
   }
 
@@ -616,8 +620,10 @@
         await renderAdminOnlinePage();
         if (byId('onlineAdmin')?.classList.contains('active')) await global.renderArchiveSummaryV119?.();
       } else await renderDriverPortal();
+      markRefreshV146(true);
     } catch (error) {
-      alert(`Online frissítési hiba: ${error.message}`);
+      markRefreshV146(false, error);
+      if (error?.code !== 'SESSION_EXPIRED' && error?.code !== 'NO_SESSION') alert(`Online frissítési hiba: ${error.message}`);
     } finally {
       suppressOnlineSave = false; refreshInProgress = false;
       if (refreshButton) { refreshButton.disabled = false; refreshButton.querySelector('small').textContent = 'Frissítés'; }
@@ -978,7 +984,8 @@
           restoreViewScroll(scroll);
         }
       } finally { loadingV132 = false; }
-    } catch (error) { console.warn('[V132] admin háttérfrissítés', error); }
+      markRefreshV146(true);
+    } catch (error) { console.warn('[V132] admin háttérfrissítés', error); markRefreshV146(false, error); }
   }
 
   async function logout() {
@@ -2125,7 +2132,9 @@
     synced: () => syncedV132,
     knownIds: () => knownServerIdsV137,
     rememberIds: ids => rememberServerIdsV137(ids),
-    initialLoad: () => initialOnlineLoad()
+    initialLoad: () => initialOnlineLoad(),
+    fresh: () => freshV146,
+    poll: () => pollOnceV115()
   };
   global.markOrdersSyncedV132 = orders => {
     for (const order of orders || []) if (order?.id) syncedV132.set(String(order.id), orderKeyV132(order));
@@ -2365,11 +2374,74 @@
       suppressOnlineSave = true;
       await reloadOrdersV132();
       await refreshTransfers();
+      markRefreshV146(true);
       if (isAdmin()) { if (typeof render === 'function') render(); }
       else await renderDriverPortal();
     } catch (error) {
       console.warn('[V115] automatikus frissítés', error);
+      markRefreshV146(false, error);
     } finally { suppressOnlineSave = false; }
+  }
+
+  /* ===== V146 – A LISTA SOHA NEM TŰNHET FRISSNEK, HA NEM AZ ============
+
+     Eddig a háttérfrissítés minden hibát csendben elnyelt: ha a telefon
+     egyszer elvesztette a kapcsolatot a szerverrel, a régi lista maradt
+     kint, és semmi nem jelezte. Most:
+       - a sofőri felületen látszik, mikor frissült utoljára;
+       - ha 2 percnél tovább nem sikerül, feltűnő sáv figyelmeztet, egy
+         „Újrapróbálás” gombbal;
+       - sikertelen frissítés után 10 mp múlva magától újrapróbál, és a net
+         visszatérésekor, illetve ébredéskor azonnal frissít;
+       - ha a bejelentkezés valóban lejárt, a belépő képernyőre irányít. */
+  const STALE_AFTER_MS_V146 = 2 * 60 * 1000;
+  const freshV146 = { lastOk: Date.now(), lastFail: 0, error: '' };
+  let retryTimerV146 = null;
+  function markRefreshV146(ok, error) {
+    if (ok) { freshV146.lastOk = Date.now(); freshV146.error = ''; }
+    else {
+      freshV146.lastFail = Date.now();
+      freshV146.error = String(error?.message || error || 'ismeretlen hiba');
+      if (error?.code === 'SESSION_EXPIRED' || error?.code === 'NO_SESSION') handleSessionExpiredV146();
+      else if (!retryTimerV146) retryTimerV146 = setTimeout(() => { retryTimerV146 = null; pollAnyV146(); }, 10000);
+    }
+    renderFreshnessV146();
+  }
+  global.markRefreshV146 = markRefreshV146;
+  function pollAnyV146() {
+    if (!currentProfile) return;
+    if (isAdmin()) adminPollV132().then(() => {}, () => {}); else pollOnceV115();
+  }
+  function fmtTimeV146(ms) { const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+  function renderFreshnessV146() {
+    if (typeof document === 'undefined' || !document.body || typeof document.createElement !== 'function') return;
+    const status = byId('driverOnlineStatus');
+    if (status && currentProfile && !isAdmin()) status.textContent = `Frissítve: ${fmtTimeV146(freshV146.lastOk)}`;
+    const stale = !!currentProfile && freshV146.lastFail > freshV146.lastOk && Date.now() - freshV146.lastOk > STALE_AFTER_MS_V146;
+    let bar = byId('v146StaleBar');
+    if (!stale) { bar?.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'v146StaleBar';
+      bar.className = 'v146-stale';
+      bar.setAttribute('role', 'alert');
+      document.body.appendChild(bar);
+    }
+    bar.innerHTML = `<b>⚠ Nem sikerült frissíteni – a lista nem friss!</b><span>Utoljára ${fmtTimeV146(freshV146.lastOk)}-kor frissült. ${safe(freshV146.error)}</span><button type="button" id="v146Retry">Újrapróbálás</button>`;
+    byId('v146Retry')?.addEventListener('click', () => { bar.querySelector('span').textContent = 'Frissítés…'; if (isAdmin()) refreshOnlineNow(); else pollOnceV115(); });
+  }
+  global.renderFreshnessV146 = renderFreshnessV146;
+  function handleSessionExpiredV146() {
+    if (!currentProfile) return;
+    try { stopPolling(); } catch (_) {}
+    currentSession = null; currentProfile = null;
+    byId('v146StaleBar')?.remove();
+    showLogin('A bejelentkezés lejárt, kérlek, lépj be újra.');
+  }
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('fuvar-session-expired', () => handleSessionExpiredV146());
+    window.addEventListener('online', () => { if (currentProfile) pollAnyV146(); });
+    setInterval(renderFreshnessV146, 15000);
   }
 
   function startPolling() {
