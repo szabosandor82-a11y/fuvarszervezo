@@ -249,6 +249,51 @@
     return rows?.[0] ? { ...(rows[0].payload || {}), onlineUpdatedAt: rows[0].updated_at, onlineUpdatedBy: rows[0].updated_by } : null;
   }
 
+  /* V147: a járművek (távollétekkel) a törzsadat-táblából – sofőrnek is. */
+  async function fetchVehiclesV147() {
+    try {
+      const rows = await dbRequest(`master_data?${qs({ select: 'payload', id: 'eq.current', limit: '1' })}`);
+      return rows?.[0]?.payload?.vehicles || null;
+    } catch (error) {
+      if (missingTableV112(error)) return null;
+      throw error;
+    }
+  }
+
+  /* ===== V147 – PUSH-ÉRTESÍTÉS ======================================= */
+  async function pushConfigGetV147() {
+    const rows = await dbRequest(`push_config?${qs({ select: 'vapid_public', id: 'eq.1' })}`);
+    return rows?.[0]?.vapid_public || '';
+  }
+  async function pushConfigSetV147(vapidPublic) {
+    await dbRequest('push_config?on_conflict=id', { method: 'POST', body: [{ id: 1, vapid_public: vapidPublic, updated_at: new Date().toISOString() }], headers: { Prefer: 'resolution=merge-duplicates,return=minimal' } });
+    return true;
+  }
+  async function pushSaveSubscriptionV147(subscription, muted = false) {
+    const json = typeof subscription?.toJSON === 'function' ? subscription.toJSON() : subscription;
+    if (!json?.endpoint || !json?.keys?.p256dh || !json?.keys?.auth) throw new Error('Érvénytelen feliratkozás.');
+    const email = normalize(profile?.email || session?.user?.email || '');
+    await dbRequest('push_subscriptions?on_conflict=endpoint', {
+      method: 'POST',
+      body: [{ endpoint: json.endpoint, user_email: email, p256dh: json.keys.p256dh, auth: json.keys.auth, muted: !!muted, user_agent: String(global.navigator?.userAgent || '').slice(0, 200), updated_at: new Date().toISOString() }],
+      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }
+    });
+    return true;
+  }
+  async function pushSetMutedV147(endpoint, muted) {
+    if (!endpoint) return false;
+    await dbRequest(`push_subscriptions?${qs({ endpoint: `eq.${endpoint}` })}`, { method: 'PATCH', body: { muted: !!muted, updated_at: new Date().toISOString() }, headers: { Prefer: 'return=minimal' } });
+    return true;
+  }
+  async function pushDeleteSubscriptionV147(endpoint) {
+    if (!endpoint) return false;
+    await dbRequest(`push_subscriptions?${qs({ endpoint: `eq.${endpoint}` })}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+    return true;
+  }
+  async function pushTestV147() {
+    return rawRequest(`${baseUrl()}/functions/v1/chat-push`, { method: 'POST', body: { test: true } });
+  }
+
   async function syncMasterData(source = global.state, currentProfile = profile) {
     if (!currentProfile) currentProfile = await fetchProfile();
     if (currentProfile?.role !== 'admin') return null;
@@ -1161,6 +1206,8 @@
     mimeForFileV136, cleanupEmptySourceReportsV136, removeStoragePathsV136,
     /* V146 */
     isDefinitiveAuthErrorV146,
+    /* V147 */
+    fetchVehiclesV147, pushConfigGetV147, pushConfigSetV147, pushSaveSubscriptionV147, pushSetMutedV147, pushDeleteSubscriptionV147, pushTestV147,
     /* V138 */
     chatMyEmailV138, chatFetchV138, chatSendV138, chatUpdateV138, chatReadsV138, chatMarkReadV138, chatUploadV138, chatSignV138
   };

@@ -1,11 +1,11 @@
-const CACHE_NAME = 'fuvarszervezo-v146-online-20261016-1';
+const CACHE_NAME = 'fuvarszervezo-v147-online-20261019-1';
 const APP_ASSETS = [
-  './', './index.html', './styles.css?v=146.0', './app.js?v=146.0', './data.js?v=146.0',
-  './planner-v32.js?v=146.0', './planner-v33.js?v=146.0', './planner-v34.js?v=146.0',
-  './planner-v35.js?v=146.0', './planner-v37.js?v=146.0', './daily-list-v93.js?v=146.0', './planner-v41.js?v=146.0',
-  './planner-v43.js?v=146.0', './planner-v44.js?v=146.0', './auth-v44-2.js?v=146.0', './chat-v138.js?v=146.0',
-  './online-config.js?v=146.0', './online-v44-2.js?v=146.0',
-  './delivery-camera-v69.js?v=146.0', './ole-msg-reader.js?v=146.0', './manifest.webmanifest', './icon-192.png', './icon-512.png'
+  './', './index.html', './styles.css?v=147.0', './app.js?v=147.0', './data.js?v=147.0',
+  './planner-v32.js?v=147.0', './planner-v33.js?v=147.0', './planner-v34.js?v=147.0',
+  './planner-v35.js?v=147.0', './planner-v37.js?v=147.0', './daily-list-v93.js?v=147.0', './planner-v41.js?v=147.0',
+  './planner-v43.js?v=147.0', './planner-v44.js?v=147.0', './auth-v44-2.js?v=147.0', './chat-v138.js?v=147.0',
+  './online-config.js?v=147.0', './online-v44-2.js?v=147.0',
+  './delivery-camera-v69.js?v=147.0', './ole-msg-reader.js?v=147.0', './manifest.webmanifest', './icon-192.png', './icon-512.png'
 ];
 self.addEventListener('install', event => event.waitUntil(
   caches.open(CACHE_NAME).then(cache => cache.addAll(APP_ASSETS)).then(() => self.skipWaiting())
@@ -23,4 +23,46 @@ self.addEventListener('fetch', event => {
       const copy = response.clone(); caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)); return response;
     }).catch(() => caches.match(event.request).then(response => response || caches.match('./index.html'))));
   } else event.respondWith(caches.match(event.request).then(response => response || fetch(event.request)));
+});
+
+/* ===== V147 – PUSH-ÉRTESÍTÉS A CSEVEGŐBŐL ==============================
+   A szerver (Supabase Edge Function: chat-push) akkor is ide küldi az új
+   üzenetet, ha az alkalmazás be van zárva. Mindig megjelenítünk értesítést
+   (a böngészők ezt megkövetelik); ha az alkalmazás épp előtérben van,
+   csendesen, és a nyitott lapot azonnali frissítésre kérjük. */
+self.addEventListener('push', event => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; }
+  catch (_) { data = { title: 'Fuvarszervező', body: event.data ? event.data.text() : '' }; }
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const focused = windows.some(client => client.focused && client.visibilityState === 'visible');
+    windows.forEach(client => client.postMessage({ type: 'chat-push', conversation: data.conversation || '' }));
+    const conv = encodeURIComponent(data.conversation || '');
+    await self.registration.showNotification(data.title || 'Fuvarszervező', {
+      body: data.body || '',
+      tag: data.tag || 'chat',
+      renotify: !focused,
+      silent: !!data.silent || focused,
+      icon: 'icon-192.png',
+      badge: 'icon-192.png',
+      data: { url: `./?chat=1&conv=${conv}`, conversation: data.conversation || '' }
+    });
+  })());
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const conversation = event.notification.data?.conversation || '';
+  const url = new URL(event.notification.data?.url || './', self.registration.scope).href;
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of windows) {
+      if ('focus' in client) {
+        client.postMessage({ type: 'open-chat', conversation: encodeURIComponent(conversation) });
+        return client.focus();
+      }
+    }
+    return self.clients.openWindow ? self.clients.openWindow(url) : undefined;
+  })());
 });

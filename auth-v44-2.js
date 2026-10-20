@@ -365,8 +365,18 @@
     await renderDriverPortal();
   }
 
+  /* V147: a sofőr telefonja a járműveket (a távollétekkel együtt) a szerveri
+     törzsadatból veszi át, ha az elérhető. */
+  async function loadVehiclesForDriverV147() {
+    if (!currentProfile || isAdmin() || !global.V44Online?.fetchVehiclesV147) return;
+    try {
+      const vehicles = await global.V44Online.fetchVehiclesV147();
+      if (Array.isArray(vehicles) && vehicles.length) state.vehicles = vehicles;
+    } catch (error) { console.warn('[V147] járművek a törzsadatból', error); }
+  }
   async function applySession() {
     if (!currentSession || !currentProfile) return showLogin();
+    loadVehiclesForDriverV147().then(() => { if (!isAdmin()) renderDriverPortal(); });
     /* V146: a szerepkör megjegyzése – az állapot-rendező ebből tudja, hogy
        sofőri eszközön fut (ott soha nem törölhet fuvart). */
     try { localStorage.setItem('fuvarszervezo_last_role_v146', currentProfile.role || ''); } catch (_) {}
@@ -578,7 +588,45 @@
     return transferCache;
   }
 
+  /* V147: a sofőri lista újrarajzolásakor a görgetés a helyén marad */
   async function renderDriverPortal() {
+    if (!currentProfile || isAdmin()) return;
+    const snap = typeof global.captureScrollV147 === 'function' ? global.captureScrollV147() : null;
+    try { return await renderDriverPortalInnerV147(); }
+    finally { if (snap) global.restoreScrollV147(snap); }
+  }
+  /* ===== V147 – PUSH KULCSPÁR (VAPID) ============================== */
+  const b64urlV147 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  async function generatePushKeysV147() {
+    if (!isAdmin()) return;
+    if (!global.crypto?.subtle) return alert('Ez a böngésző nem tud kulcsot előállítani.');
+    if (!confirm('Új kulcspárt állítok elő. Ha már volt beállítva, a telefonokon az értesítést újra be kell majd kapcsolni. Folytatod?')) return;
+    const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+    const publicKey = b64urlV147(await crypto.subtle.exportKey('raw', pair.publicKey));
+    const privateKey = (await crypto.subtle.exportKey('jwk', pair.privateKey)).d;
+    const out = byId('v147PushOut');
+    try { await global.V44Online.pushConfigSetV147(publicKey); }
+    catch (error) { return alert(`A nyilvános kulcs mentése nem sikerült (lefutott a SUPABASE_PUSH_V147.sql?): ${error.message}`); }
+    out.classList.remove('hidden');
+    out.innerHTML = `<label>VAPID_PUBLIC_KEY (nyilvános – már elmentve)<textarea readonly rows="2">${safe(publicKey)}</textarea></label>
+      <label>VAPID_PRIVATE_KEY (TITKOS – csak a Supabase Secrets-be!)<textarea readonly rows="2">${safe(privateKey)}</textarea></label>
+      <p class="v108-hint">Másold be mindkettőt a Supabase → Edge Functions → Secrets alá (PUSH_BEALLITAS_V147.txt, 4. lépés). Az ablak bezárása után a titkos kulcs nem jeleníthető meg újra.</p>`;
+    showPushStatusV147();
+  }
+  global.generatePushKeysV147 = generatePushKeysV147;
+  async function showPushStatusV147() {
+    const el = byId('v147PushStatus');
+    if (!el || !isAdmin() || !global.V44Online?.pushConfigGetV147) return;
+    try { const key = await global.V44Online.pushConfigGetV147(); el.textContent = key ? '✓ Nyilvános kulcs beállítva.' : 'Még nincs kulcspár.'; }
+    catch (_) { el.textContent = 'A push-táblák még nincsenek létrehozva (SUPABASE_PUSH_V147.sql).'; }
+  }
+
+  /* V147: ha a sofőr aznap távol van (és nincs fuvarja), ezt írjuk ki. */
+  function absentTextV147(vehicle) {
+    const absence = typeof global.vehicleAbsenceV147 === 'function' ? global.vehicleAbsenceV147(vehicle, selectedDriverDate) : null;
+    return absence ? `<div class="mobile-empty v147-absent-day">🏖 Távollét (${safe(global.absenceLabelV147 ? global.absenceLabelV147(absence) : '')}) – erre a napra nincs fuvarod.</div>` : '';
+  }
+  async function renderDriverPortalInnerV147() {
     if (!currentProfile || isAdmin()) return;
     /* V113: a kereső és a napléptető bekötése, majd a megtekintés-sáv. */
     bindDriverToolsV113();
@@ -598,7 +646,7 @@
     }
     const sections = vehicles.map(vehicle => {
       const rows = (state.orders || []).filter(order => order.scheduleDate === selectedDriverDate && order.vehicleId === vehicle.id).sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
-      return `<section class="mobile-driver-section"><div class="mobile-driver-title"><h2>${safe(vehicle.driverName)}</h2><span>${rows.length} fuvar</span></div>${rows.length ? rows.map(userBubble).join('') : '<div class="mobile-empty">Erre a napra nincs fuvar.</div>'}</section>`;
+      return `<section class="mobile-driver-section"><div class="mobile-driver-title"><h2>${safe(vehicle.driverName)}</h2><span>${rows.length} fuvar</span></div>${rows.length ? rows.map(userBubble).join('') : (absentTextV147(vehicle) || '<div class="mobile-empty">Erre a napra nincs fuvar.</div>')}</section>`;
     }).join('');
     host.innerHTML = `${pendingTransferCards()}<div class="mobile-online-refresh"><button type="button" class="secondary" id="driverRefreshOnline">↻ Frissítés</button><span id="driverOnlineStatus">Online</span></div>${sections}`;
     byId('driverRefreshOnline')?.addEventListener('click', refreshOnlineNow);
@@ -2325,9 +2373,12 @@
          létezett – csak belépéskor épül, ezért nem volt az index.html-ben. */
       section.innerHTML = '<div class="page-head"><div><small>ONLINE</small><h2>Beállítások és fuvarátadások</h2></div></div><div id="onlineAdminContent"></div>'
         + '<section class="panel v119-archive"><h3>Szállítólevelek archiválása</h3><p class="v108-hint">Az új feltöltések is azonnal bekerülhetnek a ZIP-be. Törölni csak már archivált, legalább két napos fájlokat lehet, külön megerősítéssel.</p><div id="v119Summary" class="v119-summary">Összesítés betöltése…</div><div class="v119-buttons"><button type="button" id="v119ArchiveRefresh" class="secondary">Összesítés frissítése</button><button type="button" id="v119Archive">Archiválás</button><button type="button" id="v119Purge" class="v115-danger">Archiváltak törlése</button></div><div id="v119Progress" class="v119-progress hidden"></div></section>'
-        + '<section class="panel v135-backfill"><h3>Levélmellékletek a sofőröknek</h3><p class="v108-hint">Azoknak a fuvaroknak a levélmellékletét, amelyek nem jutottak fel a szerverre, ezen a gépen tárolt eredetiből feltölti, hogy a sofőrök is megnyithassák. Azon a gépen futtasd, amelyiken az importok készültek.</p><div class="v119-buttons"><button type="button" id="v135Backfill">Hiányzó mellékletek feltöltése a sofőröknek</button></div><div id="v135BackfillProgress" class="v135-progress hidden"></div></section>';
+        + '<section class="panel v135-backfill"><h3>Levélmellékletek a sofőröknek</h3><p class="v108-hint">Azoknak a fuvaroknak a levélmellékletét, amelyek nem jutottak fel a szerverre, ezen a gépen tárolt eredetiből feltölti, hogy a sofőrök is megnyithassák. Azon a gépen futtasd, amelyiken az importok készültek.</p><div class="v119-buttons"><button type="button" id="v135Backfill">Hiányzó mellékletek feltöltése a sofőröknek</button></div><div id="v135BackfillProgress" class="v135-progress hidden"></div></section>'
+        + '<section class="panel v147-push-panel"><h3>Push-értesítés (csevegő)</h3><p class="v108-hint">A telefonok akkor is kapnak értesítést a csevegő üzeneteiről, ha az alkalmazás be van zárva. Egyszeri beállítás – lépésenként: PUSH_BEALLITAS_V147.txt. A kulcspár itt, a böngésződben készül; a TITKOS kulcsot csak a Supabase Edge Function titkai közé másold be.</p><div class="v119-buttons"><button type="button" id="v147PushKeys">Kulcspár előállítása</button></div><div id="v147PushOut" class="v147-push-out hidden"></div><p id="v147PushStatus" class="v108-hint"></p></section>';
       document.querySelector('main')?.append(section);
       section.querySelector('#v135Backfill')?.addEventListener('click', () => backfillSourceMailV135());
+      section.querySelector('#v147PushKeys')?.addEventListener('click', () => generatePushKeysV147());
+      setTimeout(showPushStatusV147, 1500);
       const navButton = document.createElement('button');
       navButton.className = 'nav'; navButton.dataset.page = 'onlineAdmin'; navButton.innerHTML = '<span>⚙</span><small>Beállítások</small>';
       document.querySelector('nav')?.append(navButton);

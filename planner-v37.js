@@ -560,7 +560,7 @@
     const deliveryV134 = deliveryStateOfV134(group.orders);
     return `<div class="route-block ${deliveryV134.marked ? 'has-delivery' : ''} ${options.insidePickupGroup ? 'inside-pickup-group' : ''} ${pinned ? 'pinned-block' : ''} ${fullLoad ? 'full-load-block' : ''} ${resolved ? 'resolved-backlog-block' : ''}" data-group-key="${escHtml(group.key)}" data-pickup-move-key="${escHtml(pickupMoveKey(group))}" data-order-ids="${escHtml(ids)}" data-vehicle-id="${escHtml(vehicleId)}">
       <article class="bubble grouped-bubble v126-${cegKulcs} ${complete ? 'done' : ''} ${resolved ? 'resolved-backlog' : ''}${unreadComment ? ' user-comment-unread' : ''}" data-id="${escHtml(first.id)}" data-order-ids="${escHtml(ids)}">
-        <span class="drag" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : options.insidePickupGroup ? 'Az egész felrakási blokk húzása' : 'Húzás'}">${resolved ? '✓' : '☷'}</span>
+        <span class="drag ${options.insidePickupGroup ? 'drag-inner' : 'drag-outer'}" title="${resolved ? 'Elintézett rendelés – nem mozgatható' : options.insidePickupGroup ? 'Ennek a buboréknak a húzása (sorrend: a felrakó-csoport együtt mozog; másik sofőrhöz: csak ez megy át)' : 'Húzás'}">${resolved ? '✓' : '☷'}</span>
         <div class="bubble-control-row">
           <button type="button" class="pin-button ${pinned ? 'active' : ''}" onclick="event.stopPropagation();v37TogglePin('${escHtml(ids)}','${escHtml(vehicleId)}')" title="${pinned ? 'Rögzítés feloldása' : 'Pozíció rögzítése'}">⚑</button>
           <button type="button" class="full-load-button ${fullLoad ? 'active' : ''}" onclick="event.stopPropagation();v33ToggleFullLoad('${escHtml(ids)}')" title="Teljes autós rakomány">🚚</button>
@@ -587,7 +587,10 @@
     // A Nézetben minden felrakó pontosan egyszer szerepel.
     if (focus) return units.map((unit, unitIndex) => renderCompactUnitV56(unit, unitIndex, vehicleId)).join('');
     return units.map((unit, unitIndex) => {
-      if (!unit.grouped) {
+      /* V147: egyetlen (akár több rendeléses) buborék köré nem rajzolunk
+         csoportkeretet – így áthúzáskor rákérdezhetünk, melyik rendelés
+         menjen át. Az egység (együtt mozgás) ettől nem változik. */
+      if (!unit.grouped || unit.groups.length === 1) {
         const group = unit.groups[0];
         return renderGroupBubble(group, unitIndex, vehicleId, {
           focus,
@@ -603,7 +606,8 @@
       const orderCount = unit.allPickupOrders.length;
       const resolvedPickup = unit.allPickupOrders.every(isResolvedBacklogOrder);
       return `<section class="pickup-move-block ${resolvedPickup ? 'resolved-pickup-block' : ''}" data-pickup-move-key="${escHtml(unit.pickupKey)}" data-order-ids="${escHtml(ids)}" data-vehicle-id="${escHtml(vehicleId)}">
-        <div class="pickup-group-orders">${unit.groups.map((group, subIndex) => renderGroupBubble(group, subIndex, vehicleId, {
+        <div class="v147-group-head"><span class="drag drag-outer drag-group" title="A teljes felrakó-csoport húzása (a zászlós rendelések a sofőrnél maradnak)">☷</span><b>${escHtml(pickupName)}</b><small>${orderCount} rendelés · felrakó-csoport</small></div>
+        <div class="pickup-group-orders" data-vehicle-id="${escHtml(vehicleId)}">${unit.groups.map((group, subIndex) => renderGroupBubble(group, subIndex, vehicleId, {
           focus,
           insidePickupGroup: true,
           allPickupOrders: unit.allPickupOrders,
@@ -841,7 +845,10 @@
     if (!seed || !targetVehicleId) return 0;
     const date = seed.scheduleDate;
     const key = pickupMoveKey(seed);
-    const related = (state.orders || []).filter(order => order.scheduleDate === date && pickupMoveKey(order) === key && !isResolvedBacklogOrder(order));
+    /* V147: a felrakó-csoport csak UGYANANNÁL a sofőrnél mozog együtt (sorrend);
+       másik sofőrnél lévő azonos felrakójú rendeléshez nem nyúlunk. */
+    const movedSet = new Set(ids.map(String));
+    const related = (state.orders || []).filter(order => order.scheduleDate === date && pickupMoveKey(order) === key && !isResolvedBacklogOrder(order) && (movedSet.has(String(order.id)) || order.vehicleId === targetVehicleId));
     if (!related.length) return 0;
 
     const relatedIds = new Set(related.map(order => order.id));
@@ -868,7 +875,29 @@
   function trackPointer(event) {
     const touch = event?.touches?.[0] || event?.changedTouches?.[0];
     const y = touch?.clientY ?? event?.clientY;
+    const x = touch?.clientX ?? event?.clientX;
     if (Number.isFinite(y)) dragPointerY = y;
+    /* V147: az elengedés helye – ebből derül ki, melyik sofőr listájára ejtették */
+    if (Number.isFinite(x) && Number.isFinite(y) && (x || y)) global.__dropPointV147 = { x, y };
+  }
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    for (const type of ['dragover', 'pointermove', 'touchmove']) document.addEventListener(type, event => { if (dragActive) trackPointer(event); }, { capture: true, passive: true });
+  }
+  /* Ha a húzókönyvtár nem tudta eldönteni a helyet (egy magas elem közepére
+     ejtették), az elengedés helyéből állapítjuk meg a célsofőrt és a helyet. */
+  function dropTargetFromPointV147(fromVehicle) {
+    const point = global.__dropPointV147;
+    if (!point || typeof document.elementFromPoint !== 'function') return null;
+    const under = document.elementFromPoint(point.x, point.y);
+    const list = under?.closest?.('.route-list[id]');
+    const vehicle = list ? String(list.id).replace(/^route-/, '') : '';
+    if (!vehicle || vehicle === fromVehicle) return null;
+    const before = new Set();
+    for (const block of orderedRouteBlocks(list)) {
+      const rect = block.getBoundingClientRect();
+      if (rect.top + rect.height / 2 < point.y) for (const id of String(block.dataset.orderIds || '').split(',').filter(Boolean)) before.add(id);
+    }
+    return { vehicle, before };
   }
 
   function autoScrollLoop() {
@@ -910,13 +939,121 @@
     document.addEventListener('touchmove', event => dragActive && trackPointer(event), { passive: true, capture: true });
   }
 
-  function createSortable(element, vehicleId, focus = false) {
+  /* ===== V147 – ÁTHÚZÁS MÁSIK SOFŐRHÖZ ============================== */
+  function vehicleOfContainerV147(element) {
+    const list = element?.closest?.('.route-list[id]');
+    return list ? String(list.id).replace(/^route-/, '') : '';
+  }
+  /* A célsofőr azon rendelései, amelyek az ejtés helye ELŐTT állnak. */
+  function idsBeforeDropV147(target, item, movedIds) {
+    const list = target?.closest?.('.route-list[id]') || target;
+    const moved = new Set(movedIds);
+    const before = new Set();
+    for (const block of orderedRouteBlocks(list)) {
+      if (block === item || item.contains?.(block)) break;
+      for (const id of String(block.dataset.orderIds || '').split(',').filter(Boolean)) if (!moved.has(id)) before.add(id);
+    }
+    return before;
+  }
+  function driverNameV147(vehicleId) {
+    const v = (state.vehicles || []).find(item => item.id === vehicleId);
+    return v?.driverName || v?.name || 'a sofőr';
+  }
+  function labelOfV147(order) {
+    return typeof global.orderLabelV145 === 'function' ? global.orderLabelV145(order) : (order.orderNo || '');
+  }
+  function rerenderRoutesV147() { if (typeof renderRoutes === 'function') setTimeout(renderRoutes, 0); }
+  function crossDriverMoveV147(ids, targetVehicleId, beforeIds, groupFrame) {
+    const orders = ids.map(id => state.orders.find(order => order.id === id)).filter(Boolean).filter(order => !isResolvedBacklogOrder(order));
+    if (!orders.length) return rerenderRoutesV147();
+    const pinned = orders.filter(order => order.routePinned);
+    const movable = orders.filter(order => !order.routePinned);
+    const sourceName = driverNameV147(orders[0].vehicleId);
+    if (!movable.length) {
+      global.toastV147?.(`🚩 Zászlóval rögzített rendelés – ${sourceName} sofőrnél marad. A zászló levétele után vihető át.`);
+      return rerenderRoutesV147();
+    }
+    const finish = selected => {
+      if (!selected.length) return rerenderRoutesV147();
+      applyCrossMoveV147(selected, targetVehicleId, beforeIds);
+      const kept = pinned.length ? ` ${pinned.length} zászlós rendelés ${sourceName} sofőrnél maradt: ${pinned.map(labelOfV147).join(', ')}.` : '';
+      global.toastV147?.(`${selected.length} rendelés átkerült ${driverNameV147(targetVehicleId)} sofőrhöz.${kept}`);
+    };
+    if (!groupFrame && orders.length > 1) return chooseOrdersV147(orders, targetVehicleId, finish);
+    finish(movable.map(order => order.id));
+  }
+  /* Több rendeléses buborék: melyik rendelés menjen át? */
+  function chooseOrdersV147(orders, targetVehicleId, done) {
+    let dialog = document.getElementById('v147MoveDialog');
+    if (!dialog) { dialog = document.createElement('dialog'); dialog.id = 'v147MoveDialog'; dialog.className = 'v147-dialog'; document.body.appendChild(dialog); }
+    const rows = orders.map(order => {
+      const items = (order.items || []);
+      const first = items[0]?.name ? ` · ${items[0].name}${items.length > 1 ? ' …' : ''}` : '';
+      const pin = order.routePinned;
+      return `<label class="v147-move-row${pin ? ' pinned' : ''}"><input type="checkbox" value="${escHtml(order.id)}" ${pin ? 'disabled' : 'checked'}><span><b>${escHtml(labelOfV147(order) || 'Rendelésszám nélkül')}</b> · ${items.length} tétel${escHtml(first)}${pin ? ' <em>🚩 rögzítve – marad</em>' : ''}</span></label>`;
+    }).join('');
+    dialog.innerHTML = `<form method="dialog" class="v147-move">
+      <h3>Melyik rendelést vigyem át ${escHtml(driverNameV147(targetVehicleId))} sofőrhöz?</h3>
+      <label class="v147-move-all"><input type="checkbox" data-all checked> Mind</label>
+      <div class="v147-move-list">${rows}</div>
+      <div class="v147-actions"><button type="button" data-cancel>Mégse</button><button type="button" data-ok class="primary">Átvitel</button></div>
+    </form>`;
+    const boxes = () => [...dialog.querySelectorAll('.v147-move-list input:not([disabled])')];
+    dialog.querySelector('[data-all]').onchange = event => boxes().forEach(box => { box.checked = event.target.checked; });
+    boxes().forEach(box => box.onchange = () => { dialog.querySelector('[data-all]').checked = boxes().every(item => item.checked); });
+    dialog.querySelector('[data-cancel]').onclick = () => { dialog.close(); rerenderRoutesV147(); };
+    dialog.querySelector('[data-ok]').onclick = () => { const selected = boxes().filter(box => box.checked).map(box => box.value); dialog.close(); done(selected); };
+    if (!dialog.open) dialog.showModal();
+  }
+  /* A kijelölt rendelések áthelyezése: ha a célsofőrnél van azonos felrakó,
+     annak UTOLSÓ rendelése alá kerülnek, egyébként az ejtés helyére. */
+  function applyCrossMoveV147(ids, targetVehicleId, beforeIds = new Set()) {
+    const moving = ids.map(id => state.orders.find(order => order.id === id)).filter(order => order && !order.routePinned)
+      .sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
+    if (!moving.length) { rerenderRoutesV147(); return 0; }
+    const date = moving[0].scheduleDate;
+    const sourceIds = new Set(moving.map(order => order.vehicleId));
+    const movingIds = new Set(moving.map(order => order.id));
+    const target = (state.orders || []).filter(order => order.scheduleDate === date && order.vehicleId === targetVehicleId && !movingIds.has(order.id))
+      .sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
+    const key = pickupMoveKey(moving[0]);
+    let lastSame = -1;
+    target.forEach((order, index) => { if (pickupMoveKey(order) === key) lastSame = index; });
+    const insertAt = lastSame >= 0 ? lastSame + 1 : target.filter(order => beforeIds.has(order.id)).length;
+    moving.forEach(order => { order.vehicleId = targetVehicleId; });
+    target.splice(insertAt, 0, ...moving);
+    target.forEach((order, index) => { order.sequence = index + 1; });
+    for (const vehicleIdLeft of sourceIds) {
+      (state.orders || []).filter(order => order.scheduleDate === date && order.vehicleId === vehicleIdLeft)
+        .sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999))
+        .forEach((order, index) => { order.sequence = index + 1; });
+    }
+    state.routePlans = state.routePlans || {}; state.routePlans[date] = {};
+    save();
+    if (typeof renderRoutes === 'function') setTimeout(renderRoutes, 0);
+    if (typeof global.renderDailyListV93 === 'function' && document.getElementById('dailylist')?.classList.contains('active')) setTimeout(global.renderDailyListV93, 60);
+    const buildManual = global.V121Planner?.buildManualRouteV55 || global.V55Planner?.buildManualRouteV55;
+    setTimeout(async () => {
+      if (typeof buildManual === 'function') { try { for (const vehicle of visibleVehiclesV147()) await buildManual(vehicle); } catch (_) {} }
+      if (typeof initMaps === 'function') initMaps();
+    }, 40);
+    return moving.length;
+  }
+  global.applyCrossMoveV147 = applyCrossMoveV147;
+  global.crossDriverMoveV147 = crossDriverMoveV147;
+
+  function createSortable(element, vehicleId, focus = false, inner = false) {
     if (!element || typeof Sortable === 'undefined') return null;
     return new Sortable(element, {
-      group: focus ? `focus-${vehicleId}` : 'vehicles-v37',
+      /* V147: a felrakó-csoport belsejébe csak a SAJÁT buborékai rendezhetők –
+         kívülről semmi nem ejthető bele, különben a csoport szétszakadna. */
+      group: focus ? `focus-${vehicleId}` : (inner
+        ? { name: 'vehicles-v37', pull: true, put: (to, from) => to.el === from.el }
+        : 'vehicles-v37'),
       animation: 180,
-      handle: '.drag',
-      draggable: '.pickup-move-block:not(.resolved-pickup-block), .route-block:not(.inside-pickup-group):not(.resolved-backlog-block)',
+      /* V147: a csoport keretét a saját fogantyúja, a buborékot a sajátja mozgatja */
+      handle: focus ? '.drag' : (inner ? '.drag-inner' : '.drag-outer'),
+      draggable: inner ? '.route-block.inside-pickup-group:not(.resolved-backlog-block)' : '.pickup-move-block:not(.resolved-pickup-block), .route-block:not(.inside-pickup-group):not(.resolved-backlog-block)',
       filter: '.resolved-backlog-block, .resolved-pickup-block',
       scroll: false,
       fallbackOnBody: true,
@@ -932,17 +1069,40 @@
       onEnd: event => {
         stopDragScroll();
         const movedIds = String(event.item?.dataset?.orderIds || '').split(',').filter(Boolean);
+        /* V147 – ÁTHÚZÁS MÁSIK SOFŐRHÖZ A FŐOLDALON
+           Csak a megfogott buborék (vagy a megfogott felrakó-csoport) megy át;
+           a zászlós rendelés a sofőrnél marad; több rendeléses buboréknál
+           rákérdezünk; ha a célsofőrnél van azonos felrakó, alá rendeződik. */
+        if (!focus) {
+          const fromVehicle = vehicleOfContainerV147(event.from) || vehicleId;
+          let toVehicle = vehicleOfContainerV147(event.to);
+          const fallback = toVehicle === fromVehicle ? dropTargetFromPointV147(fromVehicle) : null;
+          if (fallback) {
+            global.__dropPointV147 = null;
+            crossDriverMoveV147(movedIds, fallback.vehicle, fallback.before, event.item.classList.contains('pickup-move-block'));
+            return;
+          }
+          global.__dropPointV147 = null;
+          if (toVehicle && fromVehicle && toVehicle !== fromVehicle) {
+            const beforeIds = idsBeforeDropV147(event.to, event.item, movedIds);
+            const groupFrame = event.item.classList.contains('pickup-move-block');
+            /* Egyetlen újrarajzolás a végén (mint korábban) – a dupla
+               újrarajzolás megakasztotta a következő húzást. */
+            crossDriverMoveV147(movedIds, toVehicle, beforeIds, groupFrame);
+            return;
+          }
+        }
         if (focus) {
           updateSequencesFromContainer(element, vehicleId);
           renumberFocusRowsV74(element);
         }
         else {
-          activeVehicles().forEach(vehicle => {
+          visibleVehiclesV147().forEach(vehicle => {
             const container = document.getElementById(`route-${vehicle.id}`);
             if (container) updateSequencesFromContainer(container, vehicle.id);
           });
         }
-        const targetVehicleId = focus ? vehicleId : String(event.to?.id || '').replace(/^route-/, '');
+        const targetVehicleId = focus ? vehicleId : (vehicleOfContainerV147(event.to) || vehicleId);
         const anchorSequence = movedIds.map(id => state.orders.find(order => order.id === id)).filter(Boolean).reduce((min, order) => Math.min(min, +order.sequence || 999), 999);
         moveSupplierOrdersTogether(movedIds, targetVehicleId, anchorSequence);
         state.routePlans = state.routePlans || {}; state.routePlans[selectedDate()] = {};
@@ -972,7 +1132,20 @@
   }
 
   function v37InitSortables() {
-    activeVehicles().forEach(vehicle => createSortable(document.getElementById(`route-${vehicle.id}`), vehicle.id, false));
+    visibleVehiclesV147().forEach(vehicle => {
+      const list = document.getElementById(`route-${vehicle.id}`);
+      createSortable(list, vehicle.id, false);
+      /* V147: a felrakó-csoporton belüli buborékok egyenként is foghatók */
+      list?.querySelectorAll('.pickup-group-orders').forEach(inner => createSortable(inner, vehicle.id, false, true));
+    });
+  }
+  function absentWarningV147(vehicle, count) {
+    const absence = typeof global.vehicleAbsenceV147 === 'function' ? global.vehicleAbsenceV147(vehicle, selectedDate()) : null;
+    if (!absence) return '';
+    return `<div class="v147-absent-warn">🏖 Távol: ${escHtml(global.absenceLabelV147 ? global.absenceLabelV147(absence) : '')} – ${count} rendelés áthelyezendő</div>`;
+  }
+  function visibleVehiclesV147() {
+    return typeof global.visibleVehiclesV147 === 'function' ? global.visibleVehiclesV147() : activeVehicles();
   }
 
   function renderFocusView() {
@@ -1006,7 +1179,8 @@
   function v37RenderRoutes() {
     syncAllBacklogStatuses();
     ensureFocusDialog();
-    const vehicles = activeVehicles();
+    /* V147: a távollévő sofőr oszlopa csak akkor látszik, ha mégis van fuvarja */
+    const vehicles = visibleVehiclesV147();
     /* V100: a rács a járművek számához igazodik – a negyedik autó a többi
        MELLÉ kerül, nem alá. A beállítás korábban az app.js renderRoutes
        függvényébe került, de a főoldalt VALÓJÁBAN ez a függvény rajzolja,
@@ -1015,7 +1189,7 @@
     document.querySelector('#routes').innerHTML = vehicles.map(vehicle => {
       const list = dayOrders(vehicle.id).sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
       const groupCount = bubbleGroups(list).length;
-      return `<section class="route" data-driver="${driverKey(vehicle)}"><header class="route-head"><div class="route-head-main"><div><h2><input value="${escHtml(vehicle.driverName)}" onchange="renameDriver('${escHtml(vehicle.id)}',this.value)"></h2><small>${escHtml(vehicle.name)} · ${escHtml(vehicle.type)} · ${groupCount} fuvar · ${list.length} rendelés</small></div><div class="route-view-actions"><button type="button" class="dropoff-button" onclick="v33OpenDropoffs('${escHtml(vehicle.id)}')">Lerakók</button><button type="button" class="driver-view-button" onclick="v37OpenDriverView('${escHtml(vehicle.id)}')">Nézet</button></div></div><div class="route-summary" id="summary-${escHtml(vehicle.id)}"></div></header><div id="map-${escHtml(vehicle.id)}" class="map"></div><div id="route-${escHtml(vehicle.id)}" class="route-list">${groupedBubbles(list, vehicle.id)}</div></section>`;
+      return `<section class="route" data-driver="${driverKey(vehicle)}"><header class="route-head"><div class="route-head-main"><div><h2><input value="${escHtml(vehicle.driverName)}" onchange="renameDriver('${escHtml(vehicle.id)}',this.value)"></h2><small>${escHtml(vehicle.name)} · ${escHtml(vehicle.type)} · ${groupCount} fuvar · ${list.length} rendelés</small></div><div class="route-view-actions"><button type="button" class="dropoff-button" onclick="v33OpenDropoffs('${escHtml(vehicle.id)}')">Lerakók</button><button type="button" class="driver-view-button" onclick="v37OpenDriverView('${escHtml(vehicle.id)}')">Nézet</button><button type="button" class="v147-abs-head" onclick="openAbsenceDialogV147('${escHtml(vehicle.id)}')" title="Szabadság / távollét rögzítése">Távollét</button></div></div>${absentWarningV147(vehicle, list.length)}<div class="route-summary" id="summary-${escHtml(vehicle.id)}"></div></header><div id="map-${escHtml(vehicle.id)}" class="map"></div><div id="route-${escHtml(vehicle.id)}" class="route-list">${groupedBubbles(list, vehicle.id)}</div></section>`;
     }).join('') || '<div class="notice">Nincs aktív jármű.</div>';
     setTimeout(initMaps, 30);
     setTimeout(v37InitSortables, 40);

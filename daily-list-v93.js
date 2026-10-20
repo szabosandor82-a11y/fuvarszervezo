@@ -89,7 +89,7 @@
      is lehet – azok egymás után kapják a sorszámot, hogy a főoldali
      buborékok sorrendje is stimmeljen. */
   function renumberV94() {
-    const vehicles = typeof activeVehicles === 'function' ? activeVehicles() : [];
+    const vehicles = typeof window.visibleVehiclesV147 === 'function' ? window.visibleVehiclesV147() : (typeof activeVehicles === 'function' ? activeVehicles() : []);
     for (const vehicle of vehicles) {
       let sequence = 0;
       for (const row of $$('#' + containerId(vehicle.id) + ' .v93-row')) {
@@ -106,7 +106,7 @@
 
   function bindSortablesV94() {
     if (typeof Sortable === 'undefined') return;
-    const vehicles = typeof activeVehicles === 'function' ? activeVehicles() : [];
+    const vehicles = typeof window.visibleVehiclesV147 === 'function' ? window.visibleVehiclesV147() : (typeof activeVehicles === 'function' ? activeVehicles() : []);
     for (const vehicle of vehicles) {
       const element = document.getElementById(containerId(vehicle.id));
       if (!element || element.dataset.v94bound === '1') continue;
@@ -117,10 +117,20 @@
         fallbackOnBody: true, delayOnTouchOnly: true, delay: 120, touchStartThreshold: 4,
         onEnd: event => {
           const target = String(event.to.id || '').replace('v94-route-', '');
-          // a felrakó ÖSSZES rendelése együtt mozog
+          const source = String(event.from?.id || '').replace('v94-route-', '');
+          // a felrakó ÖSSZES rendelése együtt mozog – V147: a zászlós kivételével,
+          // az a sofőrnél marad (pl. acélcső, amit csak ő tud vinni)
+          const maradt = [];
           for (const id of String(event.item.dataset.ids || '').split(',').filter(Boolean)) {
             const order = (state.orders || []).find(item => item.id === id);
-            if (order && target) order.vehicleId = target;
+            if (!order || !target) continue;
+            if (target !== (source || order.vehicleId) && order.routePinned) { maradt.push(order); continue; }
+            order.vehicleId = target;
+          }
+          if (maradt.length && typeof window.toastV147 === 'function') {
+            const nev = ((state.vehicles || []).find(v => v.id === source) || {}).driverName || 'a sofőr';
+            const szam = o => (typeof window.orderLabelV145 === 'function' ? window.orderLabelV145(o) : o.orderNo);
+            window.toastV147(`${maradt.length} zászlós rendelés ${nev} sofőrnél maradt: ${maradt.map(szam).join(', ')}.`);
           }
           renumberV94();
           if (typeof save === 'function') save(false);
@@ -134,7 +144,7 @@
   function renderDailyListV93() {
     const host = $('#v93Board');
     if (!host) return;
-    const vehicles = typeof activeVehicles === 'function' ? activeVehicles() : [];
+    const vehicles = typeof window.visibleVehiclesV147 === 'function' ? window.visibleVehiclesV147() : (typeof activeVehicles === 'function' ? activeVehicles() : []);
     const label = $('#v94Date');
     if (label && typeof selectedDate === 'function') label.textContent = selectedDate();
     /* V133: a fejléc dátummezője is a kiválasztott napot mutassa – akkor is,

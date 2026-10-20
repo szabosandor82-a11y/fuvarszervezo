@@ -1581,3 +1581,48 @@ body .driver-account-actions #driverLogout{min-height:42px;width:auto;padding:9p
 .v146-stale b{font-size:15px}
 .v146-stale span{flex:1 1 220px;opacity:.95;font-size:13px}
 .v146-stale button{border:0;border-radius:8px;padding:8px 14px;background:#fff;color:#b42318;font-weight:800;cursor:pointer}
+
+/* ===== V147 ============================================================ */
+.v147-toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);z-index:8000;max-width:min(560px,calc(100vw - 32px));padding:12px 16px;border-radius:12px;background:#14283c;color:#fff;font-size:14px;font-weight:600;box-shadow:0 10px 30px #0006;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+.v147-toast.show{opacity:1;transform:translate(-50%,0)}
+.v147-dialog{border:0;border-radius:16px;padding:0;max-width:min(520px,calc(100vw - 24px));width:100%;box-shadow:0 20px 60px #0005}
+.v147-dialog::backdrop{background:#0b1a2a99}
+.v147-dialog form{padding:18px 18px 14px;display:flex;flex-direction:column;gap:12px}
+.v147-dialog h3{margin:0;font-size:17px}
+.v147-hint{margin:0;font-size:13px;color:#4a627a}
+.v147-actions{display:flex;justify-content:flex-end;gap:8px}
+.v147-actions button{padding:9px 14px;border-radius:9px;border:1px solid #c9d6e3;background:#fff;font-weight:800;cursor:pointer}
+.v147-actions .primary{background:#2563c9;border-color:#2563c9;color:#fff}
+.v147-move-all{font-weight:800}
+.v147-move-list{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto}
+.v147-move-row{display:flex;gap:10px;align-items:flex-start;padding:9px 10px;border:1px solid #dbe3ec;border-radius:10px;cursor:pointer}
+.v147-move-row input{margin-top:3px;width:18px;height:18px}
+.v147-move-row.pinned{opacity:.6;cursor:not-allowed;background:#f4f6f8}
+.v147-move-row em{color:#b45309;font-style:normal;font-weight:700}
+.v147-group-head{display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:13px;color:#35506b}
+.v147-group-head small{color:#6b7f93}
+.v147-group-head .drag-group{cursor:grab}
+.v147-abs-head{font-size:12px}
+.v147-absent-warn{margin:6px 10px 0;padding:7px 10px;border-radius:9px;background:#fff4e5;border:1px solid #f0b46c;color:#8a4b00;font-size:13px;font-weight:700}
+.v147-abs fieldset{border:1px solid #dbe3ec;border-radius:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;padding:10px 12px}
+.v147-abs fieldset label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:700}
+.v147-abs fieldset .wide{grid-column:1/-1}
+.v147-abs input,.v147-abs select{padding:8px;border:1px solid #c9d6e3;border-radius:8px;font:inherit;font-size:16px}
+.v147-abs-list{display:flex;flex-direction:column;gap:6px}
+.v147-abs-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border:1px solid #dbe3ec;border-radius:9px}
+.v147-abs-row button{border:1px solid #f0b4ae;color:#b42318;background:#fff;border-radius:8px;padding:5px 10px;font-weight:700}
+.v147-empty{color:#6b7f93;font-size:13px}
+.v147-abs-chip{margin:4px 0 0;color:#8a4b00;font-weight:700;font-size:13px}
+.v147-abs-btn{margin-top:8px}
+.v147-absent-day{background:#fff4e5;color:#8a4b00;font-weight:700}
+.v147-push-out{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.v147-push-out label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:800}
+.v147-push-out textarea{font:12px monospace;padding:8px;border-radius:8px;border:1px solid #c9d6e3}
+.cv-panel-head .cv-push{border:0;background:#ffffff26;color:#fff;border-radius:16px;padding:6px 10px;font-size:12px;font-weight:800;cursor:pointer}
+.cv-picker .cv-push{color:#2563c9}
+@media (max-width:420px){.cv-panel-head .cv-push{font-size:0;padding:6px 9px}.cv-panel-head .cv-push::before{content:'🔔';font-size:16px}}
+/* V147: a felrakó-csoport fogantyúja a csoport fejlécében (az alap .drag
+   abszolút pozíciójú – pozicionált szülő nélkül a lap sarkába került) */
+.pickup-move-block{position:relative}
+.v147-group-head{position:relative;display:flex;align-items:center;gap:8px;min-height:34px;padding:6px 10px 6px 42px;border-radius:10px 10px 0 0;background:#eef3f8;border-bottom:1px solid #dbe3ec;cursor:grab}
+.v147-group-head .drag.drag-group{position:absolute;left:8px;top:50%;transform:translateY(-50%);right:auto;width:26px;height:26px;display:grid;place-items:center;border-radius:7px;background:#fff;border:1px solid #c9d6e3;font-size:15px;line-height:1}

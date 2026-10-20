@@ -159,6 +159,91 @@
   function setMuted(value) {
     try { localStorage.setItem(`${LS_MUTED}:${st.me}`, value ? '1' : '0'); } catch (_) {}
     renderMuteButtons();
+    /* V147: a push-értesítés is csendes lesz ezen az eszközön */
+    currentSubscriptionV147().then(sub => { if (sub) api()?.pushSetMutedV147?.(sub.endpoint, !!value).catch(() => {}); });
+  }
+
+  /* ===== V147 – PUSH-ÉRTESÍTÉS (bezárt alkalmazásnál is) ================ */
+  function pushSupportedV147() {
+    return !!(global.navigator?.serviceWorker && global.PushManager && global.Notification);
+  }
+  function isStandaloneV147() {
+    return !!(global.matchMedia?.('(display-mode: standalone)')?.matches || global.navigator?.standalone);
+  }
+  function isIosV147() { return /iphone|ipad|ipod/i.test(String(global.navigator?.userAgent || '')); }
+  function keyBytesV147(base64) {
+    const padded = (base64 + '='.repeat((4 - base64.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(padded); const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  async function currentSubscriptionV147() {
+    try {
+      if (!pushSupportedV147()) return null;
+      const reg = await global.navigator.serviceWorker.getRegistration();
+      return reg ? await reg.pushManager.getSubscription() : null;
+    } catch (_) { return null; }
+  }
+  async function enablePushV147() {
+    if (!pushSupportedV147()) {
+      if (isIosV147() && !isStandaloneV147()) return alert('iPhone-on az értesítéshez az alkalmazást a főképernyőre kell tenni:\nSafari → Megosztás → Főképernyőhöz adás, majd onnan indítsd, és itt kapcsold be.');
+      return alert('Ez a böngésző nem támogatja az értesítéseket.');
+    }
+    if (isIosV147() && !isStandaloneV147()) return alert('iPhone-on az értesítés csak a főképernyőről indított alkalmazásban működik.\nSafari → Megosztás → Főképernyőhöz adás, majd onnan indítsd.');
+    const permission = await global.Notification.requestPermission();
+    if (permission !== 'granted') return alert('Az értesítést nem engedélyezted. A telefon beállításaiban később bekapcsolhatod.');
+    let key = '';
+    try { key = await api().pushConfigGetV147(); } catch (_) {}
+    if (!key) return alert('Az admin még nem állította be a push-értesítést (Beállítások → Push-értesítés).');
+    try {
+      const reg = await global.navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (sub && sub.options?.applicationServerKey) {
+        const current = new Uint8Array(sub.options.applicationServerKey);
+        const wanted = keyBytesV147(key);
+        if (current.length !== wanted.length || current.some((b, i) => b !== wanted[i])) { await sub.unsubscribe(); sub = null; }
+      }
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytesV147(key) });
+      await api().pushSaveSubscriptionV147(sub, isMuted());
+      try { localStorage.setItem(`chatV147Push:${st.me}`, '1'); } catch (_) {}
+      renderPushButtonsV147();
+      if (confirm('Az értesítés bekapcsolva ezen az eszközön. Küldjek egy próbaértesítést?')) testPushV147();
+    } catch (error) {
+      alert(`Az értesítés bekapcsolása nem sikerült: ${error.message}`);
+    }
+  }
+  async function testPushV147() {
+    try {
+      const result = await api().pushTestV147();
+      if (result && result.sent === 0) alert('A szerver nem talált feliratkozást ehhez a felhasználóhoz. Kapcsold be újra az értesítést.');
+    } catch (error) {
+      alert(`A próbaértesítés nem ment el: ${error.message}\n(Ellenőrizd a PUSH_BEALLITAS_V147.txt 3–5. lépését.)`);
+    }
+  }
+  async function renderPushButtonsV147() {
+    const sub = await currentSubscriptionV147();
+    for (const button of document.querySelectorAll('.cv-push')) {
+      button.textContent = sub ? '🔔 Értesítés: be' : '🔔 Értesítés bekapcsolása';
+      button.dataset.on = sub ? '1' : '';
+    }
+  }
+  function onPushButtonV147(button) {
+    if (button?.dataset.on === '1') {
+      if (confirm('Az értesítés be van kapcsolva ezen az eszközön.\nOK = próbaértesítés küldése')) testPushV147();
+    } else enablePushV147();
+  }
+  /* Az értesítésre koppintva: a beszélgetés megnyitása. */
+  function openFromPushV147(conversation) {
+    if (!st.started) return;
+    if (st.role === 'admin') { if (conversation) openWindow(conversation); }
+    else st.root?.querySelector('.cv-fab')?.click();
+  }
+  if (global.navigator?.serviceWorker?.addEventListener) {
+    global.navigator.serviceWorker.addEventListener('message', event => {
+      const data = event.data || {};
+      if (data.type === 'open-chat') openFromPushV147(decodeURIComponent(data.conversation || ''));
+      if (data.type === 'chat-push' && st.started) tick();
+    });
   }
   function audioContext() {
     const Ctx = global.AudioContext || global.webkitAudioContext;
@@ -500,7 +585,7 @@
     root.innerHTML = `
       <button type="button" class="cv-fab" aria-label="Üzenetek az irodával">💬<span class="cv-badge hidden"></span></button>
       <section class="cv-panel hidden" role="dialog" aria-label="Üzenetek az irodával">
-        <header class="cv-panel-head"><b>Üzenetek az irodával</b><span class="cv-head-tools"><button type="button" class="cv-mute" aria-label="Hangjelzés"></button><button type="button" class="cv-close" aria-label="Bezárás">×</button></span></header>
+        <header class="cv-panel-head"><b>Üzenetek az irodával</b><span class="cv-head-tools"><button type="button" class="cv-push">🔔 Értesítés bekapcsolása</button><button type="button" class="cv-mute" aria-label="Hangjelzés"></button><button type="button" class="cv-close" aria-label="Bezárás">×</button></span></header>
         <div class="cv-view"></div>
       </section>`;
     document.body.append(root);
@@ -509,6 +594,8 @@
     createView(st.me, root.querySelector('.cv-view'), { includeGroup: true });
     renderMuteButtons();
     root.querySelector('.cv-mute').onclick = () => setMuted(!isMuted());
+    root.querySelector('.cv-push').onclick = event => onPushButtonV147(event.currentTarget);
+    renderPushButtonsV147();
     root.querySelector('.cv-fab').onclick = () => {
       askNotificationPermission();
       st.driverOpen = true; panel.classList.remove('hidden'); root.querySelector('.cv-fab').classList.add('hidden');
@@ -561,6 +648,7 @@
     if (!el) return;
     const conversation = el.dataset.conv;
     const action = el.dataset.cv;
+    if (action === 'push') { togglePicker(false); onPushButtonV147(el); return; }
     if (action !== 'mute') askNotificationPermission();
     if (action === 'mute') { setMuted(!isMuted()); return; }
     if (action === 'head') { st.openWins.includes(conversation) ? closeWindow(conversation) : openWindow(conversation); }
@@ -577,7 +665,9 @@
     const drivers = st.users.filter(user => user.role !== 'admin' && user.email);
     picker.innerHTML = `<div class="cv-picker-title">Új beszélgetés</div>`
       + `<button type="button" data-cv="pick" data-conv="${ALL}">📢 Mindenkinek (csoportos)</button>`
-      + drivers.map(user => `<button type="button" data-cv="pick" data-conv="${esc(String(user.email).toLowerCase())}"><span class="cv-dot" style="background:${colorOf(String(user.email).toLowerCase())}"></span>${esc(user.display_name || user.email)}</button>`).join('');
+      + drivers.map(user => `<button type="button" data-cv="pick" data-conv="${esc(String(user.email).toLowerCase())}"><span class="cv-dot" style="background:${colorOf(String(user.email).toLowerCase())}"></span>${esc(user.display_name || user.email)}</button>`).join('')
+      + `<div class="cv-picker-title">Értesítés ezen a gépen</div><button type="button" class="cv-push" data-cv="push">🔔 Értesítés bekapcsolása</button>`;
+    renderPushButtonsV147();
     picker.classList.remove('hidden');
   }
 
@@ -647,7 +737,16 @@
       try { st.users = (await api().listUsers()) || []; } catch (error) { console.warn('[V138] felhasználók', error); }
       buildAdminUi();
     } else buildDriverUi();
-    tick();
+    await tick();
+    /* V147: értesítésre koppintva (?chat=1&conv=…) a beszélgetés megnyílik */
+    try {
+      const params = new URLSearchParams(global.location?.search || '');
+      if (params.get('chat') === '1') {
+        openFromPushV147(params.get('conv') || '');
+        params.delete('chat'); params.delete('conv');
+        global.history?.replaceState?.(null, '', `${global.location.pathname}${params.toString() ? `?${params}` : ''}`);
+      }
+    } catch (_) {}
   }
   function stop() {
     clearTimeout(st.timer);
@@ -676,6 +775,7 @@
   global.ChatV138 = {
     start, stop, tick, state: st,
     _logic: { esc, linkify, unreadCount, seenLabel, activeConversations, initials, lastRead, readKey, ALL },
-    _sound: { beep, chime, unlockAudio, isMuted, setMuted }
+    _sound: { beep, chime, unlockAudio, isMuted, setMuted },
+    _push: { enablePushV147, testPushV147, currentSubscriptionV147, keyBytesV147, openFromPushV147 }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
