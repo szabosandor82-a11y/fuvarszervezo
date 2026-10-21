@@ -377,6 +377,7 @@
   async function applySession() {
     if (!currentSession || !currentProfile) return showLogin();
     loadVehiclesForDriverV147().then(() => { if (!isAdmin()) renderDriverPortal(); });
+    setTimeout(() => checkProtectionV148(), 2500);
     /* V146: a szerepkör megjegyzése – az állapot-rendező ebből tudja, hogy
        sofőri eszközön fut (ott soha nem törölhet fuvart). */
     try { localStorage.setItem('fuvarszervezo_last_role_v146', currentProfile.role || ''); } catch (_) {}
@@ -621,6 +622,114 @@
     catch (_) { el.textContent = 'A push-táblák még nincsenek létrehozva (SUPABASE_PUSH_V147.sql).'; }
   }
 
+  /* ===== V148 – VISSZAÁLLÍTÁS IDŐPONTRA ÉS ÁTHELYEZÉSI ELŐZMÉNYEK ===== */
+  function driverNameV148(vehicleId) {
+    const v = (state.vehicles || []).find(item => item.id === vehicleId);
+    return v?.driverName || v?.name || vehicleId || '—';
+  }
+  function fmtTsV148(value) {
+    const d = new Date(value); if (isNaN(d)) return '';
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())}. ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+  /* Az időpontbeli állapot: minden fuvarnál az időpont UTÁNI első változás
+     előtti (OLD) változat; amelyik azóta nem változott, az most is úgy van. */
+  function computeRestoreV148(historyRows, orders, dayFilter = '') {
+    const first = new Map();
+    for (const row of historyRows) if (!first.has(String(row.order_id))) first.set(String(row.order_id), row);
+    const current = new Map((orders || []).map(order => [String(order.id), order]));
+    const out = [];
+    for (const [id, then] of first) {
+      const now = current.get(id);
+      const thenDate = String(then.schedule_date || '').slice(0, 10), thenVehicle = String(then.vehicle_id || '');
+      if (dayFilter && thenDate !== dayFilter && String(now?.scheduleDate || '') !== dayFilter) continue;
+      if (!now) { out.push({ id, kind: 'deleted', then, label: then.payload?.orderNo || id }); continue; }
+      if (String(now.scheduleDate || '') !== thenDate || String(now.vehicleId || '') !== thenVehicle) out.push({ id, kind: 'moved', then, now, label: global.orderLabelV145 ? global.orderLabelV145(now) : now.orderNo });
+    }
+    return out.sort((a, b) => String(a.then.schedule_date).localeCompare(String(b.then.schedule_date)) || String(a.label).localeCompare(String(b.label)));
+  }
+  global.computeRestoreV148 = computeRestoreV148;
+  let restoreCandidatesV148 = [];
+  async function findRestoreV148() {
+    const out = byId('v148RestoreOut'); if (!out) return;
+    const value = byId('v148RestoreAt')?.value;
+    if (!value) return alert('Add meg az időpontot.');
+    const since = new Date(value).toISOString();
+    out.innerHTML = '<p class="v108-hint">Előzmények betöltése…</p>';
+    let rows;
+    try { rows = await global.V44Online.fetchHistoryV148({ since }); }
+    catch (error) { out.innerHTML = `<p class="v108-hint">Az előzmények nem érhetők el (lefutott a SUPABASE_VEDELEM_V148.sql?): ${safe(error.message)}</p>`; return; }
+    restoreCandidatesV148 = computeRestoreV148(rows, state.orders, byId('v148RestoreDay')?.value || '');
+    if (!restoreCandidatesV148.length) { out.innerHTML = `<p class="v108-hint">✓ ${safe(fmtTsV148(since))} óta egyetlen fuvar napja vagy sofőrje sem változott${byId('v148RestoreDay')?.value ? ' ezen a napon' : ''}.</p>`; return; }
+    out.innerHTML = `<p class="v108-hint">${restoreCandidatesV148.length} fuvar napja vagy sofőrje más, mint ${safe(fmtTsV148(since))}-kor. Jelöld ki, melyiket állítsam vissza:</p>
+      <label class="v148-all"><input type="checkbox" id="v148All" checked> Mind</label>
+      <div class="v148-list">${restoreCandidatesV148.map((c, i) => {
+        const akkor = `${String(c.then.schedule_date).slice(0, 10)} · ${safe(driverNameV148(c.then.vehicle_id))}`;
+        const most = c.kind === 'deleted' ? '<em>azóta törölve</em>' : `${safe(c.now.scheduleDate)} · ${safe(driverNameV148(c.now.vehicleId))}`;
+        return `<label class="v148-row"><input type="checkbox" data-i="${i}" checked><span><b>${safe(c.label)}</b><small>akkor: ${akkor} → most: ${most} · módosította: ${safe(c.then.changed_by || '?')}, ${safe(fmtTsV148(c.then.changed_at))}</small></span></label>`;
+      }).join('')}</div>
+      <div class="v119-buttons"><button type="button" id="v148Apply" class="primary">Kijelöltek visszaállítása</button></div>`;
+    const boxes = () => [...out.querySelectorAll('.v148-list input')];
+    byId('v148All').onchange = e => boxes().forEach(box => { box.checked = e.target.checked; });
+    byId('v148Apply').onclick = () => applyRestoreV148(boxes().filter(box => box.checked).map(box => restoreCandidatesV148[+box.dataset.i]));
+  }
+  global.findRestoreV148 = findRestoreV148;
+  function applyRestoreV148(selected) {
+    if (!selected.length) return alert('Nincs kijelölt fuvar.');
+    if (!confirm(`${selected.length} fuvar napja, sofőrje és sorrendje visszaáll a korábbi állapotra. Folytatod?`)) return;
+    let n = 0;
+    for (const c of selected) {
+      const date = String(c.then.schedule_date || '').slice(0, 10);
+      if (c.kind === 'moved') {
+        const order = state.orders.find(item => String(item.id) === c.id); if (!order) continue;
+        order.scheduleDate = date; order.vehicleId = c.then.vehicle_id || ''; order.sequence = c.then.sequence ?? order.sequence;
+        n++;
+      } else if (c.kind === 'deleted' && c.then.payload) {
+        const { placementV148, ...rest } = c.then.payload;
+        state.orders.push({ ...rest, id: c.id, scheduleDate: date, vehicleId: c.then.vehicle_id || '', sequence: c.then.sequence ?? 999 });
+        n++;
+      }
+    }
+    state.routePlans = {};
+    if (typeof global.save === 'function') global.save();
+    if (typeof global.render === 'function') global.render();
+    (global.toastV147 || alert)(`${n} fuvar visszaállítva.`);
+    findRestoreV148();
+  }
+  global.applyRestoreV148 = applyRestoreV148;
+  /* Egy fuvar áthelyezési előzményei (a szerkesztő ablakból). */
+  async function showOrderHistoryV148(orderId) {
+    let rows;
+    try { rows = await global.V44Online.fetchHistoryV148({ orderId }); }
+    catch (error) { return alert(`Az előzmények nem érhetők el (lefutott a SUPABASE_VEDELEM_V148.sql?): ${error.message}`); }
+    const order = state.orders.find(item => String(item.id) === String(orderId));
+    const steps = [];
+    let last = '';
+    for (const row of rows) {
+      const key = `${String(row.schedule_date).slice(0, 10)}|${row.vehicle_id}`;
+      if (key !== last) steps.push({ date: String(row.schedule_date).slice(0, 10), vehicle: row.vehicle_id, by: row.changed_by, at: row.changed_at });
+      last = key;
+    }
+    if (order) steps.push({ date: order.scheduleDate, vehicle: order.vehicleId, by: order.placementV148?.by || '', at: order.placementV148?.at || '', now: true });
+    let dialog = byId('v148HistoryDialog');
+    if (!dialog) { dialog = document.createElement('dialog'); dialog.id = 'v148HistoryDialog'; dialog.className = 'v147-dialog'; document.body.appendChild(dialog); }
+    dialog.innerHTML = `<form method="dialog"><h3>Áthelyezési előzmények – ${safe(order ? (global.orderLabelV145 ? global.orderLabelV145(order) : order.orderNo) : orderId)}</h3>
+      ${steps.length > 1 ? `<ol class="v148-steps">${steps.map(step => `<li><b>${safe(step.date)} · ${safe(driverNameV148(step.vehicle))}</b>${step.now ? ' <em>(most)</em>' : ''}<small>${safe(step.by || '')}${step.at && !String(step.at).startsWith('1970') ? ' · ' + safe(fmtTsV148(step.at)) : ''}</small></li>`).join('')}</ol>` : '<p class="v147-hint">Ennek a fuvarnak a napja és sofőrje azóta nem változott, hogy az előzmények rögzítése elindult.</p>'}
+      <div class="v147-actions"><button type="submit" class="primary">Bezárás</button></div></form>`;
+    if (!dialog.open) dialog.showModal();
+  }
+  global.showOrderHistoryV148 = showOrderHistoryV148;
+  /* A védelmi SQL lefutott-e – ha nem, feltűnő figyelmeztetés az adminnak. */
+  async function checkProtectionV148() {
+    if (!isAdmin() || !global.V44Online?.protectionInstalledV148) return;
+    const ok = await global.V44Online.protectionInstalledV148();
+    let bar = byId('v148ProtectBar');
+    if (ok) { bar?.remove(); return; }
+    if (!bar) { bar = document.createElement('div'); bar.id = 'v148ProtectBar'; bar.className = 'v148-protect'; document.body.appendChild(bar); }
+    bar.innerHTML = '<b>⚠ A fuvarvédelem még nincs bekapcsolva a szerveren.</b> Futtasd le a Supabase SQL Editorban a <b>SUPABASE_VEDELEM_V148.sql</b> fájlt – enélkül egy régi állapotú telefon visszaírhatja a fuvarok napját. <button type="button" onclick="this.parentElement.remove()">Később</button>';
+  }
+  global.checkProtectionV148 = checkProtectionV148;
+
   /* V147: ha a sofőr aznap távol van (és nincs fuvarja), ezt írjuk ki. */
   function absentTextV147(vehicle) {
     const absence = typeof global.vehicleAbsenceV147 === 'function' ? global.vehicleAbsenceV147(vehicle, selectedDriverDate) : null;
@@ -814,7 +923,125 @@
     return egyesult;
   }
 
+  /* ===== V148 – A FUVAR HELYE CSAK KIFEJEZETT ÁTHELYEZÉSSEL VÁLTOZHAT ====
+
+     A 2026-10-21-i eset: Patrik telefona induláskor a saját, régi (10-19 /
+     10-20-i) változatát „frissebbnek” ítélte (helyi időbélyeg vs. a fuvar
+     adataiban tárolt időbélyeg), megtartotta, és visszaírta a szerverre –
+     a mai fuvarok tegnapra kerültek.
+
+     Most:
+       - minden fuvar hordoz egy elhelyezési rekordot (placementV148: nap,
+         sofőr, a szerver szerinti időpont). Ha EZEN az eszközön helyezik át,
+         a mentés „függőben lévő áthelyezésnek” jelöli, a szerver legutóbbi
+         ismert időpontjával (base);
+       - a még fel nem töltött saját módosítások listája TARTÓS (újraindítás
+         után is megvan). Betöltéskor CSAK ezek maradhatnak meg helyben –
+         minden más esetben a szerver változata nyer;
+       - a nap és a sofőr betöltéskor akkor is a szerverről jön, ha a fuvaron
+         más (pl. pipálás) függőben van – kivéve a saját, függő áthelyezést;
+       - feltöltés után a szerverrel visszaigazoltatjuk: ha közben máshol
+         áthelyezték (a szerver elutasította), a szerver szerinti hely marad,
+         és jelezzük. A szerveroldali szabály (SUPABASE_VEDELEM_V148.sql)
+         ugyanezt az adatbázisban is kikényszeríti. */
+  function pendingKeyV148() {
+    const profileV148 = typeof currentProfile !== 'undefined' ? currentProfile : null;
+    return `fuvarPendingV148:${String(profileV148?.email || 'helyi').toLowerCase()}`;
+  }
+  function pendingSetV148() {
+    try { return new Set(JSON.parse((typeof localStorage !== 'undefined' && localStorage.getItem(pendingKeyV148())) || '[]').map(String)); } catch (_) { return new Set(); }
+  }
+  function savePendingV148(set) {
+    try { localStorage.setItem(pendingKeyV148(), JSON.stringify([...set].slice(-5000))); } catch (_) {}
+  }
+  function placementOfV148(order) { return `${order?.scheduleDate || ''}|${String(order?.vehicleId || '')}`; }
+  function stampPlacementsV148() {
+    const me = String(currentProfile?.email || '').toLowerCase();
+    for (const order of state.orders || []) {
+      const pr = order.placementV148;
+      const date = order.scheduleDate || '', vehicleId = String(order.vehicleId || '');
+      if (!pr) {
+        /* Rekord nélküli fuvar: ha a szerveren még nincs (új), függő jelölést
+           kap; ha már fent van, CSAK akkor, ha a napja vagy sofőrje a
+           legutóbb feltöltött állapothoz képest ténylegesen megváltozott. */
+        const known = syncedV132.get(String(order.id));
+        if (!known) { order.placementV148 = { date, vehicleId, base: null, pending: true, at: null, by: me }; continue; }
+        let prev = null; try { prev = JSON.parse(known); } catch (_) {}
+        if (prev && (prev.scheduleDate !== order.scheduleDate || String(prev.vehicleId || '') !== vehicleId)) order.placementV148 = { date, vehicleId, base: null, pending: true, at: null, by: me };
+        continue;
+      }
+      if (pr.date === date && String(pr.vehicleId || '') === vehicleId) continue;
+      order.placementV148 = { date, vehicleId, base: pr.pending ? (pr.base ?? null) : (pr.at ?? null), pending: true, at: null, by: me };
+    }
+  }
+  function markPendingV148() {
+    const set = pendingSetV148();
+    let changed = false;
+    for (const order of state.orders || []) {
+      const id = String(order.id);
+      if (isDirtyV132(order) && !set.has(id)) { set.add(id); changed = true; }
+    }
+    if (changed) savePendingV148(set);
+  }
+  function clearPendingV148(ids) {
+    const set = pendingSetV148(); let changed = false;
+    for (const id of ids) if (set.delete(String(id))) changed = true;
+    if (changed) savePendingV148(set);
+  }
+  /* Összefésüléskor a NAP és a SOFŐR: a saját, függő áthelyezés marad,
+     minden más esetben a szerveré. */
+  function resolvePlacementV148(merged, local, remote) {
+    const pr = local?.placementV148;
+    const ownPendingMove = pr?.pending && pr.date === local.scheduleDate && String(pr.vehicleId || '') === String(local.vehicleId || '');
+    if (ownPendingMove && placementOfV148(local) !== placementOfV148(remote)) return merged;
+    merged.scheduleDate = remote.scheduleDate;
+    merged.vehicleId = remote.vehicleId;
+    merged.sequence = remote.sequence;
+    merged.placementV148 = remote.placementV148 ? { ...remote.placementV148 } : { date: remote.scheduleDate, vehicleId: remote.vehicleId || '', at: null };
+    return merged;
+  }
+  /* Feltöltés után: elfogadta-e a szerver az áthelyezést? */
+  let confirmRunningV148 = null;
+  async function confirmPlacementsV148() {
+    if (confirmRunningV148) return confirmRunningV148;
+    confirmRunningV148 = (async () => {
+      const pendingOrders = (state.orders || []).filter(order => order.placementV148?.pending);
+      if (!pendingOrders.length || !global.V44Online?.fetchPlacementsV148) return;
+      let server;
+      try { server = await global.V44Online.fetchPlacementsV148(pendingOrders.map(order => order.id)); }
+      catch (error) { console.warn('[V148] áthelyezés visszaigazolása', error); return; }
+      const rejected = [], confirmed = [];
+      loadingV132 = true;
+      try {
+        for (const order of pendingOrders) {
+          const remote = server.get(String(order.id));
+          if (!remote || !remote.placementV148 || remote.placementV148.pending || !remote.placementV148.at) continue;
+          const same = remote.scheduleDate === order.scheduleDate && String(remote.vehicleId || '') === String(order.vehicleId || '');
+          if (same) { order.placementV148 = { ...remote.placementV148 }; confirmed.push(order); continue; }
+          const base = Date.parse(order.placementV148.base || 0) || 0;
+          if ((Date.parse(remote.placementV148.at) || 0) > base) {
+            order.scheduleDate = remote.scheduleDate; order.vehicleId = remote.vehicleId; order.sequence = remote.sequence;
+            order.placementV148 = { ...remote.placementV148 };
+            rejected.push(order);
+          }
+        }
+        for (const order of [...confirmed, ...rejected]) syncedV132.set(String(order.id), orderKeyV132(order));
+        clearPendingV148([...confirmed, ...rejected].map(order => order.id));
+        if (confirmed.length || rejected.length) { if (typeof global.save === 'function') global.save(false); }
+      } finally { loadingV132 = false; }
+      if (rejected.length) {
+        const nevek = rejected.map(order => (global.orderLabelV145 ? global.orderLabelV145(order) : order.orderNo)).join(', ');
+        (global.toastV147 || alert)(`${rejected.length} fuvart közben máshol áthelyeztek – a szerver szerinti hely maradt érvényben: ${nevek}`);
+        if (typeof global.render === 'function') global.render();
+      }
+    })();
+    try { await confirmRunningV148; } finally { confirmRunningV148 = null; }
+  }
+  (typeof global !== 'undefined' ? global : globalThis).confirmPlacementsV148 = confirmPlacementsV148;
+  (typeof global !== 'undefined' ? global : globalThis).__placementV148 = { stampPlacementsV148, resolvePlacementV148, pendingSetV148, markPendingV148, clearPendingV148 };
+
   function mergeOrdersByTimestampV70(localOrders, remoteOrders) {
+    const pendingV148 = pendingSetV148();
     const remoteById = new Map((remoteOrders || []).map(order => [String(order.id), order]));
     const keptLocalIds = new Set();
     const orders = [];
@@ -822,7 +1049,10 @@
       const remote = remoteById.get(String(local.id));
       if (!remote) { orders.push(local); keptLocalIds.add(String(local.id)); continue; }
       remoteById.delete(String(local.id));
-      if (orderStampV70(local) > orderStampV70(remote)) { orders.push(mergeDriverFieldsV104(local, remote)); keptLocalIds.add(String(local.id)); }
+      /* V148: helyben CSAK a még fel nem töltött saját módosítás maradhat
+         meg (tartós lista) – időbélyegek összehasonlítása NEM dönt. A nap
+         és a sofőr akkor is a szerveré, kivéve a saját, függő áthelyezést. */
+      if (pendingV148.has(String(local.id))) { orders.push(resolvePlacementV148(mergeDriverFieldsV104(local, remote), local, remote)); keptLocalIds.add(String(local.id)); }
       else orders.push(mergeDriverFieldsV104(remote, local));
     }
     for (const remote of remoteById.values()) orders.push(remote);
@@ -926,7 +1156,7 @@
         const id = String(remote.id);
         const local = localById.get(id);
         if (!local || !keep.has(id)) return remote;
-        const egyesult = mergeDriverFieldsV104(local, remote);
+        const egyesult = resolvePlacementV148(mergeDriverFieldsV104(local, remote), local, remote);
         if (currentProfile?.role !== 'admin') egyesult.items = local.items;
         return egyesult;
       });
@@ -1876,6 +2106,8 @@
           else if (orderKeyV132(order) === sentKeys.get(id)) syncedV132.set(id, sentKeys.get(id));
         }
         rememberServerIdsV137(changes.orders.map(order => order.id));
+        clearPendingV148(changes.orders.filter(order => syncedV132.get(String(order.id)) === orderKeyV132(order) && !order.placementV148?.pending).map(order => order.id));
+        if (changes.orders.some(order => order.placementV148?.pending)) setTimeout(() => confirmPlacementsV148(), 0);
         for (const id of changes.deletedIds) { syncedV132.delete(id); deletedThisSessionV132.add(id); }
         if (isDriver) syncedV132.forEach((_, id) => { if (!(state.orders || []).some(order => String(order.id) === id)) syncedV132.delete(id); });
         for (const [id, key] of sentBacklog) syncedBacklogV132.set(id, key);
@@ -2260,11 +2492,25 @@
     guardOrderFunction('toggleComplete', false);
     guardOrderFunction('failOrderToTomorrow', false);
 
+    /* V148: bármelyik feltöltési út után visszaigazoltatjuk az áthelyezést */
+    if (global.V44Online && !global.V44Online.__v148Wrapped) {
+      for (const name of ['syncOrdersForDate', 'syncOrders', 'updateOwnOrder']) {
+        const original = global.V44Online[name];
+        if (typeof original !== 'function') continue;
+        global.V44Online[name] = async function (...args) {
+          const result = await original.apply(this, args);
+          setTimeout(() => confirmPlacementsV148(), 0);
+          return result;
+        };
+      }
+      global.V44Online.__v148Wrapped = true;
+    }
     const originalSave = global.save;
     if (typeof originalSave === 'function') {
       global.save = function (...args) {
-        if (!loadingV132) stampUndoV132();
+        if (!loadingV132) { stampUndoV132(); stampPlacementsV148(); }
         const result = originalSave.apply(this, args);
+        if (!loadingV132 && currentProfile) markPendingV148();
         if (isRestrictedUser()) setTimeout(() => renderDriverPortal(), 0);
         scheduleSync();
         return result;
@@ -2374,10 +2620,15 @@
       section.innerHTML = '<div class="page-head"><div><small>ONLINE</small><h2>Beállítások és fuvarátadások</h2></div></div><div id="onlineAdminContent"></div>'
         + '<section class="panel v119-archive"><h3>Szállítólevelek archiválása</h3><p class="v108-hint">Az új feltöltések is azonnal bekerülhetnek a ZIP-be. Törölni csak már archivált, legalább két napos fájlokat lehet, külön megerősítéssel.</p><div id="v119Summary" class="v119-summary">Összesítés betöltése…</div><div class="v119-buttons"><button type="button" id="v119ArchiveRefresh" class="secondary">Összesítés frissítése</button><button type="button" id="v119Archive">Archiválás</button><button type="button" id="v119Purge" class="v115-danger">Archiváltak törlése</button></div><div id="v119Progress" class="v119-progress hidden"></div></section>'
         + '<section class="panel v135-backfill"><h3>Levélmellékletek a sofőröknek</h3><p class="v108-hint">Azoknak a fuvaroknak a levélmellékletét, amelyek nem jutottak fel a szerverre, ezen a gépen tárolt eredetiből feltölti, hogy a sofőrök is megnyithassák. Azon a gépen futtasd, amelyiken az importok készültek.</p><div class="v119-buttons"><button type="button" id="v135Backfill">Hiányzó mellékletek feltöltése a sofőröknek</button></div><div id="v135BackfillProgress" class="v135-progress hidden"></div></section>'
-        + '<section class="panel v147-push-panel"><h3>Push-értesítés (csevegő)</h3><p class="v108-hint">A telefonok akkor is kapnak értesítést a csevegő üzeneteiről, ha az alkalmazás be van zárva. Egyszeri beállítás – lépésenként: PUSH_BEALLITAS_V147.txt. A kulcspár itt, a böngésződben készül; a TITKOS kulcsot csak a Supabase Edge Function titkai közé másold be.</p><div class="v119-buttons"><button type="button" id="v147PushKeys">Kulcspár előállítása</button></div><div id="v147PushOut" class="v147-push-out hidden"></div><p id="v147PushStatus" class="v108-hint"></p></section>';
+        + '<section class="panel v147-push-panel"><h3>Push-értesítés (csevegő)</h3><p class="v108-hint">A telefonok akkor is kapnak értesítést a csevegő üzeneteiről, ha az alkalmazás be van zárva. Egyszeri beállítás – lépésenként: PUSH_BEALLITAS_V147.txt. A kulcspár itt, a böngésződben készül; a TITKOS kulcsot csak a Supabase Edge Function titkai közé másold be.</p><div class="v119-buttons"><button type="button" id="v147PushKeys">Kulcspár előállítása</button></div><div id="v147PushOut" class="v147-push-out hidden"></div><p id="v147PushStatus" class="v108-hint"></p></section>'
+        + '<section class="panel v148-restore-panel"><h3>Visszaállítás időpontra</h3><p class="v108-hint">Ha egy fuvar rossz napra vagy rossz sofőrhöz került, itt visszaállítható, hogy egy korábbi időpontban hol volt. Csak a kijelölt fuvarok napja, sofőrje és sorrendje változik – a pipák, fotók, megjegyzések és az azóta felvett fuvarok megmaradnak. (Az előzmények a SUPABASE_VEDELEM_V148.sql lefuttatása óta, 60 napig érhetők el.)</p>'
+        + '<div class="v148-restore-form"><label>Időpont<input type="datetime-local" id="v148RestoreAt"></label><label>Csak ez a nap (nem kötelező)<input type="date" id="v148RestoreDay"></label><button type="button" id="v148RestoreFind">Eltérések keresése</button></div><div id="v148RestoreOut"></div></section>';
       document.querySelector('main')?.append(section);
       section.querySelector('#v135Backfill')?.addEventListener('click', () => backfillSourceMailV135());
       section.querySelector('#v147PushKeys')?.addEventListener('click', () => generatePushKeysV147());
+      section.querySelector('#v148RestoreFind')?.addEventListener('click', () => findRestoreV148());
+      const at = section.querySelector('#v148RestoreAt');
+      if (at && !at.value) { const d = new Date(Date.now() - 3 * 3600e3); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); at.value = d.toISOString().slice(0, 16); }
       setTimeout(showPushStatusV147, 1500);
       const navButton = document.createElement('button');
       navButton.className = 'nav'; navButton.dataset.page = 'onlineAdmin'; navButton.innerHTML = '<span>⚙</span><small>Beállítások</small>';

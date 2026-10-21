@@ -390,7 +390,12 @@ window.vehicleAbsenceV147=vehicleAbsenceV147;
 function visibleVehiclesV147(date=null){
   const day=date||(typeof selectedDate==='function'?selectedDate():'');
   const act=new Set(activeVehicles(day).map(v=>v.id));
-  return state.vehicles.filter(v=>act.has(v.id)||(v.active&&vehicleAbsenceV147(v,day)&&state.orders.some(o=>o.vehicleId===v.id&&o.scheduleDate===day)));
+  /* V148: ha egy autó aznap nem dolgozna (távollét VAGY „csak egy napra”
+     beállítás), de mégis van fuvarja, az oszlopa figyelmeztetéssel látszik –
+     láthatatlan fuvar nem maradhat. */
+  const hasOrders=v=>state.orders.some(o=>o.vehicleId===v.id&&o.scheduleDate===day);
+  const dayOnlyOther=v=>{const only=String(v.dayOnly||'').trim();return !!only&&!!day&&only!==day};
+  return state.vehicles.filter(v=>act.has(v.id)||(v.active&&(vehicleAbsenceV147(v,day)||dayOnlyOther(v))&&hasOrders(v)));
 }
 window.visibleVehiclesV147=visibleVehiclesV147;
 function absenceLabelV147(a){if(!a)return'';const f=d=>String(d||'').slice(5).replace('-','.')+'.';return `${f(a.from)}–${f(a.to||a.from)}${a.note?` · ${a.note}`:''}`}
@@ -414,6 +419,8 @@ function openAbsenceDialogV147(vehicleId){
   const d=absenceDialogV147();
   const list=(v.absencesV147||[]).slice().sort((a,b)=>String(a.from).localeCompare(String(b.from)));
   const others=state.vehicles.filter(x=>x.active&&x.id!==v.id);
+  /* V148: a célsofőr csak olyan lehet, aki az időszak minden napján dolgozik */
+  const busyV148=(x,from,to)=>{if(!from)return '';for(let d=new Date(from+'T12:00:00');localISO(d)<=(to||from);d.setDate(d.getDate()+1)){const day=localISO(d);const a=vehicleAbsenceV147(x,day);if(a)return `távol ${absenceLabelV147(a)}`;const only=String(x.dayOnly||'').trim();if(only&&only!==day)return `csak ${only} napon`}return ''};
   d.innerHTML=`<form method="dialog" class="v147-abs">
     <h3>Távollét – ${esc(v.driverName||v.name)}</h3>
     <p class="v147-hint">Azokon a napokon a sofőr nem kap fuvart, és nem jelenik meg a főoldalon. Az időszak után magától visszakerül.</p>
@@ -422,17 +429,21 @@ function openAbsenceDialogV147(vehicleId){
       <label>Mettől<input type="date" name="from" required></label>
       <label>Meddig<input type="date" name="to" required></label>
       <label class="wide">Megjegyzés<input name="note" placeholder="pl. szabadság"></label>
-      <label class="wide">Ha ezekre a napokra már van fuvarja<select name="move"><option value="">Maradjanak nála (figyelmeztetéssel)</option>${others.map(x=>`<option value="${esc(x.id)}">Áthelyezés: ${esc(x.driverName||x.name)}</option>`).join('')}</select></label>
+      <label class="wide">Ha ezekre a napokra már van fuvarja<select name="move"><option value="">Maradjanak nála (figyelmeztetéssel)</option>${others.map(x=>`<option value="${esc(x.id)}" data-v148-target="${esc(x.id)}">Áthelyezés: ${esc(x.driverName||x.name)}</option>`).join('')}</select></label>
     </fieldset>
     <div class="v147-actions"><button type="button" data-close>Bezárás</button><button type="button" data-save class="primary">Rögzítés</button></div>
   </form>`;
   d.querySelector('[data-close]').onclick=()=>d.close();
+  const refreshTargets=()=>{const from=(d.querySelector('[name="from"]')||{}).value,to=(d.querySelector('[name="to"]')||{}).value||from;
+    d.querySelectorAll('[data-v148-target]').forEach(opt=>{const x=state.vehicles.find(y=>y.id===opt.dataset.v148Target);const busy=busyV148(x,from,to);opt.disabled=!!busy;opt.textContent=`Áthelyezés: ${x.driverName||x.name}${busy?` (${busy})`:''}`;if(busy&&opt.selected)d.querySelector('[name="move"]').value=''})};
+  d.querySelectorAll('[name="from"],[name="to"]').forEach(el=>el.addEventListener('change',refreshTargets));
   d.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{v.absencesV147=(v.absencesV147||[]).filter(a=>a.id!==b.dataset.del);save();render();openAbsenceDialogV147(vehicleId)});
   d.querySelector('[data-save]').onclick=()=>{
     const val=name=>(d.querySelector(`[name="${name}"]`)||{}).value||'';
     const from=val('from'),to=val('to')||from,note=val('note').trim(),move=val('move');
     if(!from||!to)return alert('Add meg a kezdő és a záró napot.');
     if(to<from)return alert('A záró nap nem lehet a kezdő nap előtt.');
+    if(move){const x=state.vehicles.find(y=>y.id===move);const busy=busyV148(x,from,to);if(busy)return alert(`${x.driverName||x.name} ebben az időszakban nem dolgozik (${busy}) – válassz másik sofőrt.`)}
     const affected=state.orders.filter(o=>o.vehicleId===v.id&&o.scheduleDate>=from&&o.scheduleDate<=to);
     if(affected.length&&!move&&!confirm(`${affected.length} rendelése van erre az időszakra. Nála maradjanak? (Az oszlopa azokon a napokon figyelmeztetéssel látszik.)`))return;
     v.absencesV147=[...(v.absencesV147||[]),{id:uid(),from,to,note}];
@@ -1314,7 +1325,11 @@ function searchableOrderText(o){return norm(JSON.stringify(o)+' '+(o.items||[]).
    napra állítva. */
 function setVehicleDayOnlyV102(id){
   const vehicle=state.vehicles.find(x=>x.id===id);if(!vehicle)return;
-  vehicle.dayOnly=selectedDate();
+  /* V148: ez NEM szabadságra való – arra a „Távollét…” gomb szolgál */
+  const day=selectedDate();
+  const mas=(state.orders||[]).filter(o=>o.vehicleId===id&&o.scheduleDate&&o.scheduleDate!==day&&o.scheduleDate>=today()).length;
+  if(!confirm(`${vehicle.driverName||'A jármű'} ezután CSAK a(z) ${day} napon jelenik meg a főoldalon.${mas?`\n\nFigyelem: ${mas} fuvarja van más napokon – azok figyelmeztetéssel továbbra is látszanak.`:''}\n\nSzabadsághoz a „Távollét…” gombot használd. Folytatod?`))return;
+  vehicle.dayOnly=day;
   save();
   alert(`${vehicle.driverName||'A jármű'} mostantól csak ezen a napon jelenik meg: ${vehicle.dayOnly}`);
 }
@@ -1381,7 +1396,7 @@ function saveHomePointsV108(){
 window.renderHomePointsV108=renderHomePointsV108;
 window.saveHomePointsV108=saveHomePointsV108;
 
-function renderVehicles(){$('#vehicleList').innerHTML=state.vehicles.map(v=>`<article class="card vehicle-card ${v.active?'':'inactive'}"><div><h3>${esc(v.driverName)} · ${esc(v.name)}</h3><p>${esc(v.type)} · ${esc(v.homeCity||'')}</p>${(v.absencesV147||[]).filter(a=>(a.to||a.from)>=today()).map(a=>`<p class="v147-abs-chip">🏖 ${esc(absenceLabelV147(a))}</p>`).join('')}<button type="button" class="v147-abs-btn" onclick="openAbsenceDialogV147('${esc(v.id)}')">Távollét…</button>${String(v.dayOnly||'').trim()?`<p class="v100-dayonly">Csak erre a napra: ${esc(v.dayOnly)}</p>`:'<p class="v100-always">Állandó jármű · minden napon</p>'}<div class="card-actions"><button onclick="editVehicle('${v.id}')">Szerkesztés</button>${String(v.dayOnly||'').trim()?`<button class="secondary" onclick="setVehicleAlwaysV102('${v.id}')">Legyen állandó</button>`:`<button class="secondary" onclick="setVehicleDayOnlyV102('${v.id}')">Csak a mai napra</button>`}</div></div><label class="switch"><input type="checkbox" ${v.active?'checked':''} onchange="toggleVehicle('${v.id}',this.checked)"> Aktív</label></article>`).join('')}
+function renderVehicles(){$('#vehicleList').innerHTML=state.vehicles.map(v=>`<article class="card vehicle-card ${v.active?'':'inactive'}"><div><h3>${esc(v.driverName)} · ${esc(v.name)}</h3><p>${esc(v.type)} · ${esc(v.homeCity||'')}</p>${(v.absencesV147||[]).filter(a=>(a.to||a.from)>=today()).map(a=>`<p class="v147-abs-chip">🏖 ${esc(absenceLabelV147(a))}</p>`).join('')}<button type="button" class="v147-abs-btn" onclick="openAbsenceDialogV147('${esc(v.id)}')">Távollét…</button>${String(v.dayOnly||'').trim()?`<p class="v100-dayonly">Csak erre a napra: ${esc(v.dayOnly)}</p>`:'<p class="v100-always">Állandó jármű · minden napon</p>'}<div class="card-actions"><button onclick="editVehicle('${v.id}')">Szerkesztés</button>${String(v.dayOnly||'').trim()?`<button class="secondary" onclick="setVehicleAlwaysV102('${v.id}')">Legyen állandó</button>`:`<button class="secondary" onclick="setVehicleDayOnlyV102('${v.id}')">Csak a(z) ${esc(selectedDate())} napon jelenjen meg</button>`}</div></div><label class="switch"><input type="checkbox" ${v.active?'checked':''} onchange="toggleVehicle('${v.id}',this.checked)"> Aktív</label></article>`).join('')}
 window.toggleVehicle=(id,val)=>{const v=state.vehicles.find(x=>x.id===id);if(v){v.active=val;if(!val){const active=state.vehicles.filter(x=>x.active);state.orders.filter(o=>o.vehicleId===id).forEach(o=>o.vehicleId=active[0]?.id||'')}save()}};
 function renderDriver(){const vid=$('#driverVehicleSelect').value||activeVehicles()[0]?.id,date=$('#driverDate').value||selectedDate();const rows=dayOrders(vid,date).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999));$('#driverTasks').innerHTML=rows.map((o,i)=>`<article class="driver-task ${o.completed?'done':''}"><h3>${i+1}. ${esc((typeof orderLabelV145==='function'?orderLabelV145(o):(o?.orderNo||'')))} · ${esc(o.projectName||o.dropAddress)}</h3><p><b>Felrakó:</b> ${esc(o.pickupName)} · ${esc(o.pickupAddress)}</p><p><b>Lerakó:</b> ${esc(o.dropAddress)}</p>${o.note?`<p><b>Megjegyzés:</b> ${esc(o.note)}</p>`:''}<button onclick="toggleComplete('${o.id}')">${o.completed?'✓ Minden tétel rendben':'○ Átvétel rendben'}</button><button class="secondary" onclick="openItems('${o.id}')">Tételek külön pipálása</button><button class="secondary" onclick="openCamera('${o.id}')">📷 Szállítólevél fotózása</button></article>`).join('')||'<div class="notice">Nincs feladat.</div>'}
 function fillSelectors(){const vehicleOpts='<option value="">Nincs kiosztva</option>'+state.vehicles.map(v=>option(v.id,`${v.driverName} · ${v.name}${v.active?'':' (kikapcsolva)'}`)).join('');$('#vehicleId').innerHTML=vehicleOpts;$('#orderVehicleFilter').innerHTML='<option value="">Minden autó</option>'+state.vehicles.map(v=>option(v.id,v.driverName)).join('');$('#driverVehicleSelect').innerHTML=activeVehicles().map(v=>option(v.id,`${v.driverName} · ${v.name}`,$('#driverVehicleSelect').value)).join('');if(!$('#driverDate').value)$('#driverDate').value=selectedDate()}
@@ -1806,7 +1821,16 @@ function openOrder(o={}){
      célt, és nem töltötte ki a címet – például a Moxy bérleménynél. */
   lastPickupTargetKeyV83='';lastDropTargetKeyV83='';
   $('#orderId').value=o.id||'';$('#orderTitle').textContent=o.id?'Fuvar szerkesztése':'Új fuvar';setScheduleParts(o.scheduleDate||selectedDate());setDateParts('deadline',o.requestedDeadline||'');fillSelectors();fillSearchableMasters();$('#vehicleId').value=o.vehicleId||'';$('#orderNo').value=o.orderNo||'';const s=state.suppliers.find(x=>x.id===o.supplierId);$('#supplierId').value=o.supplierId||'';$('#supplierSearch').value=s?s.name:(o.pickupName||'');fillSupplierAddressList(s?.name||o.pickupName||'');$('#pickupAddress').value=o.pickupAddress||'';$('#pickupNote').value=o.pickupNote||'';const p=state.projects.find(x=>x.id===o.projectId);$('#projectId').value=o.projectId||'';$('#projectSearch').value=p?.name||o.projectName||'';$('#dropAddress').value=o.dropAddress||'';$('#recipientId').innerHTML=recipientOptions(o.projectName,o.recipientId);$('#recipientName').value=o.recipientName||'';$('#recipientPhone').value=o.recipientPhone||'';$('#recipientEmail').value=o.recipientEmail||'';setCustomProjectMode(!p);$('#pickupFrom').value=o.pickupFrom||'';$('#pickupTo').value=o.pickupTo||'';$('#dropFrom').value=o.dropFrom||'';$('#dropTo').value=o.dropTo||'';$('#orderNote').value=cleanOrderNoteV73(o);$('#orderDialog').showModal();setTimeout(()=>$('#scheduleYear').focus(),30)}
-window.editOrder=id=>openOrder(state.orders.find(x=>x.id===id));
+window.editOrder=id=>{
+  openOrder(state.orders.find(x=>x.id===id));
+  /* V148: áthelyezési előzmények a szerkesztőből (csak adminnak) */
+  const head=document.querySelector('#orderDialog .dialog-head');
+  if(head&&!head.querySelector('.v148-history-btn')&&document.body.classList.contains('mode-admin')){
+    const b=document.createElement('button');b.type='button';b.className='v148-history-btn';b.textContent='Áthelyezési előzmények';
+    b.onclick=()=>window.showOrderHistoryV148?.($('#orderId').value);head.insertBefore(b,head.lastElementChild);
+  }
+  document.querySelector('#orderDialog .v148-history-btn')?.classList.toggle('hidden',!id);
+};
 $('#orderForm').onsubmit=e=>{e.preventDefault();if(!syncScheduleDate())return alert('Adj meg érvényes szállítási dátumot.');if(!syncDateParts('deadline',false))return alert('Adj meg érvényes kért szállítási határidőt, vagy hagyd üresen.');const old=state.orders.find(x=>x.id===$('#orderId').value),s=findSupplierByInput($('#supplierSearch').value),p=findProjectByInput($('#projectSearch').value),r=state.recipients.find(x=>x.id===$('#recipientId').value);const o={...old,id:old?.id||uid(),scheduleDate:$('#scheduleDate').value,vehicleId:$('#vehicleId').value||marioVehicle()?.id||'',orderNo:last5($('#orderNo').value),requestedDeadline:$('#deadline').value,supplierId:s?.id||'',pickupName:s?.name||$('#supplierSearch').value.trim()||old?.pickupName||'',pickupAddress:$('#pickupAddress').value,pickupNote:$('#pickupNote').value,projectId:p?.id||'',projectName:p?.name||$('#projectSearch').value.trim()||'Egyedi úticél',dropAddress:$('#dropAddress').value,recipientId:p?(r?.id||''):'',recipientName:$('#recipientName').value.trim()||r?.name||'',recipientPhone:$('#recipientPhone').value,recipientEmail:$('#recipientEmail').value,pickupFrom:$('#pickupFrom').value,pickupTo:$('#pickupTo').value,dropFrom:$('#dropFrom').value,dropTo:$('#dropTo').value,note:$('#orderNote').value,
   /* V73: a megjegyzés szerkesztésekor a RÉGI importált szöveget is
      felülírjuk, különben a buborékban a két érték egymás mellett maradna

@@ -207,7 +207,7 @@
       await api().pushSaveSubscriptionV147(sub, isMuted());
       try { localStorage.setItem(`chatV147Push:${st.me}`, '1'); } catch (_) {}
       renderPushButtonsV147();
-      if (confirm('Az értesítés bekapcsolva ezen az eszközön. Küldjek egy próbaértesítést?')) testPushV147();
+      if (confirm('Az értesítés be van kapcsolva ezen az eszközön (a szerveren is elmentve). Küldjek egy próbaértesítést?')) testPushV147();
     } catch (error) {
       alert(`Az értesítés bekapcsolása nem sikerült: ${error.message}`);
     }
@@ -227,11 +227,9 @@
       button.dataset.on = sub ? '1' : '';
     }
   }
-  function onPushButtonV147(button) {
-    if (button?.dataset.on === '1') {
-      if (confirm('Az értesítés be van kapcsolva ezen az eszközön.\nOK = próbaértesítés küldése')) testPushV147();
-    } else enablePushV147();
-  }
+  /* V148: minden kattintás újramenti a feliratkozást a szerveren (ha a
+     korábbi mentés nem jutott fel, így pótlódik), utána próbaértesítés. */
+  function onPushButtonV147() { enablePushV147(); }
   /* Az értesítésre koppintva: a beszélgetés megnyitása. */
   function openFromPushV147(conversation) {
     if (!st.started) return;

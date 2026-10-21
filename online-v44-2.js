@@ -250,6 +250,35 @@
   }
 
   /* V147: a járművek (távollétekkel) a törzsadat-táblából – sofőrnek is. */
+  /* ===== V148 – ELHELYEZÉS-VÉDELEM ÉS ELŐZMÉNYEK ===================== */
+  /* A feltöltött áthelyezések szerver szerinti állapota (elfogadta-e). */
+  async function fetchPlacementsV148(ids = []) {
+    const out = new Map();
+    const list = [...new Set(ids.map(String))];
+    for (let i = 0; i < list.length; i += 80) {
+      const part = list.slice(i, i + 80);
+      const rows = await dbRequest(`orders?${qs({ select: 'id,schedule_date,vehicle_id,sequence,payload->placementV148', id: `in.(${part.map(id => `"${id}"`).join(',')})` })}`);
+      for (const row of rows || []) out.set(String(row.id), { scheduleDate: row.schedule_date, vehicleId: row.vehicle_id || '', sequence: row.sequence, placementV148: row.placementV148 || null });
+    }
+    return out;
+  }
+  async function protectionInstalledV148() {
+    try { const r = await dbRequest('rpc/fuvar_vedelem_v148', { method: 'POST', body: {} }); return r === 'ok' || r === '"ok"'; }
+    catch (_) { return false; }
+  }
+  async function fetchHistoryV148({ since, orderId = '', limit = 1000 } = {}) {
+    const rows = [];
+    for (let offset = 0; offset < 20000; offset += limit) {
+      const params = { select: 'id,order_id,op,changed_at,changed_by,schedule_date,vehicle_id,sequence,payload', order: 'changed_at.asc,id.asc', limit: String(limit), offset: String(offset) };
+      if (since) params.changed_at = `gt.${since}`;
+      if (orderId) params.order_id = `eq.${orderId}`;
+      const page = await dbRequest(`orders_history?${qs(params)}`);
+      rows.push(...(page || []));
+      if (!page || page.length < limit) break;
+    }
+    return rows;
+  }
+
   async function fetchVehiclesV147() {
     try {
       const rows = await dbRequest(`master_data?${qs({ select: 'payload', id: 'eq.current', limit: '1' })}`);
@@ -345,7 +374,7 @@
   }
   function rowToOrder(row) {
     const payload = row.payload && typeof row.payload === 'object' ? row.payload : {};
-    return {
+    const order = {
       ...payload,
       id: row.id,
       scheduleDate: row.schedule_date || payload.scheduleDate || '',
@@ -355,6 +384,14 @@
       sequence: row.sequence ?? payload.sequence ?? 999,
       onlineUpdatedAt: row.updated_at
     };
+    /* V148: a szerver szerinti elhelyezés (nap + sofőr) rekordja. A régi,
+       még rekord nélküli fuvarnál a szerver oszlopaiból készül – nem
+       függőben lévő, így a telefon nem tekinti saját módosításnak. */
+    const pr = payload.placementV148;
+    order.placementV148 = (pr && !pr.pending && pr.date === order.scheduleDate && String(pr.vehicleId || '') === String(order.vehicleId || ''))
+      ? { ...pr }
+      : { date: order.scheduleDate, vehicleId: order.vehicleId || '', at: pr && !pr.pending ? (pr.at || null) : null };
+    return order;
   }
 
   /* V131: egy régi adminoldal teljes payloadot küldhetett vissza, és ezzel
@@ -1206,6 +1243,8 @@
     mimeForFileV136, cleanupEmptySourceReportsV136, removeStoragePathsV136,
     /* V146 */
     isDefinitiveAuthErrorV146,
+    /* V148 */
+    fetchPlacementsV148, protectionInstalledV148, fetchHistoryV148,
     /* V147 */
     fetchVehiclesV147, pushConfigGetV147, pushConfigSetV147, pushSaveSubscriptionV147, pushSetMutedV147, pushDeleteSubscriptionV147, pushTestV147,
     /* V138 */

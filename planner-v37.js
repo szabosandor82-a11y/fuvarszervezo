@@ -1141,6 +1141,8 @@
   }
   function absentWarningV147(vehicle, count) {
     const absence = typeof global.vehicleAbsenceV147 === 'function' ? global.vehicleAbsenceV147(vehicle, selectedDate()) : null;
+    const only = String(vehicle.dayOnly || '').trim();
+    if (!absence && only && only !== selectedDate()) return `<div class="v147-absent-warn">⚠ Ez az autó csak a(z) ${escHtml(only)} napra van beállítva (Járművek) – ma mégis ${count} rendelése van</div>`;
     if (!absence) return '';
     return `<div class="v147-absent-warn">🏖 Távol: ${escHtml(global.absenceLabelV147 ? global.absenceLabelV147(absence) : '')} – ${count} rendelés áthelyezendő</div>`;
   }
