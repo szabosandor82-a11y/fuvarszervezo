@@ -27,6 +27,9 @@
   const safeName = value => String(value || 'file').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(-140);
   const driverKeyFromOrder = order => {
     const vehicle = String(order?.vehicleId || '');
+    /* V149: a Járművek oldalon az autóhoz rendelt sofőr-fiók az első */
+    const bound = (global.state?.vehicles || []).find(v => v.id === vehicle)?.driverKeyV149;
+    if (bound) return String(bound);
     if (vehicle === 'v-mario') return 'mario';
     if (vehicle === 'v-patrik') return 'patrik';
     if (vehicle === 'v-martin') return 'martin';
@@ -263,7 +266,7 @@
     return out;
   }
   async function protectionInstalledV148() {
-    try { const r = await dbRequest('rpc/fuvar_vedelem_v148', { method: 'POST', body: {} }); return r === 'ok' || r === '"ok"'; }
+    try { const r = await dbRequest('rpc/fuvar_vedelem_v149', { method: 'POST', body: {} }); return r === 'ok' || r === '"ok"'; }
     catch (_) { return false; }
   }
   async function fetchHistoryV148({ since, orderId = '', limit = 1000 } = {}) {
@@ -301,6 +304,15 @@
   async function pushSaveSubscriptionV147(subscription, muted = false) {
     const json = typeof subscription?.toJSON === 'function' ? subscription.toJSON() : subscription;
     if (!json?.endpoint || !json?.keys?.p256dh || !json?.keys?.auth) throw new Error('Érvénytelen feliratkozás.');
+    /* V149: a szerverfüggvény az eszközt mindig az éppen bejelentkezett
+       felhasználóhoz rendeli (akkor is, ha korábban más használta). Ha még
+       nincs telepítve (SUPABASE_VEDELEM_V149.sql), a régi úton megyünk. */
+    try {
+      await dbRequest('rpc/push_subscribe_v149', { method: 'POST', body: { p_endpoint: json.endpoint, p_p256dh: json.keys.p256dh, p_auth: json.keys.auth, p_muted: !!muted, p_user_agent: String(global.navigator?.userAgent || '').slice(0, 200) } });
+      return true;
+    } catch (error) {
+      if (!(+error?.status === 404 || /push_subscribe_v149|function .* does not exist|PGRST202/i.test(String(error?.message || '') + JSON.stringify(error?.payload || '')))) throw error;
+    }
     const email = normalize(profile?.email || session?.user?.email || '');
     await dbRequest('push_subscriptions?on_conflict=endpoint', {
       method: 'POST',

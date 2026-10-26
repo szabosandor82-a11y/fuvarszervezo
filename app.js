@@ -695,6 +695,15 @@ function buildCombo(select){
       options[active]?.scrollIntoView({ block: 'nearest' });
     } else if(event.key === 'Enter'){
       if(!list.hidden && options.length){ event.preventDefault(); choose((options[active] || options[0]).dataset.value); }
+    } else if(event.key === 'Tab' && !list.hidden && options.length){
+      /* V149: a Tab RÖGZÍTI a kijelölt sort, és továbblép a következő mezőre.
+         Eddig csak továbblépett, a mező pedig visszaállt a régi értékre.
+         Kijelölés nélkül: ha gépeltél, és egy találat maradt, azt veszi;
+         ha nem gépeltél, a meglévő érték marad. */
+      const typed = input.value.trim() && input.value !== labelOf(select.value);
+      if(active >= 0) choose(options[active].dataset.value);
+      else if(typed && options.length === 1) choose(options[0].dataset.value);
+      else list.hidden = true;
     } else if(event.key === 'Escape'){ list.hidden = true; }
   });
   input.addEventListener('blur', () => setTimeout(() => { list.hidden = true; input.value = labelOf(select.value); }, 150));
@@ -765,8 +774,9 @@ function attachDataCombo(input, listId, itemsFn, onPick){
          maradt, azt írja be: ilyenkor nincs mit eltéveszteni.
          Több találatnál nem választ, nehogy felülírja, amit gépeltél –
          ilyenkor a Tab a szokásos módon a következő mezőre lép. */
-      if(active >= 0){ event.preventDefault(); pick(active); }
-      else if(options.length === 1){ event.preventDefault(); pick(0); }
+      /* V149: rögzít ÉS továbblép (eddig a fókusz a mezőben maradt) */
+      if(active >= 0){ pick(active); }
+      else if(options.length === 1){ pick(0); }
       else { list.hidden = true; }
     } else if(event.key === 'Escape'){ list.hidden = true; }
   });
@@ -1396,7 +1406,7 @@ function saveHomePointsV108(){
 window.renderHomePointsV108=renderHomePointsV108;
 window.saveHomePointsV108=saveHomePointsV108;
 
-function renderVehicles(){$('#vehicleList').innerHTML=state.vehicles.map(v=>`<article class="card vehicle-card ${v.active?'':'inactive'}"><div><h3>${esc(v.driverName)} · ${esc(v.name)}</h3><p>${esc(v.type)} · ${esc(v.homeCity||'')}</p>${(v.absencesV147||[]).filter(a=>(a.to||a.from)>=today()).map(a=>`<p class="v147-abs-chip">🏖 ${esc(absenceLabelV147(a))}</p>`).join('')}<button type="button" class="v147-abs-btn" onclick="openAbsenceDialogV147('${esc(v.id)}')">Távollét…</button>${String(v.dayOnly||'').trim()?`<p class="v100-dayonly">Csak erre a napra: ${esc(v.dayOnly)}</p>`:'<p class="v100-always">Állandó jármű · minden napon</p>'}<div class="card-actions"><button onclick="editVehicle('${v.id}')">Szerkesztés</button>${String(v.dayOnly||'').trim()?`<button class="secondary" onclick="setVehicleAlwaysV102('${v.id}')">Legyen állandó</button>`:`<button class="secondary" onclick="setVehicleDayOnlyV102('${v.id}')">Csak a(z) ${esc(selectedDate())} napon jelenjen meg</button>`}</div></div><label class="switch"><input type="checkbox" ${v.active?'checked':''} onchange="toggleVehicle('${v.id}',this.checked)"> Aktív</label></article>`).join('')}
+function renderVehicles(){$('#vehicleList').innerHTML=state.vehicles.map(v=>`<article class="card vehicle-card ${v.active?'':'inactive'}"><div><h3>${esc(v.driverName)} · ${esc(v.name)}</h3><p>${esc(v.type)} · ${esc(v.homeCity||'')}</p>${(v.absencesV147||[]).filter(a=>(a.to||a.from)>=today()).map(a=>`<p class="v147-abs-chip">🏖 ${esc(absenceLabelV147(a))}</p>`).join('')}<button type="button" class="v147-abs-btn" onclick="openAbsenceDialogV147('${esc(v.id)}')">Távollét…</button><label class="v149-driver-bind">Sofőr-fiók (ki látja a telefonján)<select onchange="setVehicleDriverV149('${esc(v.id)}',this.value)">${driverAccountOptionsV149(v)}</select></label>${String(v.dayOnly||'').trim()?`<p class="v100-dayonly">Csak erre a napra: ${esc(v.dayOnly)}</p>`:'<p class="v100-always">Állandó jármű · minden napon</p>'}<div class="card-actions"><button onclick="editVehicle('${v.id}')">Szerkesztés</button>${String(v.dayOnly||'').trim()?`<button class="secondary" onclick="setVehicleAlwaysV102('${v.id}')">Legyen állandó</button>`:`<button class="secondary" onclick="setVehicleDayOnlyV102('${v.id}')">Csak a(z) ${esc(selectedDate())} napon jelenjen meg</button>`}</div></div><label class="switch"><input type="checkbox" ${v.active?'checked':''} onchange="toggleVehicle('${v.id}',this.checked)"> Aktív</label></article>`).join('')}
 window.toggleVehicle=(id,val)=>{const v=state.vehicles.find(x=>x.id===id);if(v){v.active=val;if(!val){const active=state.vehicles.filter(x=>x.active);state.orders.filter(o=>o.vehicleId===id).forEach(o=>o.vehicleId=active[0]?.id||'')}save()}};
 function renderDriver(){const vid=$('#driverVehicleSelect').value||activeVehicles()[0]?.id,date=$('#driverDate').value||selectedDate();const rows=dayOrders(vid,date).sort((a,b)=>(+a.sequence||999)-(+b.sequence||999));$('#driverTasks').innerHTML=rows.map((o,i)=>`<article class="driver-task ${o.completed?'done':''}"><h3>${i+1}. ${esc((typeof orderLabelV145==='function'?orderLabelV145(o):(o?.orderNo||'')))} · ${esc(o.projectName||o.dropAddress)}</h3><p><b>Felrakó:</b> ${esc(o.pickupName)} · ${esc(o.pickupAddress)}</p><p><b>Lerakó:</b> ${esc(o.dropAddress)}</p>${o.note?`<p><b>Megjegyzés:</b> ${esc(o.note)}</p>`:''}<button onclick="toggleComplete('${o.id}')">${o.completed?'✓ Minden tétel rendben':'○ Átvétel rendben'}</button><button class="secondary" onclick="openItems('${o.id}')">Tételek külön pipálása</button><button class="secondary" onclick="openCamera('${o.id}')">📷 Szállítólevél fotózása</button></article>`).join('')||'<div class="notice">Nincs feladat.</div>'}
 function fillSelectors(){const vehicleOpts='<option value="">Nincs kiosztva</option>'+state.vehicles.map(v=>option(v.id,`${v.driverName} · ${v.name}${v.active?'':' (kikapcsolva)'}`)).join('');$('#vehicleId').innerHTML=vehicleOpts;$('#orderVehicleFilter').innerHTML='<option value="">Minden autó</option>'+state.vehicles.map(v=>option(v.id,v.driverName)).join('');$('#driverVehicleSelect').innerHTML=activeVehicles().map(v=>option(v.id,`${v.driverName} · ${v.name}`,$('#driverVehicleSelect').value)).join('');if(!$('#driverDate').value)$('#driverDate').value=selectedDate()}
@@ -5417,3 +5427,82 @@ optimizeAll=async function(doSave=true){try{for(const v of activeVehicles())awai
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});
   else bind();
 })();
+
+/* ===== V149 – MINDEN FELUGRÓ ABLAK FEJLÉCE RÖGZÍTVE ======================
+   Telefonon (főképernyős módban is) a hosszú ablakokban a fejléc a
+   tartalommal együtt felgördült, és a bezáró gomb kicsúszott a képből.
+   Most MINDEN megnyíló ablaknál – a mostaniaknál és a később készülőknél is:
+     - a fejléc (cím + ✕) a görgető terület tetején rögzítve marad;
+     - telefonon az ablak teljes képernyős, az állapotsor alatt kezdődik;
+     - ha az ablaknak nincs felül bezáró gombja, a program felrak egy ✕-et. */
+function dialogCloseV149(d){
+  const cancel=d.querySelector('[data-cancel]');
+  if(cancel&&cancel.offsetParent!==null){cancel.click();return}
+  try{d.close()}catch(_){}
+}
+function prepareDialogV149(d){
+  if(!d||d.tagName!=='DIALOG')return;
+  d.classList.add('v149-dlg');
+  const head=d.querySelector('.dialog-head, .driver-focus-head, .cv-panel-head, .v149-dlg-bar');
+  const closeSel='[data-close], .close, .driver-focus-close, .cv-close, .v149-x, [data-close-transfer]';
+  if(head){
+    head.classList.add('v149-sticky');
+    if(!head.querySelector(closeSel)){const x=document.createElement('button');x.type='button';x.className='v149-x';x.setAttribute('aria-label','Bezárás');x.textContent='✕';x.onclick=()=>dialogCloseV149(d);head.appendChild(x)}
+    return;
+  }
+  /* fejléc nélküli ablak (pl. választó, távollét, előzmények): rögzített sáv */
+  const host=d.querySelector(':scope > form')||d;
+  const title=host.querySelector(':scope > h3, :scope > h2');
+  const bar=document.createElement('div');bar.className='v149-dlg-bar v149-sticky';
+  const t=document.createElement('b');t.textContent=title?title.textContent:'';bar.appendChild(t);
+  const x=document.createElement('button');x.type='button';x.className='v149-x';x.setAttribute('aria-label','Bezárás');x.textContent='✕';x.onclick=()=>dialogCloseV149(d);bar.appendChild(x);
+  if(title)title.remove();
+  host.insertBefore(bar,host.firstChild);
+}
+window.prepareDialogV149=prepareDialogV149;
+(function installDialogV149(){
+  if(typeof HTMLDialogElement==='undefined')return;
+  for(const name of ['showModal','show']){
+    const orig=HTMLDialogElement.prototype[name];
+    if(typeof orig!=='function'||orig.__v149)continue;
+    const wrapped=function(...args){try{prepareDialogV149(this)}catch(_){}return orig.apply(this,args)};
+    wrapped.__v149=true;HTMLDialogElement.prototype[name]=wrapped;
+  }
+  if(typeof MutationObserver!=='undefined'&&document.documentElement){
+    new MutationObserver(records=>{for(const r of records){const el=r.target;if(el.tagName==='DIALOG'&&el.open)try{prepareDialogV149(el)}catch(_){}
+      for(const n of r.addedNodes||[])if(n.nodeType===1&&n.closest&&n.closest('dialog[open]'))try{prepareDialogV149(n.closest('dialog[open]'))}catch(_){}}})
+      .observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:['open'],childList:true});
+  }
+})();
+
+/* ===== V149 – AUTÓ ↔ SOFŐR-FIÓK =========================================
+   Eddig csak Márió, Patrik és Martin volt beépítve (név szerint). Most minden
+   autóhoz kiválasztható, melyik sofőr-fiókhoz tartozik – így bármennyi új
+   autó és sofőr felvehető, a fuvarjaik a saját telefonjukon jelennek meg.
+   A sofőr-fiókot (e-mail, szerep = driver, driver_key) a Supabase
+   allowed_users táblájában kell felvenni. */
+function driverAccountOptionsV149(v){
+  const users=(window.__driverUsersV149||[]);
+  const current=String(v.driverKeyV149||'');
+  const auto=(window.V44Online?.driverKeyFromOrder?.({vehicleId:v.id})||'');
+  const opts=[`<option value="">${auto&&!current?`Automatikus (${esc(auto)})`:'– nincs hozzárendelve –'}</option>`];
+  for(const u of users){const key=String(u.driver_key||'');if(!key)continue;opts.push(`<option value="${esc(key)}" ${key===current?'selected':''}>${esc(u.display_name||u.email)} · ${esc(key)}</option>`)}
+  if(current&&!users.some(u=>String(u.driver_key||'')===current))opts.push(`<option value="${esc(current)}" selected>${esc(current)}</option>`);
+  return opts.join('');
+}
+async function loadDriverUsersV149(){
+  try{const list=await window.V44Online?.listUsers?.();window.__driverUsersV149=(list||[]).filter(u=>u.active!==false&&(u.role==='driver'||u.role==='test'));if(document.querySelector('.v149-driver-bind'))renderVehicles()}catch(_){}
+}
+window.loadDriverUsersV149=loadDriverUsersV149;
+function setVehicleDriverV149(vehicleId,key){
+  const v=state.vehicles.find(x=>x.id===vehicleId);if(!v)return;
+  const other=key?state.vehicles.find(x=>x.id!==vehicleId&&String(x.driverKeyV149||'')===key):null;
+  if(other&&!confirm(`Ez a sofőr-fiók már ${other.driverName||other.name} autójához van rendelve. Áthelyezzem ide?`)){renderVehicles();return}
+  if(other)delete other.driverKeyV149;
+  if(key)v.driverKeyV149=key;else delete v.driverKeyV149;
+  /* a jövőbeli fuvarjai újra feltöltődnek, hogy a szerveren is az új sofőrhöz tartozzanak */
+  for(const o of state.orders||[])if(o.vehicleId===vehicleId&&String(o.scheduleDate||'')>=today())o.driverKeySyncV149=key||'auto';
+  save();renderVehicles();
+  window.toastV147?.(key?`${v.driverName||v.name} autója a(z) „${key}” sofőr-fiókhoz rendelve.`:'A hozzárendelés törölve.');
+}
+window.setVehicleDriverV149=setVehicleDriverV149;

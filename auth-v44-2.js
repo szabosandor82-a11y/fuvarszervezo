@@ -192,6 +192,9 @@
   const activeProfile = () => currentProfile || appUser(currentSession?.user?.email);
 
   function vehicleForDriverKey(key) {
+    /* V149: a Járművek oldalon hozzárendelt sofőr-fiók az első */
+    const bound = (global.state?.vehicles || []).find(v => v.driverKeyV149 && String(v.driverKeyV149) === String(key || ''));
+    if (bound) return bound;
     const directId = global.V44Online?.DRIVER_VEHICLES?.[key];
     const direct = (global.state?.vehicles || []).find(v => v.id === directId);
     if (direct) return direct;
@@ -378,6 +381,7 @@
     if (!currentSession || !currentProfile) return showLogin();
     loadVehiclesForDriverV147().then(() => { if (!isAdmin()) renderDriverPortal(); });
     setTimeout(() => checkProtectionV148(), 2500);
+    if (isAdmin()) setTimeout(() => global.loadDriverUsersV149?.(), 1500);
     /* V146: a szerepkör megjegyzése – az állapot-rendező ebből tudja, hogy
        sofőri eszközön fut (ott soha nem törölhet fuvart). */
     try { localStorage.setItem('fuvarszervezo_last_role_v146', currentProfile.role || ''); } catch (_) {}
@@ -726,7 +730,7 @@
     let bar = byId('v148ProtectBar');
     if (ok) { bar?.remove(); return; }
     if (!bar) { bar = document.createElement('div'); bar.id = 'v148ProtectBar'; bar.className = 'v148-protect'; document.body.appendChild(bar); }
-    bar.innerHTML = '<b>⚠ A fuvarvédelem még nincs bekapcsolva a szerveren.</b> Futtasd le a Supabase SQL Editorban a <b>SUPABASE_VEDELEM_V148.sql</b> fájlt – enélkül egy régi állapotú telefon visszaírhatja a fuvarok napját. <button type="button" onclick="this.parentElement.remove()">Később</button>';
+    bar.innerHTML = '<b>⚠ A szerveroldali fuvarvédelem frissítése szükséges.</b> Futtasd le a Supabase SQL Editorban a <b>SUPABASE_VEDELEM_V149.sql</b> fájlt – enélkül az áthelyezések egy része nem jut el a sofőrökhöz. <button type="button" onclick="this.parentElement.remove()">Később</button>';
   }
   global.checkProtectionV148 = checkProtectionV148;
 
@@ -1010,7 +1014,7 @@
       let server;
       try { server = await global.V44Online.fetchPlacementsV148(pendingOrders.map(order => order.id)); }
       catch (error) { console.warn('[V148] áthelyezés visszaigazolása', error); return; }
-      const rejected = [], confirmed = [];
+      const rejected = [], confirmed = [], resend = [];
       loadingV132 = true;
       try {
         for (const order of pendingOrders) {
@@ -1018,8 +1022,23 @@
           if (!remote || !remote.placementV148 || remote.placementV148.pending || !remote.placementV148.at) continue;
           const same = remote.scheduleDate === order.scheduleDate && String(remote.vehicleId || '') === String(order.vehicleId || '');
           if (same) { order.placementV148 = { ...remote.placementV148 }; confirmed.push(order); continue; }
+          /* V149: ha a szerveren a legutóbbi áthelyezést MI magunk végeztük (vagy
+             a szerver időpontja nem újabb, mint amire építettünk), akkor nem
+             más gép írta felül – a saját áthelyezésünket küldjük újra, friss
+             alappal. Csak ha MÁS helyezte át közben, marad a szerver szerinti
+             hely. (Legfeljebb kétszer próbáljuk, hogy ne legyen végtelen kör.) */
+          const me = String(currentProfile?.email || '').toLowerCase();
+          const remoteAt = Date.parse(remote.placementV148.at) || 0;
           const base = Date.parse(order.placementV148.base || 0) || 0;
-          if ((Date.parse(remote.placementV148.at) || 0) > base) {
+          const by = String(remote.placementV148.by || '').toLowerCase();
+          const ownOrStale = (!!me && !!by && by === me) || remoteAt <= base;
+          const tries = +order.placementV148.retryV149 || 0;
+          if (ownOrStale && tries < 2) {
+            order.placementV148 = { ...order.placementV148, base: remote.placementV148.at, retryV149: tries + 1 };
+            resend.push(order);
+            continue;
+          }
+          if (remoteAt > base || tries >= 2) {
             order.scheduleDate = remote.scheduleDate; order.vehicleId = remote.vehicleId; order.sequence = remote.sequence;
             order.placementV148 = { ...remote.placementV148 };
             rejected.push(order);
@@ -1029,6 +1048,10 @@
         clearPendingV148([...confirmed, ...rejected].map(order => order.id));
         if (confirmed.length || rejected.length) { if (typeof global.save === 'function') global.save(false); }
       } finally { loadingV132 = false; }
+      if (resend.length) {
+        /* az újraküldendők módosultak (új alap) → a következő mentés feltölti */
+        if (typeof global.save === 'function') global.save(false);
+      }
       if (rejected.length) {
         const nevek = rejected.map(order => (global.orderLabelV145 ? global.orderLabelV145(order) : order.orderNo)).join(', ');
         (global.toastV147 || alert)(`${rejected.length} fuvart közben máshol áthelyeztek – a szerver szerinti hely maradt érvényben: ${nevek}`);
@@ -2151,12 +2174,44 @@
           try { await isolateDriverSyncV137(changes.orders, sentKeys); }
           catch (inner) { console.warn('[V137] fuvaronkénti mentés', inner); }
         }
+        /* V149: adminnál sem akaszthatja meg EGY hibás fuvar a többit –
+           fuvaronként újrapróbáljuk, és a hibásakat név szerint kiírjuk. */
+        if (!isDriver && changes.orders.length > 1) {
+          try { await isolateAdminSyncV149(changes.orders, sentKeys); }
+          catch (inner) { console.warn('[V149] fuvaronkénti admin-mentés', inner); }
+        }
         setSyncStatus({ state: 'error', message: `Mentési hiba: ${error.message}` });
         if (hasChangesV132(collectChangesV132())) retrySyncLaterV132(15000);
       }
     })();
     try { await syncRunningV132; } finally { syncRunningV132 = null; }
     if (hasChangesV132(collectChangesV132()) && !saveTimer) retrySyncLaterV132(900);
+  }
+
+  async function isolateAdminSyncV149(orders, sentKeys) {
+    const failed = [];
+    for (const order of orders) {
+      try {
+        await global.V44Online.syncChangedOrdersV132({ orders: [order] }, currentProfile);
+        syncedV132.set(String(order.id), sentKeys?.get?.(String(order.id)) || orderKeyV132(order));
+        clearPendingV148([order.id]);
+      } catch (error) {
+        failed.push({ order, message: String(error?.message || error) });
+      }
+    }
+    if (orders.some(order => order.placementV148?.pending)) setTimeout(() => confirmPlacementsV148(), 0);
+    showSyncFailuresV149(failed);
+    return failed;
+  }
+  global.isolateAdminSyncV149 = (...args) => isolateAdminSyncV149(...args);
+  function showSyncFailuresV149(failed) {
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
+    let bar = byId('v149SyncFailBar');
+    if (!failed.length) { bar?.remove(); return; }
+    if (!bar) { bar = document.createElement('div'); bar.id = 'v149SyncFailBar'; bar.className = 'v149-syncfail'; bar.setAttribute('role', 'alert'); document.body.appendChild(bar); }
+    const label = order => (global.orderLabelV145 ? global.orderLabelV145(order) : order.orderNo) || order.id;
+    bar.innerHTML = `<b>⚠ ${failed.length} fuvar nem jutott fel a szerverre – a sofőrök ezeket nem látják:</b><ul>${failed.slice(0, 8).map(f => `<li>${safe(label(f.order))} · ${safe(f.order.scheduleDate || '')} – ${safe(f.message).slice(0, 160)}</li>`).join('')}</ul><button type="button" id="v149SyncRetry">Újrapróbálás</button><button type="button" onclick="this.parentElement.remove()">Bezárás</button>`;
+    byId('v149SyncRetry')?.addEventListener('click', () => { bar.remove(); runSyncV132(); });
   }
 
   async function isolateDriverSyncV137(orders, sentKeys) {
