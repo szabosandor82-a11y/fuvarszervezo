@@ -1658,3 +1658,86 @@ dialog.v149-dlg .v149-x{flex:0 0 auto;width:40px;height:40px;border-radius:50%;b
 .v149-syncfail ul{margin:6px 0 8px 18px;padding:0}
 .v149-syncfail button{margin-right:8px;border:1px solid #d99;background:#fff;border-radius:8px;padding:6px 12px;font-weight:700}
 .v149-driver-bind{display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:12px;font-weight:700;color:#35506b}.v149-driver-bind select{padding:7px;border-radius:8px;border:1px solid #c9d6e3;font:inherit;font-size:14px}
+dialog.v149-dlg .v149-sticky{max-width:none!important;box-sizing:border-box!important}
+
+/* ===== V150 – IGÉNYESEBB, EGYSÉGES ABLAKOK ================================
+   Csendes, papírlapszerű munkalap: az oldal sötétkék-kék színeire épít.
+   Csak a felugró ablakokra vonatkozik (dialog.v149-dlg). */
+dialog.v149-dlg{
+  --w-ink:#10233d;--w-slate:#5f7389;--w-sheet:#ffffff;--w-desk:#f3f6f9;--w-line:#dde5ee;--w-accent:#146bd7;
+  color:var(--w-ink);background:var(--w-sheet)!important;border:1px solid var(--w-line)!important;border-radius:14px!important;
+  box-shadow:0 28px 70px rgba(8,45,89,.24),0 2px 8px rgba(8,45,89,.08)!important;
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+}
+dialog.v149-dlg::backdrop{background:rgba(8,45,89,.45)!important;backdrop-filter:blur(3px)}
+dialog.v149-dlg[open]{animation:v150In .2s cubic-bezier(.2,.8,.2,1)}
+@keyframes v150In{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){dialog.v149-dlg[open]{animation:none}}
+
+/* fejléc */
+dialog.v149-dlg .v149-sticky{background:var(--w-sheet)!important;box-shadow:none!important;border-bottom:1px solid transparent!important;min-height:60px;padding-top:14px!important;padding-bottom:12px!important;align-items:center;gap:14px;transition:border-color .15s,box-shadow .15s}
+dialog.v149-dlg.v150-scrolled .v149-sticky{border-bottom-color:var(--w-line)!important;box-shadow:0 8px 18px -12px rgba(8,45,89,.35)!important}
+dialog.v149-dlg .v149-sticky h2,dialog.v149-dlg .v149-sticky h3,dialog.v149-dlg .v149-dlg-bar b{margin:0;font-size:18px;font-weight:650;letter-spacing:-.01em;line-height:1.25;color:var(--w-ink)}
+dialog.v149-dlg .v149-sticky small{display:block;margin:0 0 2px;font-size:13px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--w-slate)}
+dialog.v149-dlg .v149-sticky small::first-letter{text-transform:uppercase}
+dialog.v149-dlg .v149-sticky p{margin:2px 0 0;font-size:13px;color:var(--w-slate)}
+
+/* bezáró gomb – minden ablakban egyforma */
+dialog.v149-dlg .v149-sticky .close,dialog.v149-dlg .v149-sticky .driver-focus-close,dialog.v149-dlg .v149-sticky .v149-x,dialog.v149-dlg .v149-sticky [data-close-transfer]{
+  flex:0 0 auto;width:36px;height:36px;min-width:36px;min-height:36px;padding:0;display:grid;place-items:center;margin-left:auto;
+  border:0!important;border-radius:50%!important;background:transparent!important;color:var(--w-slate)!important;font-size:20px!important;font-weight:400!important;line-height:1;cursor:pointer;box-shadow:none!important;transition:background .12s,color .12s}
+dialog.v149-dlg .v149-sticky .close:hover,dialog.v149-dlg .v149-sticky .driver-focus-close:hover,dialog.v149-dlg .v149-sticky .v149-x:hover,dialog.v149-dlg .v149-sticky [data-close-transfer]:hover{background:var(--w-desk)!important;color:var(--w-ink)!important}
+dialog.v149-dlg button:focus-visible,dialog.v149-dlg input:focus-visible,dialog.v149-dlg select:focus-visible,dialog.v149-dlg textarea:focus-visible{outline:3px solid rgba(20,107,215,.35)!important;outline-offset:1px}
+
+/* mezők, címkék */
+dialog.v149-dlg label{font-size:13px;font-weight:600;color:var(--w-slate)}
+dialog.v149-dlg input:not([type=checkbox]):not([type=radio]):not([type=file]),dialog.v149-dlg select,dialog.v149-dlg textarea,dialog.v149-dlg .combo-input{
+  border:1px solid var(--w-line)!important;border-radius:10px!important;background:var(--w-sheet)!important;color:var(--w-ink)!important;box-shadow:none!important;transition:border-color .12s,box-shadow .12s}
+dialog.v149-dlg input:not([type=checkbox]):not([type=radio]):focus,dialog.v149-dlg select:focus,dialog.v149-dlg textarea:focus{border-color:var(--w-accent)!important;box-shadow:0 0 0 3px rgba(20,107,215,.14)!important;outline:none}
+
+/* elsődleges mentés: rögzítve az ablak alján */
+dialog.v149-dlg .v150-actionbar{position:sticky;bottom:0;z-index:300;display:flex;justify-content:flex-end;gap:10px;margin:18px -18px -18px;padding:12px 18px calc(12px + env(safe-area-inset-bottom,0px));background:var(--w-sheet);border-top:1px solid var(--w-line)}
+dialog.v149-dlg .v150-actionbar button[type=submit],dialog.v149-dlg button.v150-primary{background:var(--w-accent)!important;color:#fff!important;border:0!important;border-radius:10px!important;padding:11px 20px!important;font-weight:650!important;box-shadow:0 1px 2px rgba(8,45,89,.2)!important}
+
+/* telefon: alulról felcsúszó lap */
+@media (max-width:760px){
+  dialog.v149-dlg[open]{inset:calc(var(--sat,0px) + 8px) 0 0 0!important;height:calc(100dvh - var(--sat,0px) - 8px)!important;max-height:calc(100dvh - var(--sat,0px) - 8px)!important;border-radius:16px 16px 0 0!important;border-bottom:0!important;animation:v150Up .24s cubic-bezier(.2,.8,.2,1)}
+  @keyframes v150Up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}
+  dialog.v149-dlg .v149-sticky{padding-top:20px!important}
+  dialog.v149-dlg .v149-sticky::before{content:"";position:absolute;top:7px;left:50%;width:38px;height:4px;margin-left:-19px;border-radius:2px;background:#cdd7e2}
+  dialog.v149-dlg .v149-sticky .close,dialog.v149-dlg .v149-sticky .driver-focus-close,dialog.v149-dlg .v149-sticky .v149-x,dialog.v149-dlg .v149-sticky [data-close-transfer]{width:40px;height:40px;background:var(--w-desk)!important}
+  @media (prefers-reduced-motion:reduce){dialog.v149-dlg[open]{animation:none}}
+}
+/* V150 finomítás */
+dialog.v149-dlg .v149-sticky small{text-transform:lowercase}
+dialog.v149-dlg .v149-sticky .close,dialog.v149-dlg .v149-sticky .driver-focus-close,dialog.v149-dlg .v149-sticky .v149-x,dialog.v149-dlg .v149-sticky [data-close-transfer]{font-size:22px!important;color:#4a5d72!important}
+@media (min-width:761px){dialog.v149-dlg .v149-sticky{padding-top:18px!important;padding-bottom:14px!important}}
+dialog.v149-dlg .v150-actionbar{margin-top:24px}
+dialog.v149-dlg:focus{outline:none}
+
+/* ===== V150 – rendelések a több rendeléses buborékban ===== */
+.v150-orders{margin:10px 0 6px;border:1px solid #dde5ee;border-radius:12px;background:#f7f9fc;overflow:hidden}
+.v150-orders>summary{cursor:pointer;list-style:none;padding:8px 12px;font-size:13px;font-weight:650;color:#3d5470;display:flex;align-items:center;gap:6px}
+.v150-orders>summary::-webkit-details-marker{display:none}
+.v150-orders>summary::after{content:"▾";margin-left:auto;transition:transform .15s;color:#7b8ea3}
+.v150-orders:not([open])>summary::after{transform:rotate(-90deg)}
+.v150-order-row{padding:9px 12px 10px;border-top:1px solid #e3eaf2;background:#fff}
+.v150-order-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
+.v150-order-top b{color:#10233d;font-weight:650}
+.v150-order-top span{color:#5f7389;font-size:13px}
+.v150-pin{color:#b45309!important;font-weight:700}
+.v150-clip{border:0;background:transparent;font-size:15px;padding:0 2px;cursor:pointer;line-height:1}
+.v150-order-note{display:block;width:100%;margin:6px 0 8px;padding:7px 10px;text-align:left;font:inherit;font-size:13px;color:#10233d;background:#fffbea;border:1px solid #f1df9c;border-radius:8px;cursor:pointer;white-space:pre-wrap}
+.v150-order-note.empty{background:transparent;border-style:dashed;border-color:#cfd9e4;color:#7b8ea3}
+.v150-order-actions{display:flex;gap:6px;flex-wrap:wrap}
+.v150-order-actions button{font-size:12px;font-weight:650;padding:6px 10px;border-radius:8px;border:1px solid #cfd9e4;background:#fff;color:#1d3d62;cursor:pointer}
+.v150-order-actions button:hover{background:#eef3f9}
+.v150-form{display:flex;flex-direction:column;gap:12px}
+.v150-form label{display:flex;flex-direction:column;gap:5px}
+.v150-form input,.v150-form select,.v150-form textarea{padding:10px;font:inherit;font-size:16px}
+.v150-move-warn{margin:0;color:#b42318;font-size:13px;font-weight:600}
+.v150-alldriver{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 14px;margin:8px 0 12px;padding:10px 12px;border:1px solid #dde5ee;border-radius:10px;background:#f7f9fc}
+.v150-alldriver label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:650;color:#3d5470}
+.v150-alldriver select{padding:8px;border-radius:8px;border:1px solid #cfd9e4;font:inherit;min-width:220px}
+.v150-alldriver small{color:#5f7389}
+select.v150-driver option:disabled{color:#9aa8b6}

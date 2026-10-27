@@ -1779,6 +1779,51 @@
     return missing;
   }
 
+  /* ===== V150 – SOFŐR KIVÁLASZTÁSA AZ IMPORTNÁL ==========================
+     A választás csak KIINDULÁS: a rendelés a kiválasztott sofőrhöz kerül, de a
+     „Fuvar szétosztása” átteheti. Rögzíteni a buborék zászlójával lehet.
+     Csak az import napján dolgozó sofőr választható. */
+  function busyV150(vehicle, day) {
+    if (!vehicle || !day) return '';
+    if (global.vehicleAbsenceV147?.(vehicle, day)) return 'szabadságon';
+    const only = String(vehicle.dayOnly || '').trim();
+    return only && only !== day ? `csak ${only} napon` : '';
+  }
+  function driverSelectV150(entry) {
+    const day = normalizeWorkdayISO(entry.scheduleDate || selectedImportDate() || tomorrowISO());
+    const vehicles = (state.vehicles || []).filter(v => v.active);
+    const current = entry.driverChoiceV150 || '';
+    const auto = entry.category === 'martin' ? 'Martin (alapértelmezett)' : 'Automatikus (szétosztás)';
+    return `<select data-field="driverChoiceV150" class="v150-driver"><option value="">${htmlEsc(auto)}</option>${vehicles.map(v => {
+      const busy = busyV150(v, day);
+      return `<option value="${htmlEsc(v.id)}" ${v.id === current ? 'selected' : ''} ${busy ? 'disabled' : ''}>${htmlEsc(v.driverName || v.name)}${busy ? ` (${htmlEsc(busy)})` : ''}</option>`;
+    }).join('')}</select>`;
+  }
+  function allDriverBarV150() {
+    if (typeof document === 'undefined') return;
+    const summary = document.getElementById('v38ImportSummary');
+    if (!summary) return;
+    let bar = document.getElementById('v150AllDriverBar');
+    if (!pending.length) { bar?.remove(); return; }
+    if (!bar) { bar = document.createElement('div'); bar.id = 'v150AllDriverBar'; bar.className = 'v150-alldriver'; summary.insertAdjacentElement('afterend', bar); }
+    const vehicles = (state.vehicles || []).filter(v => v.active);
+    bar.innerHTML = `<label>Mind ennek a sofőrnek<select><option value="">– válassz –</option><option value="__auto">Automatikus (szétosztás)</option>${vehicles.map(v => `<option value="${htmlEsc(v.id)}">${htmlEsc(v.driverName || v.name)}</option>`).join('')}</select></label><small>Csak kiindulás – a szétosztás átteheti. Rögzíteni a zászlóval lehet.</small>`;
+    bar.querySelector('select').onchange = event => {
+      const value = event.target.value; if (!value) return;
+      let set = 0, skipped = 0;
+      for (const entry of pending.filter(e => e.approved)) {
+        if (value === '__auto') { entry.driverChoiceV150 = ''; set++; continue; }
+        const day = normalizeWorkdayISO(entry.scheduleDate || selectedImportDate() || tomorrowISO());
+        const v = vehicles.find(x => x.id === value);
+        if (busyV150(v, day)) { skipped++; continue; }
+        entry.driverChoiceV150 = value; set++;
+      }
+      renderPending();
+      global.toastV147?.(`${set} rendelés beállítva${skipped ? `, ${skipped} kihagyva (a sofőr aznap nem dolgozik)` : ''}.`);
+    };
+  }
+  global.driverSelectV150 = driverSelectV150;
+
   function entryCard(entry, index) {
     const categoryLabel = entry.category === 'martin' ? 'Martin / Platós' : 'Dobozos';
     return `<article class="v38-preview-card ${entry.approved ? '' : 'disabled'}" data-entry-id="${htmlEsc(entry._id)}">${(() => { const ceg = entry.companyV126 || 'stand98'; return `<div class="v126-entry-company"><button type="button" class="v126-entry-btn${ceg === 'stand98' ? ' active' : ''}" data-entry-company="stand98" data-id="${htmlEsc(entry._id)}">Stand 98</button><button type="button" class="v126-entry-btn${ceg === 'future' ? ' active' : ''}" data-entry-company="future" data-id="${htmlEsc(entry._id)}">Stand Future</button></div>`; })()}
@@ -1789,6 +1834,7 @@
       ${orderNoWaived(entry) ? '<div class="v66-waived">Rendelésszám nélkül importálva – a mezőben kötőjel áll.</div>' : ''}
       <div class="v38-fields">
         <label>Felvétel dátuma<input data-field="scheduleDate" type="date" value="${htmlEsc(entry.scheduleDate)}"></label>
+        <label>Sofőr${driverSelectV150(entry)}</label>
         ${entry.messageOrderNos?.length > 1 ? `<label class="v43-all-order-nos">Rendelésszámok a levélben<input value="${htmlEsc(entry.messageOrderNos.join(', '))}" readonly></label>` : ''}
         <label>${entry.messageOrderNos?.length > 1 ? 'Aktuális rendelés száma' : 'Rendelésszám'}<input data-field="orderNo" value="${htmlEsc(entry.orderNo)}" placeholder="pl. 004911">${(entry.fullOrderRefs || []).length ? `<small class="v145-ref">Bizonylat: ${htmlEsc(entry.fullOrderRefs.join(', '))}</small>` : ''}</label>
         <label>Felrakó neve${supplierNameSelect(entry)}</label>
@@ -1861,6 +1907,7 @@
     bindEntryCompanyV126(document.getElementById('outlookPreview') || document);
     if (commit) commit.disabled = processing || !approved;
     bindPreviewEditors();
+    allDriverBarV150();
   }
 
   function bindPreviewEditors() {
@@ -1869,6 +1916,8 @@
       if (!entry) return;
       card.querySelector('.v38-approved')?.addEventListener('change', event => { entry.approved = event.target.checked; renderPending(); });
       card.querySelector('.v38-remove')?.addEventListener('click', () => { pending = pending.filter(item => item !== entry); renderPending(); });
+      /* V150: napváltáskor a sofőrválasztó frissül (ki dolgozik aznap) */
+      card.querySelector('[data-field="scheduleDate"]')?.addEventListener('change', () => setTimeout(renderPending, 0));
       card.querySelectorAll('[data-field]').forEach(input => input.addEventListener('change', () => {
         const field = input.dataset.field;
         entry[field] = input.value.trim();
@@ -2089,7 +2138,8 @@ ${entry.subject || ''}`) || project;
     const recipient = project?.defaultRecipientId ? (state.recipients || []).find(item => item.id === project.defaultRecipientId) : null;
     const sourceNos = entry.sourceOrderNos?.length ? entry.sourceOrderNos : orderNumbersOf(entry);
     return {
-      id: id(), scheduleDate: normalizeWorkdayISO(entry.scheduleDate || selectedImportDate() || tomorrowISO()), vehicleId: isMartin ? (martin?.id || '') : (mario?.id || ''), sequence: 999,
+      id: id(), scheduleDate: normalizeWorkdayISO(entry.scheduleDate || selectedImportDate() || tomorrowISO()), vehicleId: entry.driverChoiceV150 || (isMartin ? (martin?.id || '') : (mario?.id || '')), sequence: 999,
+      importDriverChosenV150: !!entry.driverChoiceV150,
       orderNo: entry.orderNo || sourceNos.join(', '), sourceOrderNos: sourceNos, fullOrderRefs: entry.fullOrderRefs || [], orderType: entry.orderType || 'SR0', isReturn: !!entry.isReturn,
       /* V145: ha a felrakó nincs a törzsben, a beírt név és cím marad –
          eddig ilyenkor kiürült, és a buborék „Nincs megadva” lett. */
@@ -2123,7 +2173,7 @@ ${entry.subject || ''}`) || project;
       } : null,
       items: (entry.items || []).map(item => ({ ...item, _id: item._id || id(), received: false, missingQty: '' })),
       longMaterialReason: isMartin ? ((entry.items || []).find(item => item.longMaterial)?.name || 'Martin / Platós Outlook import') : '',
-      markedMartin: isMartin, importVehicleCategory: isMartin ? 'martin' : 'dobozos', importAutoRaw: isMartin ? 'Martin' : 'Dobozos', importVehicleLocked: isMartin,
+      markedMartin: isMartin, importVehicleCategory: isMartin ? 'martin' : 'dobozos', importAutoRaw: isMartin ? 'Martin' : 'Dobozos', importVehicleLocked: isMartin && (!entry.driverChoiceV150 || entry.driverChoiceV150 === martin?.id),
       messageOrderNos: entry.messageOrderNos?.length ? entry.messageOrderNos.slice() : sourceNos.slice(),
       missingSupplierMaster: ((entry.pickupRole || 'supplier') === 'supplier' && !resolvedSupplier?.id) || (entry.dropRole === 'supplier' && !entry.returnDestinationSupplierId),
       missingProjectMaster: (entry.pickupRole === 'project' && !entry.pickupAddress) || ((entry.dropRole || 'project') === 'project' && !entry.dropAddress),

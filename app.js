@@ -5465,7 +5465,10 @@ window.prepareDialogV149=prepareDialogV149;
   for(const name of ['showModal','show']){
     const orig=HTMLDialogElement.prototype[name];
     if(typeof orig!=='function'||orig.__v149)continue;
-    const wrapped=function(...args){try{prepareDialogV149(this)}catch(_){}return orig.apply(this,args)};
+    const wrapped=function(...args){try{prepareDialogV149(this)}catch(_){}const r=orig.apply(this,args);
+      /* V150: megnyitáskor ne a ✕ kapja a fókuszt (kék keret egérrel is) – az ablak kapja */
+      try{const a=document.activeElement;if(a&&this.contains(a)&&a.matches('.close, .driver-focus-close, .v149-x, [data-close-transfer], [data-close]')){if(!this.hasAttribute('tabindex'))this.setAttribute('tabindex','-1');this.focus({preventScroll:true})}}catch(_){}
+      return r};
     wrapped.__v149=true;HTMLDialogElement.prototype[name]=wrapped;
   }
   if(typeof MutationObserver!=='undefined'&&document.documentElement){
@@ -5506,3 +5509,51 @@ function setVehicleDriverV149(vehicleId,key){
   window.toastV147?.(key?`${v.driverName||v.name} autója a(z) „${key}” sofőr-fiókhoz rendelve.`:'A hozzárendelés törölve.');
 }
 window.setVehicleDriverV149=setVehicleDriverV149;
+
+/* ===== V150 – A RÖGZÍTETT FEJLÉC PONTOSAN AZ ABLAK SZÉLÉIG ÉR ===========
+   A V149 rögzített fejléce az ablak belső margóján belül állt meg: felette
+   és mellette sáv maradt, ahol a görgetett szöveg kilátszott. Megnyitáskor
+   megmérjük a rést, és a fejlécet a görgető terület széléig nyújtjuk (a
+   tartalma a helyén marad); ablakméret-változáskor újramérjük. */
+function scrollerOfV150(el,dialog){
+  let sc=el.parentElement;
+  while(sc&&sc!==dialog){const cs=getComputedStyle(sc);if(/(auto|scroll)/.test(cs.overflowY))break;sc=sc.parentElement}
+  return sc||dialog;
+}
+function fitStickyHeadV150(dialog){
+  const head=dialog&&dialog.querySelector('.v149-sticky');if(!head||!dialog.open)return;
+  head.style.marginLeft=head.style.marginRight=head.style.top='';head.style.paddingLeft=head.style.paddingRight='';
+  const sc=scrollerOfV150(head,dialog);
+  const keep=sc.scrollTop;sc.scrollTop=0;
+  const cs=getComputedStyle(sc),s=sc.getBoundingClientRect(),h=head.getBoundingClientRect();
+  const bl=parseFloat(cs.borderLeftWidth)||0,bt=parseFloat(cs.borderTopWidth)||0;
+  const innerLeft=s.left+bl,innerRight=innerLeft+sc.clientWidth,innerTop=s.top+bt;
+  const gapL=Math.max(0,Math.round(h.left-innerLeft)),gapR=Math.max(0,Math.round(innerRight-h.right)),gapT=Math.max(0,Math.round(h.top-innerTop));
+  const hs=getComputedStyle(head);
+  if(gapL){head.style.marginLeft=`${(parseFloat(hs.marginLeft)||0)-gapL}px`;head.style.paddingLeft=`${(parseFloat(hs.paddingLeft)||0)+gapL}px`}
+  if(gapR){head.style.marginRight=`${(parseFloat(hs.marginRight)||0)-gapR}px`;head.style.paddingRight=`${(parseFloat(hs.paddingRight)||0)+gapR}px`}
+  head.style.setProperty('top',`-${gapT}px`,'important');
+  sc.scrollTop=keep;
+}
+window.fitStickyHeadV150=fitStickyHeadV150;
+(function installFitV150(){
+  if(typeof window==='undefined'||typeof prepareDialogV149!=='function')return;
+  const prep=window.prepareDialogV149;
+  window.prepareDialogV149=function(d){prep(d);const run=()=>{try{fitStickyHeadV150(d)}catch(_){}};if(window.requestAnimationFrame)requestAnimationFrame(run);setTimeout(run,60);setTimeout(run,300)};
+  window.addEventListener('resize',()=>document.querySelectorAll('dialog[open]').forEach(d=>{try{fitStickyHeadV150(d)}catch(_){}}));
+})();
+
+/* V150: görgetéskor halvány elválasztó a fejléc alatt; a hosszú űrlapok
+   mentés gombja az ablak alján rögzítve. */
+(function installSheetPolishV150(){
+  if(typeof window==='undefined'||typeof window.prepareDialogV149!=='function')return;
+  const prep=window.prepareDialogV149;
+  window.prepareDialogV149=function(d){
+    prep(d);
+    if(!d||d.__v150polish)return;d.__v150polish=true;
+    d.addEventListener('scroll',e=>{const t=e.target;if(t&&t.nodeType===1)d.classList.toggle('v150-scrolled',t.scrollTop>4)},true);
+    const submit=d.querySelector('form > button[type="submit"]:last-child');
+    if(submit&&!submit.parentElement.querySelector('.v150-actionbar')){const bar=document.createElement('div');bar.className='v150-actionbar';submit.parentElement.insertBefore(bar,submit);bar.appendChild(submit)}
+    const acts=d.querySelector('.v147-actions');if(acts){acts.classList.add('v150-actionbar');acts.querySelector('.primary')?.classList.add('v150-primary')}
+  };
+})();

@@ -571,6 +571,7 @@
         <div class="bubble-main-line"><b>Felrakó:</b><span>${escHtml(group.pickupName)}${group.pickupAddress ? ` · ${escHtml(group.pickupAddress)}` : ''}</span></div>
         <div class="bubble-main-line"><b>Lerakó:</b><span>${escHtml(group.projectName)}${group.dropAddress ? ` · ${escHtml(group.dropAddress)}` : ''}</span></div>
         <div class="bubble-main-line order-number-line"><b>Rendelésszám:</b><span>${escHtml(orderNos.join(', ') || 'Nincs megadva')}</span></div>
+        ${(group.orders || []).length > 1 && !options.focus ? renderOrderRowsV150(group.orders) : ''}
         <div class="tags">${sourceMissingChipV135(group.orders)}<span class="tag">${group.orders.length} rendelés</span><span class="tag">${itemCount} tétel</span>${deliveryV134.marked ? `<span class="tag delivery-tag" title="A sofőr feltöltötte a szállítólevelet">Szállítólevél${deliveryV134.files ? ` · ${deliveryV134.files}` : ''}${escHtml(deliveryV134.suffix)}</span>` : ''}${longReasons.map(reason => `<span class="tag long">${escHtml(reason)}</span>`).join('')}${pinned ? '<span class="tag pin-tag">Rögzítve</span>' : ''}${fullLoad ? '<span class="tag full-load-tag">Teljes autó</span>' : ''}${resolved ? '<span class="tag resolved-tag">✓ Elintézve</span>' : ''}${options.ungrouped && (options.samePickupCount || 0) > 1 ? '<span class="tag ungrouped-tag">Külön mozgatható</span>' : ''}</div>
         ${manualItemsOfGroup(group) ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${escHtml(manualItemsOfGroup(group))}</div>` : ''}
         <div class="bubble-actions"><button onclick="editOrder('${escHtml(first.id)}')">Szerkesztés</button><button class="secondary" title="Visszaszállítás: a projekt lesz a felrakó, a beszállító a lerakó" onclick="returnOrder('${escHtml(first.id)}')">↩ Visszáru</button><button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button><button class="secondary v115-thread${szalOlvasatlan ? ' has-unread' : ''}" title="A fuvarhoz írt üzenetek" onclick="openThreadGroupV117('${escHtml(ids)}')">✉ Üzenetek${szalOsszes ? ` (${szalOsszes})` : ''}</button><button class="secondary v109-next-day" title="A fuvar átkerül ugyanehhez a sofőrhöz, a következő munkanapra" onclick="moveToNextWorkdayV109('${escHtml(ids)}')">→ Következő napra</button>${group.orders.some(hasOutlookSource) ? `<button onclick="openSourceMail('${escHtml((group.orders.find(hasOutlookSource) || first).id)}')">Csatolmány</button>` : ''}<button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button><button class="secondary ${deliveryV134.marked ? 'has-photos' : ''}" title="${deliveryV134.files ? `${deliveryV134.files} feltöltött szállítólevél-fájl` : deliveryV134.archived ? 'A szállítólevelek archiválva' : 'Még nincs feltöltött fotó'}" onclick="openMediaGallery('${escHtml(ids)}')">📎 ${escHtml(deliveryV134.label)}</button></div>
@@ -938,6 +939,111 @@
     document.addEventListener('pointermove', event => dragActive && trackPointer(event), { passive: true, capture: true });
     document.addEventListener('touchmove', event => dragActive && trackPointer(event), { passive: true, capture: true });
   }
+
+  /* ===== V150 – TÖBB RENDELÉSES BUBORÉK: A RENDELÉSEK TAGOLTAN ==========
+     Rendelésenként: szám, tételszám, zászló, 📎, megjegyzés (koppintásra
+     szerkeszthető), Szerkesztés (a teljes szerkesztő), Tételek, Áthelyezés…
+     Sok rendelésnél (4-től) összecsukva indul. */
+  function renderOrderRowsV150(orders) {
+    const sorted = [...orders].sort((a, b) => (+a.sequence || 999) - (+b.sequence || 999));
+    const rows = sorted.map(order => {
+      const id = escHtml(order.id);
+      const label = (global.orderLabelV145 ? global.orderLabelV145(order) : order.orderNo) || 'Rendelésszám nélkül';
+      const n = (order.items || []).length;
+      const note = String(order.manualItems || '').trim();
+      const clip = hasOutlookSource(order) ? `<button type="button" class="v150-clip" title="A rendelés csatolmánya" onclick="event.stopPropagation();openSourceMail('${id}')">📎</button>` : '';
+      const pin = order.routePinned ? '<span class="v150-pin" title="Zászlóval rögzítve">⚑</span>' : '';
+      return `<div class="v150-order-row" data-order-id="${id}">
+        <div class="v150-order-top"><b>${escHtml(label)}</b><span>${n} tétel</span>${pin}${clip}</div>
+        <button type="button" class="v150-order-note${note ? '' : ' empty'}" onclick="event.stopPropagation();v150EditNote('${id}')">${note ? escHtml(note) : 'Megjegyzés hozzáadása'}</button>
+        <div class="v150-order-actions"><button type="button" onclick="event.stopPropagation();editOrder('${id}')">Szerkesztés</button><button type="button" onclick="event.stopPropagation();openItems('${id}')">Tételek</button><button type="button" onclick="event.stopPropagation();v150MoveOrder('${id}')">Áthelyezés…</button></div>
+      </div>`;
+    }).join('');
+    return `<details class="v150-orders"${sorted.length <= 3 ? ' open' : ''}><summary>Rendelések (${sorted.length})</summary>${rows}</details>`;
+  }
+  function dialogV150(id) {
+    let d = document.getElementById(id);
+    if (!d) { d = document.createElement('dialog'); d.id = id; d.className = 'v147-dialog'; document.body.appendChild(d); }
+    return d;
+  }
+  function labelV150(order) { return (global.orderLabelV145 ? global.orderLabelV145(order) : order.orderNo) || 'Rendelés'; }
+  /* megjegyzés egy rendeléshez */
+  function editNoteV150(orderId) {
+    const order = (state.orders || []).find(o => String(o.id) === String(orderId)); if (!order) return;
+    const d = dialogV150('v150NoteDialog');
+    d.innerHTML = `<form method="dialog" class="v150-form"><h3>Megjegyzés – ${escHtml(labelV150(order))}</h3>
+      <label>A sofőr ennél a rendelésnél látja<textarea name="note" rows="4">${escHtml(order.manualItems || '')}</textarea></label>
+      <div class="v147-actions"><button type="button" data-cancel>Mégse</button><button type="button" data-ok class="primary">Megjegyzés mentése</button></div></form>`;
+    d.querySelector('[data-cancel]').onclick = () => d.close();
+    d.querySelector('[data-ok]').onclick = () => {
+      order.manualItems = d.querySelector('[name="note"]').value.trim();
+      save(); d.close(); if (typeof renderRoutes === 'function') renderRoutes();
+      global.toastV147?.(`Megjegyzés mentve: ${labelV150(order)}`);
+    };
+    if (!d.open) d.showModal();
+    setTimeout(() => d.querySelector('textarea')?.focus(), 50);
+  }
+  /* egy rendelés áthelyezése másik napra / sofőrhöz (csak ez az egy) */
+  function busyOnV150(vehicle, day) {
+    if (!vehicle || !day) return '';
+    const absence = global.vehicleAbsenceV147?.(vehicle, day);
+    if (absence) return 'szabadságon';
+    const only = String(vehicle.dayOnly || '').trim();
+    if (only && only !== day) return `csak ${only} napon`;
+    return '';
+  }
+  function moveOrderV150(orderId, date, vehicleId) {
+    const order = (state.orders || []).find(o => String(o.id) === String(orderId));
+    if (!order || !date || !vehicleId) return false;
+    const fromDate = order.scheduleDate, fromVehicle = order.vehicleId;
+    const key = pickupMoveKey(order);
+    const bySeq = (a, b) => (+a.sequence || 999) - (+b.sequence || 999);
+    const target = (state.orders || []).filter(o => o !== order && o.scheduleDate === date && o.vehicleId === vehicleId).sort(bySeq);
+    let lastSame = -1;
+    target.forEach((o, i) => { if (pickupMoveKey(o) === key) lastSame = i; });
+    order.scheduleDate = date; order.vehicleId = vehicleId;
+    if (order.routePinned) order.pinnedVehicleId = vehicleId;
+    target.splice(lastSame >= 0 ? lastSame + 1 : target.length, 0, order);
+    target.forEach((o, i) => { o.sequence = i + 1; });
+    (state.orders || []).filter(o => o.scheduleDate === fromDate && o.vehicleId === fromVehicle).sort(bySeq).forEach((o, i) => { o.sequence = i + 1; });
+    state.routePlans = state.routePlans || {}; state.routePlans[fromDate] = {}; state.routePlans[date] = {};
+    save();
+    if (typeof renderRoutes === 'function') renderRoutes();
+    return true;
+  }
+  function moveDialogV150(orderId) {
+    const order = (state.orders || []).find(o => String(o.id) === String(orderId)); if (!order) return;
+    const d = dialogV150('v150MoveOrderDialog');
+    const vehicles = (state.vehicles || []).filter(v => v.active);
+    d.innerHTML = `<form method="dialog" class="v150-form"><h3>Áthelyezés – ${escHtml(labelV150(order))}</h3>
+      <p class="v147-hint">Csak ez a rendelés kerül át; a buborék többi rendelése a helyén marad.</p>
+      <label>Nap<input type="date" name="date" value="${escHtml(order.scheduleDate || '')}"></label>
+      <label>Sofőr<select name="vehicle">${vehicles.map(v => `<option value="${escHtml(v.id)}" ${v.id === order.vehicleId ? 'selected' : ''}>${escHtml(v.driverName || v.name)}</option>`).join('')}</select></label>
+      <p class="v150-move-warn" hidden></p>
+      <div class="v147-actions"><button type="button" data-cancel>Mégse</button><button type="button" data-ok class="primary">Áthelyezés</button></div></form>`;
+    const dateEl = d.querySelector('[name="date"]'), vehEl = d.querySelector('[name="vehicle"]'), warn = d.querySelector('.v150-move-warn');
+    const refresh = () => {
+      [...vehEl.options].forEach(opt => { const v = vehicles.find(x => x.id === opt.value); const busy = busyOnV150(v, dateEl.value); opt.disabled = !!busy; opt.textContent = `${v.driverName || v.name}${busy ? ` (${busy})` : ''}`; });
+      if (vehEl.selectedOptions[0]?.disabled) { const free = [...vehEl.options].find(o => !o.disabled); if (free) vehEl.value = free.value; }
+      warn.hidden = true;
+    };
+    dateEl.addEventListener('change', refresh); refresh();
+    d.querySelector('[data-cancel]').onclick = () => d.close();
+    d.querySelector('[data-ok]').onclick = () => {
+      const date = dateEl.value, vehicleId = vehEl.value;
+      if (!date) { warn.textContent = 'Add meg a napot.'; warn.hidden = false; return; }
+      const v = vehicles.find(x => x.id === vehicleId); const busy = busyOnV150(v, date);
+      if (!vehicleId || busy) { warn.textContent = `${v ? (v.driverName || v.name) : 'A sofőr'} ezen a napon nem dolgozik (${busy || 'nincs választva'}) – válassz másik sofőrt.`; warn.hidden = false; return; }
+      if (date === order.scheduleDate && vehicleId === order.vehicleId) { d.close(); return; }
+      moveOrderV150(orderId, date, vehicleId); d.close();
+      global.toastV147?.(`${labelV150(order)} áthelyezve: ${date} · ${v.driverName || v.name}`);
+    };
+    if (!d.open) d.showModal();
+  }
+  global.v150EditNote = editNoteV150;
+  global.v150MoveOrder = moveDialogV150;
+  global.moveOrderV150 = moveOrderV150;
+  global.renderOrderRowsV150 = renderOrderRowsV150;
 
   /* ===== V147 – ÁTHÚZÁS MÁSIK SOFŐRHÖZ ============================== */
   function vehicleOfContainerV147(element) {
