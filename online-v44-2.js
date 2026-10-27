@@ -282,6 +282,18 @@
     return rows;
   }
 
+  /* ===== V151 – FÜGGŐ RENDELÉSEK (csak admin) ========================= */
+  async function fetchPendingOrdersV151() {
+    const rows = await dbRequest(`pending_orders?${qs({ select: 'id,payload,followup_date,status,updated_at', status: 'eq.open', order: 'followup_date.asc' })}`);
+    return (rows || []).map(row => ({ ...(row.payload || {}), id: row.id, followupDate: row.followup_date || row.payload?.followupDate || '', status: row.status, serverUpdatedAt: row.updated_at }));
+  }
+  async function savePendingOrderV151(rec) {
+    if (!rec?.id) throw new Error('Hiányzó azonosító.');
+    const { serverUpdatedAt, ...payload } = rec;
+    await dbRequest('pending_orders?on_conflict=id', { method: 'POST', body: [{ id: String(rec.id), payload, followup_date: rec.followupDate || null, status: rec.status || 'open', updated_at: new Date().toISOString(), updated_by: normalize(profile?.email || '') }], headers: { Prefer: 'resolution=merge-duplicates,return=minimal' } });
+    return true;
+  }
+
   async function fetchVehiclesV147() {
     try {
       const rows = await dbRequest(`master_data?${qs({ select: 'payload', id: 'eq.current', limit: '1' })}`);
@@ -1255,6 +1267,8 @@
     mimeForFileV136, cleanupEmptySourceReportsV136, removeStoragePathsV136,
     /* V146 */
     isDefinitiveAuthErrorV146,
+    /* V151 */
+    fetchPendingOrdersV151, savePendingOrderV151,
     /* V148 */
     fetchPlacementsV148, protectionInstalledV148, fetchHistoryV148,
     /* V147 */

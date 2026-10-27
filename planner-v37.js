@@ -571,10 +571,9 @@
         <div class="bubble-main-line"><b>Felrakó:</b><span>${escHtml(group.pickupName)}${group.pickupAddress ? ` · ${escHtml(group.pickupAddress)}` : ''}</span></div>
         <div class="bubble-main-line"><b>Lerakó:</b><span>${escHtml(group.projectName)}${group.dropAddress ? ` · ${escHtml(group.dropAddress)}` : ''}</span></div>
         <div class="bubble-main-line order-number-line"><b>Rendelésszám:</b><span>${escHtml(orderNos.join(', ') || 'Nincs megadva')}</span></div>
-        ${(group.orders || []).length > 1 && !options.focus ? renderOrderRowsV150(group.orders) : ''}
         <div class="tags">${sourceMissingChipV135(group.orders)}<span class="tag">${group.orders.length} rendelés</span><span class="tag">${itemCount} tétel</span>${deliveryV134.marked ? `<span class="tag delivery-tag" title="A sofőr feltöltötte a szállítólevelet">Szállítólevél${deliveryV134.files ? ` · ${deliveryV134.files}` : ''}${escHtml(deliveryV134.suffix)}</span>` : ''}${longReasons.map(reason => `<span class="tag long">${escHtml(reason)}</span>`).join('')}${pinned ? '<span class="tag pin-tag">Rögzítve</span>' : ''}${fullLoad ? '<span class="tag full-load-tag">Teljes autó</span>' : ''}${resolved ? '<span class="tag resolved-tag">✓ Elintézve</span>' : ''}${options.ungrouped && (options.samePickupCount || 0) > 1 ? '<span class="tag ungrouped-tag">Külön mozgatható</span>' : ''}</div>
         ${manualItemsOfGroup(group) ? `<div class="v65-manual-note"><b>Megjegyzés:</b> ${escHtml(manualItemsOfGroup(group))}</div>` : ''}
-        <div class="bubble-actions"><button onclick="editOrder('${escHtml(first.id)}')">Szerkesztés</button><button class="secondary" title="Visszaszállítás: a projekt lesz a felrakó, a beszállító a lerakó" onclick="returnOrder('${escHtml(first.id)}')">↩ Visszáru</button><button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button><button class="secondary v115-thread${szalOlvasatlan ? ' has-unread' : ''}" title="A fuvarhoz írt üzenetek" onclick="openThreadGroupV117('${escHtml(ids)}')">✉ Üzenetek${szalOsszes ? ` (${szalOsszes})` : ''}</button><button class="secondary v109-next-day" title="A fuvar átkerül ugyanehhez a sofőrhöz, a következő munkanapra" onclick="moveToNextWorkdayV109('${escHtml(ids)}')">→ Következő napra</button>${group.orders.some(hasOutlookSource) ? `<button onclick="openSourceMail('${escHtml((group.orders.find(hasOutlookSource) || first).id)}')">Csatolmány</button>` : ''}<button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button><button class="secondary ${deliveryV134.marked ? 'has-photos' : ''}" title="${deliveryV134.files ? `${deliveryV134.files} feltöltött szállítólevél-fájl` : deliveryV134.archived ? 'A szállítólevelek archiválva' : 'Még nincs feltöltött fotó'}" onclick="openMediaGallery('${escHtml(ids)}')">📎 ${escHtml(deliveryV134.label)}</button></div>
+        <div class="bubble-actions"><button onclick="v151EditGroup('${escHtml(ids)}')">Szerkesztés</button><button class="secondary" title="Visszaszállítás: a projekt lesz a felrakó, a beszállító a lerakó" onclick="returnOrder('${escHtml(first.id)}')">↩ Visszáru</button><button onclick="v33OpenGroupItems('${escHtml(ids)}')">Tételek</button><button class="secondary v115-thread${szalOlvasatlan ? ' has-unread' : ''}" title="A fuvarhoz írt üzenetek" onclick="openThreadGroupV117('${escHtml(ids)}')">✉ Üzenetek${szalOsszes ? ` (${szalOsszes})` : ''}</button><button class="secondary v109-next-day" title="A fuvar átkerül ugyanehhez a sofőrhöz, a következő munkanapra" onclick="moveToNextWorkdayV109('${escHtml(ids)}')">→ Következő napra</button>${group.orders.some(hasOutlookSource) ? `<button onclick="openSourceMail('${escHtml((group.orders.find(hasOutlookSource) || first).id)}')">Csatolmány</button>` : ''}<button onclick="openCamera('${escHtml(first.id)}')">📷 Kamera</button><button class="secondary ${deliveryV134.marked ? 'has-photos' : ''}" title="${deliveryV134.files ? `${deliveryV134.files} feltöltött szállítólevél-fájl` : deliveryV134.archived ? 'A szállítólevelek archiválva' : 'Még nincs feltöltött fotó'}" onclick="openMediaGallery('${escHtml(ids)}')">📎 ${escHtml(deliveryV134.label)}</button></div>
         <button class="complete-button ${complete ? 'done' : ''}" onclick="v37ToggleGroupComplete('${escHtml(ids)}')">${complete ? '✓' : '○'}</button>
         <button class="trash" onclick="v33DeleteGroup('${escHtml(ids)}')">🗑</button>
       </article>
@@ -961,6 +960,43 @@
     }).join('');
     return `<details class="v150-orders"${sorted.length <= 3 ? ' open' : ''}><summary>Rendelések (${sorted.length})</summary>${rows}</details>`;
   }
+  /* ===== V151 – A BUBORÉK „SZERKESZTÉS” GOMBJA ==========================
+     Egy rendelésnél: közvetlenül a szerkesztő (mint eddig).
+     Több rendelésnél: külön ablak, benne a rendelések elkülönülve – rendelésenként
+     megjegyzés, Szerkesztés (a teljes szerkesztő arra az egy rendelésre),
+     Tételek, Áthelyezés… A főképernyő buboréka nem változik. */
+  let groupIdsV151 = [];
+  function groupOrdersV151() {
+    return groupIdsV151.map(id => (state.orders || []).find(o => String(o.id) === String(id))).filter(Boolean);
+  }
+  function renderGroupDialogV151() {
+    const d = document.getElementById('v151GroupDialog');
+    if (!d) return;
+    const orders = groupOrdersV151();
+    if (orders.length <= 1) { if (d.open) d.close(); return; }
+    const first = orders[0];
+    const rows = renderOrderRowsV150(orders).replace(/^<details class="v150-orders"[^>]*><summary>[^<]*<\/summary>/, '<div class="v150-orders v151-orders">').replace(/<\/details>$/, '</div>');
+    const head = d.querySelector('.v151-group-body');
+    const html = `<p class="v151-route"><b>${escHtml(first.pickupName || '')}</b><span>→</span><b>${escHtml(first.projectName || '')}</b></p>${rows}`;
+    if (head) head.innerHTML = html;
+  }
+  function editGroupV151(idsText) {
+    const ids = String(idsText || '').split(',').filter(Boolean);
+    const orders = ids.map(id => (state.orders || []).find(o => String(o.id) === String(id))).filter(Boolean);
+    if (orders.length <= 1) { if (orders[0]) global.editOrder(orders[0].id); return; }
+    groupIdsV151 = orders.map(o => String(o.id));
+    let d = document.getElementById('v151GroupDialog');
+    if (!d) {
+      d = document.createElement('dialog'); d.id = 'v151GroupDialog'; d.className = 'v151-group-dialog'; document.body.appendChild(d);
+      /* a rendelés szerkesztőjének bezárása után frissítjük a listát */
+      document.getElementById('orderDialog')?.addEventListener('close', () => { if (d.open) setTimeout(renderGroupDialogV151, 0); });
+    }
+    d.innerHTML = `<form method="dialog"><div class="dialog-head"><div><small>Szerkesztés</small><h3>${orders.length} rendelés egy buborékban</h3></div><button type="button" class="close" data-close="v151GroupDialog" onclick="document.getElementById('v151GroupDialog').close()">×</button></div><div class="v151-group-body"></div></form>`;
+    renderGroupDialogV151();
+    if (!d.open) d.showModal();
+  }
+  global.v151EditGroup = editGroupV151;
+  global.v151RefreshGroup = renderGroupDialogV151;
   function dialogV150(id) {
     let d = document.getElementById(id);
     if (!d) { d = document.createElement('dialog'); d.id = id; d.className = 'v147-dialog'; document.body.appendChild(d); }
@@ -978,6 +1014,7 @@
     d.querySelector('[data-ok]').onclick = () => {
       order.manualItems = d.querySelector('[name="note"]').value.trim();
       save(); d.close(); if (typeof renderRoutes === 'function') renderRoutes();
+      renderGroupDialogV151();
       global.toastV147?.(`Megjegyzés mentve: ${labelV150(order)}`);
     };
     if (!d.open) d.showModal();
@@ -1036,6 +1073,7 @@
       if (!vehicleId || busy) { warn.textContent = `${v ? (v.driverName || v.name) : 'A sofőr'} ezen a napon nem dolgozik (${busy || 'nincs választva'}) – válassz másik sofőrt.`; warn.hidden = false; return; }
       if (date === order.scheduleDate && vehicleId === order.vehicleId) { d.close(); return; }
       moveOrderV150(orderId, date, vehicleId); d.close();
+      renderGroupDialogV151();
       global.toastV147?.(`${labelV150(order)} áthelyezve: ${date} · ${v.driverName || v.name}`);
     };
     if (!d.open) d.showModal();
@@ -1285,6 +1323,8 @@
   }
 
   function v37RenderRoutes() {
+    /* V151: ha a buborék rendeléseinek ablaka nyitva van, frissüljön is */
+    setTimeout(() => { if (document.getElementById('v151GroupDialog')?.open) renderGroupDialogV151(); }, 0);
     syncAllBacklogStatuses();
     ensureFocusDialog();
     /* V147: a távollévő sofőr oszlopa csak akkor látszik, ha mégis van fuvarja */

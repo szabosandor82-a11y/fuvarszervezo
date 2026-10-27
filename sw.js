@@ -1,11 +1,12 @@
-const CACHE_NAME = 'fuvarszervezo-v150-online-20261022-1';
+const CACHE_NAME = 'fuvarszervezo-v151-online-20261022-2';
 const APP_ASSETS = [
-  './', './index.html', './styles.css?v=150.0', './app.js?v=150.0', './data.js?v=150.0',
-  './planner-v32.js?v=150.0', './planner-v33.js?v=150.0', './planner-v34.js?v=150.0',
-  './planner-v35.js?v=150.0', './planner-v37.js?v=150.0', './daily-list-v93.js?v=150.0', './planner-v41.js?v=150.0',
-  './planner-v43.js?v=150.0', './planner-v44.js?v=150.0', './auth-v44-2.js?v=150.0', './chat-v138.js?v=150.0',
-  './online-config.js?v=150.0', './online-v44-2.js?v=150.0',
-  './delivery-camera-v69.js?v=150.0', './ole-msg-reader.js?v=150.0', './manifest.webmanifest', './icon-192.png', './icon-512.png'
+  './', './index.html', './styles.css?v=151.0', './app.js?v=151.0', './data.js?v=151.0',
+  './planner-v32.js?v=151.0', './planner-v33.js?v=151.0', './planner-v34.js?v=151.0',
+  './planner-v35.js?v=151.0', './planner-v37.js?v=151.0', './daily-list-v93.js?v=151.0', './planner-v41.js?v=151.0',
+  './planner-v43.js?v=151.0', './planner-v44.js?v=151.0', './auth-v44-2.js?v=151.0', './chat-v138.js?v=151.0',
+  './pending-orders-v151.js?v=151.0',
+  './online-config.js?v=151.0', './online-v44-2.js?v=151.0',
+  './delivery-camera-v69.js?v=151.0', './ole-msg-reader.js?v=151.0', './manifest.webmanifest', './icon-192.png', './icon-512.png'
 ];
 self.addEventListener('install', event => event.waitUntil(
   caches.open(CACHE_NAME).then(cache => cache.addAll(APP_ASSETS)).then(() => self.skipWaiting())
@@ -46,7 +47,7 @@ self.addEventListener('push', event => {
       silent: !!data.silent || focused,
       icon: 'icon-192.png',
       badge: 'icon-192.png',
-      data: { url: `./?chat=1&conv=${conv}`, conversation: data.conversation || '' }
+      data: { url: data.url || `./?chat=1&conv=${conv}`, conversation: data.conversation || '' }
     });
   })());
 });
@@ -57,9 +58,11 @@ self.addEventListener('notificationclick', event => {
   const url = new URL(event.notification.data?.url || './', self.registration.scope).href;
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const pageMatch = /[?&]page=([a-z]+)/.exec(event.notification.data?.url || '');
     for (const client of windows) {
       if ('focus' in client) {
-        client.postMessage({ type: 'open-chat', conversation: encodeURIComponent(conversation) });
+        if (pageMatch) client.postMessage({ type: 'open-page', page: pageMatch[1] });
+        else client.postMessage({ type: 'open-chat', conversation: encodeURIComponent(conversation) });
         return client.focus();
       }
     }

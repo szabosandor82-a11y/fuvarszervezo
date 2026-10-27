@@ -1835,6 +1835,7 @@
       <div class="v38-fields">
         <label>Felvétel dátuma<input data-field="scheduleDate" type="date" value="${htmlEsc(entry.scheduleDate)}"></label>
         <label>Sofőr${driverSelectV150(entry)}</label>
+        <div class="v151-import-pending"><label class="check"><input type="checkbox" class="v151-pending-check" ${entry.pendingV151 ? 'checked' : ''}> Függő rendelésbe (még nincs visszaigazolva)</label>${entry.pendingV151 ? `<label>Rákérdezés napja<input type="date" class="v151-pending-date" value="${htmlEsc(entry.pendingV151.date || '')}"></label>` : ''}</div>
         ${entry.messageOrderNos?.length > 1 ? `<label class="v43-all-order-nos">Rendelésszámok a levélben<input value="${htmlEsc(entry.messageOrderNos.join(', '))}" readonly></label>` : ''}
         <label>${entry.messageOrderNos?.length > 1 ? 'Aktuális rendelés száma' : 'Rendelésszám'}<input data-field="orderNo" value="${htmlEsc(entry.orderNo)}" placeholder="pl. 004911">${(entry.fullOrderRefs || []).length ? `<small class="v145-ref">Bizonylat: ${htmlEsc(entry.fullOrderRefs.join(', '))}</small>` : ''}</label>
         <label>Felrakó neve${supplierNameSelect(entry)}</label>
@@ -1916,6 +1917,16 @@
       if (!entry) return;
       card.querySelector('.v38-approved')?.addEventListener('change', event => { entry.approved = event.target.checked; renderPending(); });
       card.querySelector('.v38-remove')?.addEventListener('click', () => { pending = pending.filter(item => item !== entry); renderPending(); });
+      /* V151: függő rendelésbe jelölés */
+      card.querySelector('.v151-pending-check')?.addEventListener('change', event => {
+        if (event.target.checked) {
+          const d = new Date(); d.setDate(d.getDate() + 2); while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+          const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          entry.pendingV151 = { date: entry.pendingV151?.date || iso };
+        } else delete entry.pendingV151;
+        renderPending();
+      });
+      card.querySelector('.v151-pending-date')?.addEventListener('change', event => { if (entry.pendingV151) entry.pendingV151.date = event.target.value; });
       /* V150: napváltáskor a sofőrválasztó frissül (ki dolgozik aznap) */
       card.querySelector('[data-field="scheduleDate"]')?.addEventListener('change', () => setTimeout(renderPending, 0));
       card.querySelectorAll('[data-field]').forEach(input => input.addEventListener('change', () => {
@@ -2275,7 +2286,16 @@ ${entry.subject || ''}`) || project;
        maradt. Az Outlook-mellékletből ez nem keletkezik. */
     if (lecsereltek.length && typeof global.carryDeliveryMarksV132 === 'function') global.carryDeliveryMarksV132(lecsereltek, accepted);
     state.orders = state.orders || [];
-    state.orders.push(...accepted);
+    /* V151: a „Függő rendelésbe” jelöltek NEM a fuvarok közé kerülnek (és nem
+       is a szerver fuvartáblájába) – a Függő rendelések között várnak. A
+       levél és a csatolmány helyben mentődik (ugyanazzal az azonosítóval),
+       a fuvarok közé tételkor a rendelés minden adatával visszakerül. */
+    const pendingIdxV151 = acceptedEntries.map((entry, i) => entry.pendingV151 ? i : -1).filter(i => i >= 0);
+    if (pendingIdxV151.length && typeof global.v151AddFromImport === 'function') {
+      global.v151AddFromImport(pendingIdxV151.map(i => accepted[i]), pendingIdxV151.map(i => acceptedEntries[i]));
+    }
+    const pendingSetV151 = new Set(pendingIdxV151.map(i => accepted[i]));
+    state.orders.push(...accepted.filter(order => !pendingSetV151.has(order)));
     if (global.V47MasterLearning?.learnFromOrder) accepted.forEach(order => global.V47MasterLearning.learnFromOrder(order, null, {}));
     state.routePlans = state.routePlans || {};
     for (const order of accepted) state.routePlans[order.scheduleDate] = {};
@@ -2302,7 +2322,7 @@ ${entry.subject || ''}`) || project;
        átkötés, és csak a végén törlődik a régi fuvar a szerverről. */
     if (replaceIds.size) {
       const parok = [];
-      for (const order of accepted) {
+      for (const order of accepted.filter(order => !pendingSetV151.has(order))) {
         const kulcs = `${String(order.orderNo || '').trim()}|${norm(order.pickupName || '')}`;
         const regiId = elozoAzonositok.get(kulcs);
         if (regiId && regiId !== String(order.id)) parok.push([regiId, String(order.id)]);
@@ -2351,7 +2371,7 @@ ${entry.subject || ''}`) || project;
         }
       });
     }
-    uploadSourceMailFiles(acceptedEntries, accepted).catch(error =>
+    uploadSourceMailFiles(acceptedEntries.filter((_, i) => !pendingSetV151.has(accepted[i])), accepted.filter(order => !pendingSetV151.has(order))).catch(error =>
       console.warn('[V60] A levél mellékletének feltöltése nem sikerült', error));
 
     const acceptedIds = new Set(acceptedEntries.map(entry => entry._id));
@@ -2372,6 +2392,8 @@ ${entry.subject || ''}`) || project;
 
     const martinCount = accepted.filter(order => order.importVehicleCategory === 'martin').length;
     const boxCount = accepted.filter(order => order.importVehicleCategory === 'dobozos').length;
+    if (pendingSetV151.size) global.toastV147?.(`${pendingSetV151.size} rendelés a Függő rendelések közé került (a sofőrök nem látják).`);
+    if (pendingSetV151.size === accepted.length) return;
     alert(`${accepted.length} Outlook-rendelés importálva a(z) ${firstDate} napra. Martin / Platós: ${martinCount}, Dobozos: ${boxCount}.${replacementCount ? `\nFrissített korábbi Outlook-import: ${replacementCount}` : ''}${skipped.length ? `\n\nKIHAGYVA (${skipped.length}):\n${skipped.join('\n')}\n\nEzeket az előnézetben pótold, majd importáld újra.` : ''}\nA Dobozos fuvarok ideiglenesen Máriónál látszanak, a „Fuvar szétosztása” gomb újraosztja őket.`);
   }
 

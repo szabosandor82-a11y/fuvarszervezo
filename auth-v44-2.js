@@ -382,6 +382,8 @@
     loadVehiclesForDriverV147().then(() => { if (!isAdmin()) renderDriverPortal(); });
     setTimeout(() => checkProtectionV148(), 2500);
     if (isAdmin()) setTimeout(() => global.loadDriverUsersV149?.(), 1500);
+    /* V151: függő rendelések – betöltés a szerverről, és ha ma esedékes, figyelmeztetés */
+    if (isAdmin()) setTimeout(async () => { await global.v151LoadPending?.(); global.v151DailyReminder?.(); }, 2000);
     /* V146: a szerepkör megjegyzése – az állapot-rendező ebből tudja, hogy
        sofőri eszközön fut (ott soha nem törölhet fuvart). */
     try { localStorage.setItem('fuvarszervezo_last_role_v146', currentProfile.role || ''); } catch (_) {}

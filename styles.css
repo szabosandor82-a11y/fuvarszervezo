@@ -1741,3 +1741,46 @@ dialog.v149-dlg:focus{outline:none}
 .v150-alldriver select{padding:8px;border-radius:8px;border:1px solid #cfd9e4;font:inherit;min-width:220px}
 .v150-alldriver small{color:#5f7389}
 select.v150-driver option:disabled{color:#9aa8b6}
+
+/* ===== V151 – a buborék rendeléseinek ablaka ===== */
+dialog.v151-group-dialog{width:min(94vw,640px)}
+.v151-group-dialog form{padding:18px}
+.v151-route{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px;font-size:14px;color:#10233d}
+.v151-route span{color:#7b8ea3}
+.v151-orders{margin:0;border-radius:12px}
+.v151-orders .v150-order-row:first-child{border-top:0}
+
+/* ===== V151 – Függő rendelések ===== */
+.nav .v151-badge{position:absolute;top:6px;right:10px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#d92d20;color:#fff;font-size:11px;font-weight:800;line-height:18px;text-align:center;box-shadow:0 0 0 2px #0f2236}
+.nav{position:relative}
+.v151-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.v151-head h2{margin:0 0 4px}
+.v151-head .muted{max-width:720px;margin:0;color:#5f7389;font-size:14px}
+.v151-head .primary{background:#146bd7;color:#fff;border:0;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer}
+.v151-list{display:flex;flex-direction:column;gap:10px;max-width:920px}
+.v151-group{margin:14px 0 2px;font-size:14px;color:#3d5470;font-weight:700}
+.v151-empty{padding:22px;border:1px dashed #cfd9e4;border-radius:12px;color:#5f7389;background:#fff}
+.v151-card{background:#fff;border:1px solid #dde5ee;border-radius:12px;padding:14px 16px;box-shadow:0 1px 2px rgba(8,45,89,.05)}
+.v151-card.due{border-left:4px solid #e08a00}
+.v151-card-top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.v151-card-top b{font-size:16px;color:#10233d}
+.v151-chip{font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;background:#eef3f9;color:#3d5470}
+.v151-chip.today{background:#fff3df;color:#8a4b00}
+.v151-chip.late{background:#fdecea;color:#a1271b}
+.v151-route{margin:6px 0 0;font-size:14px;color:#3d5470}
+.v151-route span{color:#9aa8b6;margin:0 4px}
+.v151-note{margin:8px 0 0;padding:7px 10px;border-radius:8px;background:#fffbea;border:1px solid #f1df9c;font-size:13px}
+.v151-items{margin:6px 0 0;font-size:13px;color:#5f7389}
+.v151-log{margin:8px 0 0;font-size:13px;color:#3d5470}
+.v151-log ul{margin:6px 0 0 18px;padding:0}
+.v151-log small{color:#7b8ea3}
+.v151-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.v151-actions button{font-size:13px;font-weight:650;padding:8px 12px;border-radius:9px;border:1px solid #cfd9e4;background:#fff;color:#1d3d62;cursor:pointer}
+.v151-actions .v151-primary{background:#18805d;border-color:#18805d;color:#fff}
+.v151-actions .v151-danger{color:#a1271b;border-color:#f1c4bf}
+.v151-reminder{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:7700;display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-radius:12px;background:#10233d;color:#fff;font-size:14px;box-shadow:0 12px 30px rgba(8,45,89,.35);max-width:calc(100vw - 24px)}
+.v151-reminder button{border:0;border-radius:8px;padding:7px 12px;font-weight:700;cursor:pointer}
+.v151-reminder [data-open]{background:#fff;color:#10233d}
+.v151-reminder [data-x]{background:transparent;color:#cfd9e4;font-size:16px}
+.v151-import-pending{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 16px;padding:8px 10px;border-radius:9px;background:#fff8ec;border:1px solid #f3d9a6}
+.v151-import-pending label{font-size:13px}
