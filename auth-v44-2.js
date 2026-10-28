@@ -1438,7 +1438,9 @@
 
   async function openSourceMail(orderId) {
     if (!canAccessOrder(orderId)) return alert('Ehhez a fuvarhoz nincs jogosultságod.');
-    let order = (state.orders || []).find(item => String(item.id) === String(orderId));
+    /* V152: a függő rendelések levele és csatolmánya is megnyitható */
+    let order = (state.orders || []).find(item => String(item.id) === String(orderId))
+      || (isAdmin() ? global.V151Pending?.orderById?.(orderId) : null);
     // A user portal régi munkamenetben is frissítse az Outlook-metaadatokat,
     // mert az admin által importált levél a szerver payloadjában lehet újabb.
     if (order && !order.sourceMail && global.V44Online?.fetchOrders) {
@@ -2401,6 +2403,21 @@
       .filter(name => /\.(pdf|docx?|xlsx?|xlsm|csv|msg|eml)$/i.test(String(name || '')));
     return !!(order?.sourceMail && (names.length || order.sourceUploadFailedV135));
   }
+  /* V152: egy rendelés helyben tárolt levele és csatolmánya fel a szerverre
+     (pl. amikor egy függő rendelés a fuvarok közé kerül), hogy a sofőr is
+     megnyithassa. */
+  async function uploadOrderFilesV152(order) {
+    if (!isAdmin() || !order?.id) return { ok: false, error: 'nincs rendelés' };
+    try {
+      const files = await localSourceFilesV135(order.id);
+      if (!files.length) return { ok: true, uploaded: 0 };
+      await ensureOrdersOnServerV135([order.id]);
+      const result = await uploadOrderSourceFilesV135(order, files, `Outlook forrás · ${order.sourceMail?.fileName || 'csatolmány'}`.trim());
+      return { ...result, uploaded: result.ok ? files.length : 0 };
+    } catch (error) { console.warn('[V152] csatolmány feltöltése', error); return { ok: false, error: error.message }; }
+  }
+  global.uploadOrderFilesV152 = uploadOrderFilesV152;
+
   async function backfillSourceMailV135() {
     if (!isAdmin()) return;
     const host = byId('v135BackfillProgress');

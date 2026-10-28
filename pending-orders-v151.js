@@ -33,6 +33,60 @@
   const fmt = iso => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[1]}.${m[2]}.${m[3]}.` : '—'; };
   const dueCount = () => open().filter(rec => rec.followupDate && rec.followupDate <= todayISO()).length;
 
+  /* V152: minden függő rendeléshez tartozik egy rendelés-objektum (azonosítóval),
+     hogy a levél és a csatolmány ugyanúgy hozzá kötődhessen, mint a fuvaroknál. */
+  function applyMaster(rec) {
+    const o = rec.order;
+    const supplier = (state.suppliers || []).find(x => x.name === rec.supplierName);
+    const project = (state.projects || []).find(x => x.name === rec.projectName);
+    if (rec.orderNo) o.orderNo = rec.orderNo;
+    if (supplier && o.pickupName !== supplier.name) Object.assign(o, { pickupName: supplier.name, pickupAddress: supplier.address || '', supplierId: supplier.id || '', pickupNote: supplier.pickupNote || '' });
+    if (project && o.projectName !== project.name) Object.assign(o, { projectName: project.name, dropAddress: project.address || '', projectId: project.id || '', recipientName: project.receiver || o.recipientName || '' });
+    if (!o.pickupName && rec.supplierName) o.pickupName = rec.supplierName;
+    if (!o.projectName && rec.projectName) o.projectName = rec.projectName;
+  }
+  function ensureOrder(rec) {
+    if (!rec.order) { rec.order = { id: uid(), orderNo: rec.orderNo || '', items: [], completed: false, manualV152: true }; }
+    applyMaster(rec);
+    return rec.order;
+  }
+  const orderById = id => open().map(rec => rec.order).find(o => o && String(o.id) === String(id)) || null;
+  const hasAttach = o => !!(o && (o.hasManualAttachV110 || o.sourceMail || o.outlookImport || o.outlookSourceFile || o.outlookPdfFile));
+  /* fájlok hozzáadása egy függő rendeléshez (helyben tárolva – a szerverre csak
+     a fuvarok közé tételkor kerülnek fel, így a sofőr addig nem látja) */
+  async function addFiles(rec, fileList) {
+    const order = ensureOrder(rec);
+    const files = [...(fileList || [])].filter(f => f && f.size);
+    const csomag = [];
+    for (const file of files) {
+      if (file.size > 12 * 1024 * 1024) { alert(`Ez a fájl túl nagy (12 MB a határ): ${file.name}`); continue; }
+      let bytes;
+      try { bytes = new Uint8Array(await file.arrayBuffer()); } catch (_) { continue; }
+      csomag.push({ name: file.name, type: file.type || 'application/octet-stream', bytes });
+      /* Outlook-levél: a szövege a rendelés levele lesz, a benne lévő mellékletek is mentődnek */
+      if (/\.msg$/i.test(file.name) && typeof global.LocalMsgReader === 'function') {
+        try {
+          const reader = new global.LocalMsgReader(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+          const info = reader.getFileData() || {};
+          const names = (info.attachments || []).map(a => a.fileName || a.fileNameShort || '').filter(Boolean);
+          for (const att of info.attachments || []) {
+            const name = att.fileName || att.fileNameShort; if (!name) continue;
+            try { const x = reader.getAttachment(att); const c = x?.content || x?.data; if (c) csomag.push({ name, type: 'application/octet-stream', bytes: c instanceof Uint8Array ? c : new Uint8Array(c) }); } catch (_) {}
+          }
+          const mail = { subject: String(info.subject || file.name).trim(), body: String(info.body || '').trim(), from: String(info.senderEmail || info.senderName || '').trim(), attachmentNames: names, fileName: file.name };
+          if (!order.sourceMail) order.sourceMail = mail;
+          else order.extraMailsV152 = [...(order.extraMailsV152 || []), { subject: mail.subject, from: mail.from, fileName: mail.fileName }];
+        } catch (error) { console.warn('[V152] .msg olvasása', error); }
+      }
+    }
+    if (!csomag.length) return 0;
+    try { await global.saveMailAttachmentsV108?.(String(order.id), csomag); }
+    catch (error) { console.warn('[V152] csatolmány mentése', error); alert('A csatolmány mentése nem sikerült.'); return 0; }
+    order.hasManualAttachV110 = true;
+    order.manualAttachNamesV110 = [...new Set([...(order.manualAttachNamesV110 || []), ...csomag.map(f => f.name)])];
+    return csomag.length;
+  }
+
   /* ---------- szerver ---------- */
   async function pushToServer(rec) {
     try { await global.V44Online?.savePendingOrderV151?.(rec); }
@@ -95,10 +149,12 @@
       ${rec.note ? `<div class="v151-note">${esc(rec.note)}</div>` : ''}
       ${rec.itemsText ? `<div class="v151-items">${esc(rec.itemsText)}</div>` : ''}
       ${rec.order?.items?.length ? `<div class="v151-items">${rec.order.items.length} tétel a bizonylatról</div>` : ''}
+      ${hasAttach(rec.order) ? `<div class="v152-mail">${rec.order.sourceMail?.subject ? `<span>✉ ${esc(rec.order.sourceMail.subject)}</span>` : ''}${(rec.order.manualAttachNamesV110 || rec.order.sourceMail?.attachmentNames || []).length ? `<small>📎 ${esc([...new Set([...(rec.order.sourceMail?.attachmentNames || []), ...(rec.order.manualAttachNamesV110 || [])])].join(', '))}</small>` : ''}</div>` : ''}
       ${log.length ? `<details class="v151-log"><summary>Előzmények (${log.length})</summary><ul>${log.map(e => `<li><b>${esc(fmt(String(e.at).slice(0, 10)))}</b> ${esc(e.text || '')}${e.by ? ` <small>· ${esc(e.by)}</small>` : ''}</li>`).join('')}</ul></details>` : ''}
       <div class="v151-actions">
         <button type="button" class="v151-primary" onclick="v151Promote('${id}')">Megjött → fuvarok közé</button>
         <button type="button" onclick="v151Retry('${id}')">Nem jött meg → új dátum</button>
+        ${hasAttach(rec.order) ? `<button type="button" onclick="openSourceMail('${esc(rec.order.id)}')">📎 Levél / csatolmány</button>` : ''}
         <button type="button" onclick="v151EditPending('${id}')">Szerkesztés</button>
         <button type="button" class="v151-danger" onclick="v151DeletePending('${id}')">Törlés</button>
       </div>
@@ -136,16 +192,36 @@
       <label>Mikor kérdezzek rá?<input type="date" name="date" value="${esc(def)}"></label>
       <label>Teendő / megjegyzés<textarea name="note" rows="2" placeholder="pl. rákérdezni, beérkezett-e a 125-ös cső">${esc(rec?.note || '')}</textarea></label>
       <label>Tételek (nem kötelező)<textarea name="items" rows="2" placeholder="pl. 4 tábla OSB, 2 zsák gipsz">${esc(rec?.itemsText || '')}</textarea></label>
+      <div class="v110-attach"><div class="v110-attach-head">Levél és csatolmány</div><p class="v110-attach-hint">Húzd ide az Outlook-levelet (.msg) vagy a bizonylatot (PDF, Word, Excel, kép). A sofőr csak akkor látja, amikor a rendelés a fuvarok közé kerül.</p><div class="v110-drop v152-drop" tabindex="0" role="button">Fájl behúzása vagy tallózás</div><input type="file" class="v152-file" multiple accept=".msg,.pdf,.doc,.docx,.xls,.xlsx,.xlsm,.csv,.jpg,.jpeg,.png" hidden><div class="v110-attach-list v152-list"></div></div>
       <p class="v150-move-warn" hidden></p>
       <div class="v147-actions"><button type="button" data-cancel>Mégse</button><button type="button" data-ok class="primary">${rec ? 'Mentés' : 'Felvétel'}</button></div></form>`;
+    /* V152: a fájlok egy (még nem mentett) vázlathoz is köthetők */
+    const draft = rec || { id: uid(), status: 'open', createdAt: new Date().toISOString(), log: [] };
+    const listEl = d.querySelector('.v152-list'), drop = d.querySelector('.v152-drop'), input = d.querySelector('.v152-file');
+    const showFiles = async () => {
+      const o = draft.order; let rows = [];
+      if (o?.id && global.mailAttachmentsV108) { try { rows = await global.mailAttachmentsV108(String(o.id)); } catch (_) {} }
+      const names = rows.length ? rows.map(r => r.name) : (o?.manualAttachNamesV110 || []);
+      listEl.innerHTML = (o?.sourceMail?.subject ? `<div class="v110-attach-row"><span>✉ ${esc(o.sourceMail.subject)}</span><small>levél</small></div>` : '')
+        + (names.length ? names.map(n => `<div class="v110-attach-row"><span>📎 ${esc(n)}</span><small>mentve</small></div>`).join('') : (o?.sourceMail ? '' : '<div class="v110-attach-empty">Nincs csatolmány.</div>'));
+    };
+    const take = async files => { const n = await addFiles(draft, files); if (n && rec) touch(rec); showFiles(); };
+    drop.onclick = () => input.click();
+    drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } };
+    input.onchange = () => { take(input.files); input.value = ''; };
+    drop.ondragover = e => { e.preventDefault(); drop.classList.add('dragover'); };
+    drop.ondragleave = () => drop.classList.remove('dragover');
+    drop.ondrop = e => { e.preventDefault(); drop.classList.remove('dragover'); take(e.dataTransfer?.files); };
+    showFiles();
     d.querySelector('[data-cancel]').onclick = () => d.close();
     d.querySelector('[data-ok]').onclick = () => {
       const v = n => (d.querySelector(`[name="${n}"]`) || {}).value || '';
       const warn = d.querySelector('.v150-move-warn');
       if (!v('orderNo').trim() && !v('supplier')) { warn.textContent = 'Add meg legalább a rendelésszámot vagy a beszállítót.'; warn.hidden = false; return; }
       if (!v('date')) { warn.textContent = 'Add meg, mikor kérdezzek rá.'; warn.hidden = false; return; }
-      const target = rec || { id: uid(), status: 'open', createdAt: new Date().toISOString(), log: [] };
+      const target = draft;
       Object.assign(target, { orderNo: v('orderNo').trim(), supplierName: v('supplier'), projectName: v('project'), followupDate: v('date'), note: v('note').trim(), itemsText: v('items').trim() });
+      ensureOrder(target);
       if (!rec) { list().push(target); target.log.push({ at: new Date().toISOString(), by: me(), text: `felvéve, rákérdezés: ${fmt(target.followupDate)}` }); }
       d.close(); touch(target);
       global.toastV147?.(rec ? 'Függő rendelés mentve.' : `Függő rendelés felvéve – rákérdezés: ${fmt(target.followupDate)}`);
@@ -180,6 +256,7 @@
   function buildOrder(rec, date, vehicleId) {
     const supplier = (state.suppliers || []).find(s => s.name === (rec.supplierName || rec.order?.pickupName));
     const project = (state.projects || []).find(p => p.name === (rec.projectName || rec.order?.projectName));
+    if (rec.order) applyMaster(rec);
     const base = rec.order ? { ...rec.order } : {
       id: uid(), orderNo: rec.orderNo || '', items: [], completed: false,
       pickupName: supplier?.name || rec.supplierName || '', pickupAddress: supplier?.address || '', supplierId: supplier?.id || '', pickupNote: supplier?.pickupNote || '',
@@ -189,7 +266,7 @@
     if (rec.orderNo && !base.orderNo) base.orderNo = rec.orderNo;
     const notes = [rec.itemsText, base.manualItems].filter(Boolean);
     if (rec.itemsText && !String(base.manualItems || '').includes(rec.itemsText)) base.manualItems = notes.join(' · ');
-    delete base.placementV148; delete base.pendingV151;
+    delete base.placementV148; delete base.pendingV151; delete base.manualV152;
     const seq = (state.orders || []).filter(o => o.scheduleDate === date && o.vehicleId === vehicleId).reduce((m, o) => Math.max(m, +o.sequence || 0), 0);
     return Object.assign(base, { scheduleDate: date, vehicleId, sequence: seq + 1, fromPendingV151: { id: rec.id, at: new Date().toISOString() } });
   }
@@ -223,6 +300,11 @@
       rec.log.push({ at: new Date().toISOString(), by: me(), text: `megjött – fuvar: ${fmt(date)} · ${v.driverName || v.name}` });
       d.close(); touch(rec); save(); if (typeof render === 'function') render();
       global.toastV147?.(`${labelOf(rec)} a fuvarok közé került: ${fmt(date)} · ${v.driverName || v.name}`);
+      /* V152: a helyben tárolt levél és csatolmány fel a szerverre, hogy a sofőr is megnyithassa */
+      if (hasAttach(order)) setTimeout(async () => {
+        const r = await global.uploadOrderFilesV152?.(order);
+        if (r && !r.ok) global.toastV147?.(`A csatolmány feltöltése nem sikerült (${r.error || 'ismeretlen hiba'}) – Beállítások → Hiányzó mellékletek feltöltése.`);
+      }, 2500);
     };
     if (!d.open) d.showModal();
   }
@@ -233,8 +315,47 @@
     rec.log = Array.isArray(rec.log) ? rec.log : []; rec.log.push({ at: new Date().toISOString(), by: me(), text: 'törölve' });
     touch(rec);
   }
+  function moveOrderToPending(order, date, note, isNew = false) {
+    const { placementV148, localUpdatedAt, onlineUpdatedAt, ...copy } = order;
+    const rec = { id: uid(), status: 'open', createdAt: new Date().toISOString(), orderNo: order.orderNo || '', orderLabel: global.orderLabelV145 ? global.orderLabelV145(order) : '', supplierName: order.pickupName || '', projectName: order.projectName || '', followupDate: date, note, order: copy,
+      log: [{ at: new Date().toISOString(), by: me(), text: `${isNew ? 'új fuvarként felvéve' : `fuvarból áttéve (${fmt(order.scheduleDate)})`}, rákérdezés: ${fmt(date)}` }] };
+    list().push(rec);
+    state.orders = (state.orders || []).filter(o => o !== order);
+    return rec;
+  }
+  /* V152: az ÚJ fuvar szerkesztőjéből – a kitöltött adatokkal, a behúzott
+     csatolmánnyal együtt, egyenesen a függő rendelések közé */
+  function newOrderToPending() {
+    const d = dlg('v151FromOrder');
+    d.innerHTML = `<form method="dialog" class="v150-form"><h3>Új fuvar – függő rendelésként</h3>
+      <p class="v147-hint">A kitöltött adatokkal (és a behúzott csatolmánnyal) a Függő rendelések közé kerül – a sofőr nem látja, amíg a fuvarok közé nem teszed.</p>
+      <label>Mikor kérdezzek rá?<input type="date" name="date" value="${esc(workdayAfter(2))}"></label>
+      <label>Teendő / megjegyzés<textarea name="note" rows="2" placeholder="pl. visszaigazolásra vár"></textarea></label>
+      <div class="v147-actions"><button type="button" data-cancel>Mégse</button><button type="button" data-ok class="primary">Függő rendelésbe</button></div></form>`;
+    d.querySelector('[data-cancel]').onclick = () => d.close();
+    d.querySelector('[data-ok]').onclick = () => {
+      const date = d.querySelector('[name="date"]').value; if (!date) return;
+      const note = d.querySelector('[name="note"]').value.trim();
+      const before = new Set((state.orders || []).map(o => String(o.id)));
+      d.close();
+      const form = document.getElementById('orderForm');
+      form?.dispatchEvent(new Event('submit', { cancelable: true }));
+      const created = (state.orders || []).find(o => !before.has(String(o.id)));
+      if (!created) { global.toastV147?.('A fuvar nem mentődött (ellenőrizd a kötelező mezőket) – nem került a függő rendelések közé.'); return; }
+      const rec = moveOrderToPending(created, date, note, true);
+      touch(rec); save(); if (typeof render === 'function') render();
+      /* a behúzott csatolmány a mentés után mentődik – utána jelöljük a rendelésen */
+      setTimeout(async () => {
+        let files = []; try { files = await global.mailAttachmentsV108?.(String(rec.order.id)) || []; } catch (_) {}
+        if (files.length) { rec.order.hasManualAttachV110 = true; rec.order.manualAttachNamesV110 = [...new Set(files.map(f => f.name))]; touch(rec); }
+      }, 900);
+      global.toastV147?.('Az új fuvar a Függő rendelések közé került.');
+    };
+    if (!d.open) d.showModal();
+  }
   /* egy meglévő fuvar → függő rendelés (a szerkesztőből) */
   function fromOrder(orderId) {
+    if (!orderId) return newOrderToPending();
     const order = (state.orders || []).find(o => String(o.id) === String(orderId)); if (!order) return;
     const d = dlg('v151FromOrder');
     d.innerHTML = `<form method="dialog" class="v150-form"><h3>Függő rendelésbe – ${esc(global.orderLabelV145 ? global.orderLabelV145(order) : order.orderNo || '')}</h3>
@@ -245,11 +366,7 @@
     d.querySelector('[data-cancel]').onclick = () => d.close();
     d.querySelector('[data-ok]').onclick = () => {
       const date = d.querySelector('[name="date"]').value; if (!date) return;
-      const { placementV148, localUpdatedAt, onlineUpdatedAt, ...copy } = order;
-      const rec = { id: uid(), status: 'open', createdAt: new Date().toISOString(), orderNo: order.orderNo || '', orderLabel: global.orderLabelV145 ? global.orderLabelV145(order) : '', supplierName: order.pickupName || '', projectName: order.projectName || '', followupDate: date, note: d.querySelector('[name="note"]').value.trim(), order: copy,
-        log: [{ at: new Date().toISOString(), by: me(), text: `fuvarból áttéve (${fmt(order.scheduleDate)}), rákérdezés: ${fmt(date)}` }] };
-      list().push(rec);
-      state.orders = (state.orders || []).filter(o => o !== order);
+      const rec = moveOrderToPending(order, date, d.querySelector('[name="note"]').value.trim());
       d.close(); document.getElementById('orderDialog')?.close?.();
       touch(rec); save(); if (typeof render === 'function') render();
       global.toastV147?.('A fuvar a Függő rendelések közé került.');
@@ -282,11 +399,17 @@
         if (head && isAdmin()) {
           let b = head.querySelector('.v151-to-pending');
           if (!b) { b = document.createElement('button'); b.type = 'button'; b.className = 'v148-history-btn v151-to-pending'; b.textContent = 'Függő rendelésbe'; b.onclick = () => fromOrder(document.getElementById('orderId').value); head.insertBefore(b, head.querySelector('.v148-history-btn') || head.lastElementChild); }
-          b.classList.toggle('hidden', !id);
         }
         return r;
       };
       wrapped.__v151 = true; global.editOrder = wrapped;
+    }
+    /* V152: a gomb az „Új fuvar” szerkesztőjében is ott van (akárhonnan nyílik meg) */
+    const head = document.querySelector('#orderDialog .dialog-head');
+    if (head && !head.querySelector('.v151-to-pending')) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'v148-history-btn v151-to-pending'; b.textContent = 'Függő rendelésbe';
+      b.onclick = () => fromOrder(document.getElementById('orderId').value);
+      head.insertBefore(b, head.lastElementChild);
     }
     /* értesítésre koppintva / ?page=pending */
     global.navigator?.serviceWorker?.addEventListener?.('message', e => { if (e.data?.type === 'open-page' && e.data.page === 'pending') showPage(PAGE); });
@@ -307,6 +430,7 @@
   global.v151LoadPending = loadFromServer;
   global.v151RenderPending = refresh;
   global.v151DailyReminder = dailyReminder;
-  global.V151Pending = { list, open, dueCount, buildOrder, renderPage, badge };
+  global.V151Pending = { list, open, dueCount, buildOrder, renderPage, badge, orderById, addFiles, ensureOrder };
+  global.v152NewOrderToPending = newOrderToPending;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true }); else install();
 })(window);

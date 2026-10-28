@@ -1784,3 +1784,12 @@ dialog.v151-group-dialog{width:min(94vw,640px)}
 .v151-reminder [data-x]{background:transparent;color:#cfd9e4;font-size:16px}
 .v151-import-pending{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 16px;padding:8px 10px;border-radius:9px;background:#fff8ec;border:1px solid #f3d9a6}
 .v151-import-pending label{font-size:13px}
+/* V152 – függő rendelés levele / csatolmánya */
+.v152-mail{display:flex;flex-direction:column;gap:2px;margin:8px 0 0;padding:7px 10px;border-radius:8px;background:#f3f7fc;border:1px solid #dde5ee;font-size:13px;color:#1d3d62}
+.v152-mail small{color:#5f7389}
+/* V152: a másodlagos gombok (pl. Mégse) mindig olvashatók az ablakok alsó sávjában */
+dialog.v149-dlg .v150-actionbar button:not([type=submit]):not(.primary):not(.v150-primary){background:#fff!important;color:#10233d!important;border:1px solid #cfd9e4!important;border-radius:10px!important;padding:11px 18px!important;font-weight:650!important;box-shadow:none!important}
+dialog.v149-dlg .v150-actionbar button.primary,dialog.v149-dlg .v150-actionbar .v150-primary{background:#146bd7!important;color:#fff!important;border:0!important}
+/* V152: a fejléc mellékgombja (pl. „Függő rendelésbe”, „Áthelyezési előzmények”) és a kamera gombja olvasható */
+dialog.v149-dlg .v149-sticky .v148-history-btn{background:#fff!important;color:#10233d!important;border:1px solid #cfd9e4!important;border-radius:9px!important;padding:7px 11px!important;font-size:12px!important;font-weight:650!important;box-shadow:none!important;width:auto!important;height:auto!important}
+dialog.v149-dlg .camera-button{background:#146bd7!important;color:#fff!important;border:0!important}

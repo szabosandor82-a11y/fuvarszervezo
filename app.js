@@ -5536,11 +5536,28 @@ function fitStickyHeadV150(dialog){
   sc.scrollTop=keep;
 }
 window.fitStickyHeadV150=fitStickyHeadV150;
+/* V152: az alsó (mentés) sáv is pontosan az ablak aljáig és széléig ér –
+   alatta/mellette nem látszik ki a görgetett tartalom */
+function fitActionBarV152(dialog){
+  const bar=dialog&&dialog.querySelector('.v150-actionbar');if(!bar||!dialog.open)return;
+  bar.style.marginLeft=bar.style.marginRight=bar.style.bottom='';bar.style.paddingLeft=bar.style.paddingRight='';
+  const sc=scrollerOfV150(bar,dialog);
+  const cs=getComputedStyle(sc),s=sc.getBoundingClientRect(),b=bar.getBoundingClientRect();
+  const bl=parseFloat(cs.borderLeftWidth)||0;
+  const innerLeft=s.left+bl,innerRight=innerLeft+sc.clientWidth;
+  const gapL=Math.max(0,Math.round(b.left-innerLeft)),gapR=Math.max(0,Math.round(innerRight-b.right));
+  const pb=parseFloat(cs.paddingBottom)||0;
+  const bs=getComputedStyle(bar);
+  if(gapL){bar.style.marginLeft=`${(parseFloat(bs.marginLeft)||0)-gapL}px`;bar.style.paddingLeft=`${(parseFloat(bs.paddingLeft)||0)+gapL}px`}
+  if(gapR){bar.style.marginRight=`${(parseFloat(bs.marginRight)||0)-gapR}px`;bar.style.paddingRight=`${(parseFloat(bs.paddingRight)||0)+gapR}px`}
+  bar.style.setProperty('bottom',`-${pb}px`,'important');
+}
+window.fitActionBarV152=fitActionBarV152;
 (function installFitV150(){
   if(typeof window==='undefined'||typeof prepareDialogV149!=='function')return;
   const prep=window.prepareDialogV149;
-  window.prepareDialogV149=function(d){prep(d);const run=()=>{try{fitStickyHeadV150(d)}catch(_){}};if(window.requestAnimationFrame)requestAnimationFrame(run);setTimeout(run,60);setTimeout(run,300)};
-  window.addEventListener('resize',()=>document.querySelectorAll('dialog[open]').forEach(d=>{try{fitStickyHeadV150(d)}catch(_){}}));
+  window.prepareDialogV149=function(d){prep(d);const run=()=>{try{fitStickyHeadV150(d)}catch(_){}try{window.fitActionBarV152?.(d)}catch(_){}};if(window.requestAnimationFrame)requestAnimationFrame(run);setTimeout(run,60);setTimeout(run,300)};
+  window.addEventListener('resize',()=>document.querySelectorAll('dialog[open]').forEach(d=>{try{fitStickyHeadV150(d)}catch(_){}try{window.fitActionBarV152?.(d)}catch(_){}}));
 })();
 
 /* V150: görgetéskor halvány elválasztó a fejléc alatt; a hosszú űrlapok
