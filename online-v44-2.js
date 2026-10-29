@@ -506,6 +506,10 @@
       merged.items = order.items.map((item, index) => {
         const previous = remoteItems.get(itemKey(item, index));
         if (!previous) return item;
+        /* V153: a szerver (pipa-továbbadás, levonás, éjféli hátralék) újabb
+           változata nyer – a régi helyi példány nem írhatja vissza. */
+        const verL = Number(item?.itemVerV153 || 0), verR = Number(previous?.itemVerV153 || 0);
+        if (verR > verL) return { ...previous };
         const nonempty = value => String(value ?? '').trim() !== '';
         return {
           ...item,

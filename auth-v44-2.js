@@ -886,6 +886,10 @@
       egyesult.items = nyertes.items.map((item, index) => {
         const par = vesztesTetel.get(tetelKulcs(item, index));
         if (!par) return item;
+        /* V153: a magasabb tételverzió (a szerver továbbadása) nyer. */
+        const verN = Number(item?.itemVerV153 || 0), verV = Number(par?.itemVerV153 || 0);
+        if (verV > verN) return { ...par };
+        if (verN > verV) return item;
         const hiany = value => String(value ?? '').trim() !== '';
         return {
           ...item,
@@ -1479,8 +1483,12 @@
     if (!files) return;
     /* V73: előbb a HELYBEN eltett fájlok – ezek hálózat nélkül is megnyílnak.
        A szerverről érkezők utánuk jönnek, ha vannak. */
-    const local = typeof global.loadOrderAttachmentsV73 === 'function'
+    /* V153: a másolat (függő rendelés, második példány) az eredeti fuvar
+       mellékleteit mutatja, ha neki magának nincs. */
+    const attachFrom = order.attachFromOrderIdV153 ? String(order.attachFromOrderIdV153) : '';
+    let local = typeof global.loadOrderAttachmentsV73 === 'function'
       ? global.loadOrderAttachmentsV73(orderId) : [];
+    if (!local.length && attachFrom && typeof global.loadOrderAttachmentsV73 === 'function') local = global.loadOrderAttachmentsV73(attachFrom);
     const localHtml = local.length
       ? `<div class="mail-files-title">Melléklet (${local.length})</div>`
         + local.map(file => `<button type="button" class="mail-file" data-url="${safe(file.dataUrl)}"
@@ -1488,7 +1496,8 @@
       : '';
     if (localHtml) files.innerHTML = localHtml;
     try {
-      const list = await listDeliveryFilesEventually(orderId);
+      let list = await listDeliveryFilesEventually(orderId);
+      if (!(list || []).length && attachFrom) list = await listDeliveryFilesEventually(attachFrom);
       /* V72: KIZÁRÓLAG az Outlook-import levélmellékletei. Korábban volt egy
          tartalék ág, ami minden fájlt megmutatott, ha nem találtunk
          forrásmellékletet – így a sofőr saját szállítólevél-fotói kerültek

@@ -148,7 +148,9 @@
       <div class="v151-route">${esc(rec.supplierName || rec.order?.pickupName || '—')} <span>→</span> ${esc(rec.projectName || rec.order?.projectName || '—')}</div>
       ${rec.note ? `<div class="v151-note">${esc(rec.note)}</div>` : ''}
       ${rec.itemsText ? `<div class="v151-items">${esc(rec.itemsText)}</div>` : ''}
-      ${rec.order?.items?.length ? `<div class="v151-items">${rec.order.items.length} tétel a bizonylatról</div>` : ''}
+      ${rec.order?.items?.length ? `<div class="v151-items">${rec.order.items.length} tétel a bizonylatról${(() => { const n = rec.order.items.filter(it => it.received).length; return n ? ` · ebből ${n} már megjött máshol` : ''; })()}</div>` : ''}
+      ${rec.coveredV153 ? '<div class="v153-covered">✓ Minden tétele megjött máshol – ha meggyőződtél róla, törölheted.</div>' : ''}
+      ${global.v153PlacesHtml ? global.v153PlacesHtml(rec.order || { orderNo: rec.orderNo }, { title: 'Egyébként szerepel' }) : ''}
       ${hasAttach(rec.order) ? `<div class="v152-mail">${rec.order.sourceMail?.subject ? `<span>✉ ${esc(rec.order.sourceMail.subject)}</span>` : ''}${(rec.order.manualAttachNamesV110 || rec.order.sourceMail?.attachmentNames || []).length ? `<small>📎 ${esc([...new Set([...(rec.order.sourceMail?.attachmentNames || []), ...(rec.order.manualAttachNamesV110 || [])])].join(', '))}</small>` : ''}</div>` : ''}
       ${log.length ? `<details class="v151-log"><summary>Előzmények (${log.length})</summary><ul>${log.map(e => `<li><b>${esc(fmt(String(e.at).slice(0, 10)))}</b> ${esc(e.text || '')}${e.by ? ` <small>· ${esc(e.by)}</small>` : ''}</li>`).join('')}</ul></details>` : ''}
       <div class="v151-actions">
@@ -293,7 +295,16 @@
       const v = vehicles.find(x => x.id === vehicleId);
       if (!date || !vehicleId || busyOn(v, date)) { warn.textContent = 'Válassz napot és olyan sofőrt, aki aznap dolgozik.'; warn.hidden = false; return; }
       const order = buildOrder(rec, date, vehicleId);
-      state.orders = state.orders || []; state.orders.push(order);
+      state.orders = state.orders || [];
+      /* V153: ha az eredeti fuvar (ugyanezzel az azonosítóval) még megvan, a
+         visszatérő példány új azonosítót kap – különben felülírná. */
+      if (state.orders.some(o => String(o.id) === String(order.id))) {
+        order.attachFromOrderIdV153 = order.attachFromOrderIdV153 || order.id;
+        order.id = uid();
+      }
+      if (global.v153ConfirmPlaces && !global.v153ConfirmPlaces(order, `${labelOf(rec)} a fuvarok közé kerül: ${fmt(date)} · ${v.driverName || v.name}.`)) return;
+      state.orders.push(order);
+      dropMirrorBacklogV153(rec);
       state.routePlans = state.routePlans || {}; state.routePlans[date] = {};
       rec.status = 'done'; rec.promotedOrderId = order.id;
       rec.log = Array.isArray(rec.log) ? rec.log : [];
@@ -313,14 +324,42 @@
     if (!confirm(`Törlöd a függő rendelést (${labelOf(rec)})? Nem kerül a fuvarok közé.`)) return;
     rec.status = 'deleted';
     rec.log = Array.isArray(rec.log) ? rec.log : []; rec.log.push({ at: new Date().toISOString(), by: me(), text: 'törölve' });
+    if (dropMirrorBacklogV153(rec)) save();
     touch(rec);
   }
+  /* V153: a hátralékból (dátum nélkül) jött függő rendelés elintézésekor a
+     hozzá tartozó dátum nélküli hátralék-bejegyzések is eltűnnek. */
+  function dropMirrorBacklogV153(rec) {
+    const ids = new Set((rec.backlogIdsV153 || []).map(String));
+    if (!ids.size) return false;
+    const before = (state.backlog || []).length;
+    state.backlog = (state.backlog || []).filter(b => !(ids.has(String(b.id)) && b.undatedV139 && !b.targetOrderId));
+    return state.backlog.length !== before;
+  }
+  /* V153: egy rendelés egyszerre több helyen is lehet. A meglévő fuvarból a
+     Függő rendelések közé MÁSOLAT kerül (új azonosítóval, kipipálatlan
+     tételekkel, a teljes rendelt mennyiséggel) – az eredeti fuvar a helyén
+     marad. A levél és a csatolmány az eredeti fuvarról nyílik meg. */
+  function cleanCopyV153(order) {
+    const { placementV148, localUpdatedAt, onlineUpdatedAt, threadV115, threadDeletedV115, deliveryReports, deliveryReportsDeletedV133,
+      removedItemIdsV153, midnightDoneV153, completedByV153, completedAtV111, completedUndoneAtV132, fromPendingV151, ...copy } = order;
+    copy.id = uid();
+    copy.attachFromOrderIdV153 = order.attachFromOrderIdV153 || order.id;
+    copy.completed = false; copy.completedAt = '';
+    copy.items = (order.items || []).map(it => {
+      const { baseQtyV153, deductedV153, viaV153, itemVerV153, backlogIdV153, ...rest } = it;
+      return { ...rest, _id: uid(), qty: baseQtyV153 || it.qty, received: false, missingQty: '', moveTargetDate: '', shortageOpen: false };
+    });
+    return copy;
+  }
   function moveOrderToPending(order, date, note, isNew = false) {
-    const { placementV148, localUpdatedAt, onlineUpdatedAt, ...copy } = order;
+    const keepOriginal = !isNew;
+    const { placementV148, localUpdatedAt, onlineUpdatedAt, ...moved } = order;
+    const copy = keepOriginal ? cleanCopyV153(order) : moved;
     const rec = { id: uid(), status: 'open', createdAt: new Date().toISOString(), orderNo: order.orderNo || '', orderLabel: global.orderLabelV145 ? global.orderLabelV145(order) : '', supplierName: order.pickupName || '', projectName: order.projectName || '', followupDate: date, note, order: copy,
-      log: [{ at: new Date().toISOString(), by: me(), text: `${isNew ? 'új fuvarként felvéve' : `fuvarból áttéve (${fmt(order.scheduleDate)})`}, rákérdezés: ${fmt(date)}` }] };
+      log: [{ at: new Date().toISOString(), by: me(), text: `${isNew ? 'új fuvarként felvéve' : `fuvarból másolva (a fuvar marad: ${fmt(order.scheduleDate)})`}, rákérdezés: ${fmt(date)}` }] };
     list().push(rec);
-    state.orders = (state.orders || []).filter(o => o !== order);
+    if (!keepOriginal) state.orders = (state.orders || []).filter(o => o !== order);
     return rec;
   }
   /* V152: az ÚJ fuvar szerkesztőjéből – a kitöltött adatokkal, a behúzott
@@ -359,7 +398,8 @@
     const order = (state.orders || []).find(o => String(o.id) === String(orderId)); if (!order) return;
     const d = dlg('v151FromOrder');
     d.innerHTML = `<form method="dialog" class="v150-form"><h3>Függő rendelésbe – ${esc(global.orderLabelV145 ? global.orderLabelV145(order) : order.orderNo || '')}</h3>
-      <p class="v147-hint">A fuvar kikerül a fuvarok közül (a sofőr sem látja), és a Függő rendelések között vár, amíg vissza nem teszed.</p>
+      <p class="v147-hint">A fuvar a helyén marad. Egy másolata (a teljes rendelt mennyiséggel) a Függő rendelések közé kerül – amit közben bárhol kipipálnak, az a másolatból is levonódik.</p>
+      ${global.v153PlacesHtml ? global.v153PlacesHtml(order, { excludeOrderIds: [] }) : ''}
       <label>Mikor kérdezzek rá?<input type="date" name="date" value="${esc(workdayAfter(2))}"></label>
       <label>Teendő / megjegyzés<textarea name="note" rows="2" placeholder="pl. visszaigazolásra vár"></textarea></label>
       <div class="v147-actions"><button type="button" data-cancel>Mégse</button><button type="button" data-ok class="primary">Függő rendelésbe</button></div></form>`;
@@ -367,9 +407,9 @@
     d.querySelector('[data-ok]').onclick = () => {
       const date = d.querySelector('[name="date"]').value; if (!date) return;
       const rec = moveOrderToPending(order, date, d.querySelector('[name="note"]').value.trim());
-      d.close(); document.getElementById('orderDialog')?.close?.();
+      d.close();
       touch(rec); save(); if (typeof render === 'function') render();
-      global.toastV147?.('A fuvar a Függő rendelések közé került.');
+      global.toastV147?.('A fuvar másolata a Függő rendelések közé került (a fuvar a helyén maradt).');
     };
     if (!d.open) d.showModal();
   }

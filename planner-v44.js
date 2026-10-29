@@ -23,7 +23,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '152';
+  const VERSION = '153';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   // Alapértelmezett indulási pontok. A törzsadat (SEED_DATA.vehicles) felülírja
   // őket, ha ott meg van adva a sofőr lakóhelye.

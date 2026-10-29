@@ -3466,7 +3466,7 @@ function openItems(id){
        kártyán BELÜL nyílik ki, két mezővel. A mennyiség egy cella, a dátum
        egy cella (három résszel, ahogy az adminon – a kurzor magától lép). */
     const nev=esc(it.description||it.productName||it.name||'Tétel');
-    const alcim=`${esc(it.code||'Cikkszám nélkül')} · ${esc(it.qty)} ${esc(it.unit)}${it.longMaterial?' · hosszú szál':''}`;
+    const alcim=`${esc(it.code||'Cikkszám nélkül')} · ${esc(it.qty)} ${esc(it.unit)}${it.longMaterial?' · hosszú szál':''}${it.viaV153?' · <b class="v153-via">✓ máshol megjött</b>':(it.deductedV153?` · <span class="v153-ded">${esc(it.deductedV153)} ${esc(it.unit||'')} máshol megjött (rendelt: ${esc(it.baseQtyV153||'')})</span>`:'')}`;
     const megjegyzes=esc(itemNoteValue(it));
     const allapot=it.received?'v99-ok':(open?'v99-hiany':'');
     return `<article class="v99-item ${allapot}">
@@ -4137,7 +4137,7 @@ function renderUndatedSectionV139(q){
       ${list.map(b=>`<div class="bl-item v139-item ${b.virtualV139?'v139-forgotten':'v139-undated'}">
         <div class="bl-item-main">
           <div class="bl-item-name">${esc(b.name)}${b.code?` <span class="bl-code">${esc(b.code)}</span>`:''}</div>
-          <div class="bl-item-sub">${esc(b.quantity)} ${esc(b.unit||'')}${b.itemNote?` · ${esc(b.itemNote)}`:''} · <span class="v139-tag">${b.virtualV139?`Elmúlt napon kipipálatlan · ${esc(b.sourceDateV139)}`:'Hátralékban, dátum nélkül'}</span>${b.orphanSource?' · <span class="bl-orphan">a forrásfuvart törölték</span>':''}</div>
+          <div class="bl-item-sub">${esc(b.quantity)} ${esc(b.unit||'')}${b.itemNote?` · ${esc(b.itemNote)}`:''} · <span class="v139-tag">${b.virtualV139?`Elmúlt napon kipipálatlan · ${esc(b.sourceDateV139)}`:(b.midnightV153?'Éjfélkor került ide, dátum nélkül':'Hátralékban, dátum nélkül')}</span>${b.coveredV153?' · <span class="v153-tag">✓ máshol megjött – törölheted</span>':''}${b.orphanSource?' · <span class="bl-orphan">a forrásfuvart törölték</span>':''}</div>
         </div>
         <div class="backlog-date-editor v139-editor">${v139DateParts(b.id)}<button type="button" onclick="scheduleUndatedV139('${esc(b.id)}')">Ütemezés</button><button type="button" class="v139-today" onclick="scheduleUndatedV139('${esc(b.id)}',true)">Mára</button></div>
         ${b.virtualV139

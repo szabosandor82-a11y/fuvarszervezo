@@ -1,12 +1,12 @@
-const CACHE_NAME = 'fuvarszervezo-v152-online-20261023-1';
+const CACHE_NAME = 'fuvarszervezo-v153-online-20261029-1';
 const APP_ASSETS = [
-  './', './index.html', './styles.css?v=152.0', './app.js?v=152.0', './data.js?v=152.0',
-  './planner-v32.js?v=152.0', './planner-v33.js?v=152.0', './planner-v34.js?v=152.0',
-  './planner-v35.js?v=152.0', './planner-v37.js?v=152.0', './daily-list-v93.js?v=152.0', './planner-v41.js?v=152.0',
-  './planner-v43.js?v=152.0', './planner-v44.js?v=152.0', './auth-v44-2.js?v=152.0', './chat-v138.js?v=152.0',
-  './pending-orders-v151.js?v=152.0',
-  './online-config.js?v=152.0', './online-v44-2.js?v=152.0',
-  './delivery-camera-v69.js?v=152.0', './ole-msg-reader.js?v=152.0', './manifest.webmanifest', './icon-192.png', './icon-512.png'
+  './', './index.html', './styles.css?v=153.0', './app.js?v=153.0', './data.js?v=153.0',
+  './planner-v32.js?v=153.0', './planner-v33.js?v=153.0', './planner-v34.js?v=153.0',
+  './planner-v35.js?v=153.0', './planner-v37.js?v=153.0', './daily-list-v93.js?v=153.0', './planner-v41.js?v=153.0',
+  './planner-v43.js?v=153.0', './planner-v44.js?v=153.0', './auth-v44-2.js?v=153.0', './chat-v138.js?v=153.0',
+  './pending-orders-v151.js?v=153.0', './v153.js?v=153.0',
+  './online-config.js?v=153.0', './online-v44-2.js?v=153.0',
+  './delivery-camera-v69.js?v=153.0', './ole-msg-reader.js?v=153.0', './manifest.webmanifest', './icon-192.png', './icon-512.png'
 ];
 self.addEventListener('install', event => event.waitUntil(
   caches.open(CACHE_NAME).then(cache => cache.addAll(APP_ASSETS)).then(() => self.skipWaiting())

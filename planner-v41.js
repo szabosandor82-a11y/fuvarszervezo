@@ -2250,10 +2250,18 @@ ${entry.subject || ''}`) || project;
       // a gyűjtőkódos fuvar soha nem ír felül korábbit
       const numbers = meaningfulOrderNos(entry.sourceOrderNos);
       if (!numbers.length) continue;
-      matchingOutlookOrders(numbers, entry.orderType, entry.isReturn, entry.scheduleDate,
-        pickupIdentityKey(entry.pickupName, entry.pickupAddress))
-        .forEach(order => replaceIds.add(order.id));
+      let matches = matchingOutlookOrders(numbers, entry.orderType, entry.isReturn, entry.scheduleDate,
+        pickupIdentityKey(entry.pickupName, entry.pickupAddress));
+      /* V153: ha ugyanaz a rendelés aznap több sofőrnél is szerepel, csak az
+         import szerinti sofőrnél lévő példány frissül – a másik sofőré marad. */
+      if (matches.length > 1) {
+        const wanted = entry.driverChoiceV150 || (entry.category === 'martin' ? (findMartinVehicle()?.id || '') : (findMarioVehicle()?.id || ''));
+        matches = matches.filter(order => String(order.vehicleId || '') === String(wanted || ''));
+      }
+      matches.forEach(order => replaceIds.add(order.id));
     }
+    /* V153: ha a rendelés máshol is szerepel, megmutatjuk, hol – és rákérdezünk. */
+    if (typeof global.v153ImportConfirm === 'function' && !global.v153ImportConfirm(acceptedEntries, replaceIds)) return;
     const replacementCount = replaceIds.size;
     /* V107 – A FRISSÍTETT FUVAR ÖRÖKLI A RÉGI MELLÉKLETEIT
 
