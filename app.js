@@ -332,23 +332,86 @@ function stampLocalChanges(){
    A fuvarok adata mindennél fontosabb. Ezért ha megtelt a tárhely, előbb
    ELDOBJUK a mellékleteket (azok kényelmi másolatok, a szerveren megvannak),
    és újrapróbáljuk. Csak ha úgy sem fér el, akkor szólunk. */
+/* ===== V154 – A HELYI TÁRHELY NEM TELHET MEG ==========================
+
+   A telefon böngészője (főleg iPhone-on a Safari) alkalmazásonként kb. 5 MB
+   helyi tárhelyet ad. A program eddig a TELJES állapotot ide mentette – a
+   sofőr/felhasználó telefonján ez az összes korábbi saját fuvarját jelenti
+   (a szerver minden régi fuvart visszaad, hogy visszanézhesse), levéllel,
+   tételekkel, üzenetszállal. Hónapok alatt ez kinőtte az 5 MB-ot: jött a
+   „Megtelt a böngésző tárhelye” üzenet, és – ami rosszabb – a
+   bejelentkezés megújított kulcsa sem fért el (ld. online-v44-2.js), ezért
+   a csevegő és a frissítés kérései időnként elbuktak.
+
+   Most:
+     - a helyi mentés csak GYORSÍTÓTÁR: a sofőri/felhasználói telefonon csak
+       az elmúlt 14 nap és a jövő fuvarjai kerülnek bele (a régebbieket a
+       program minden betöltéskor a szerverről hozza, a visszanézés marad);
+     - az admin gép a teljes állapotot menti; ha az nem fér el, 60, majd 14
+       napra szűkít;
+     - a még fel nem töltött (helyben frissebb vagy szerveren még nem lévő)
+       fuvar MINDIG bekerül, bármilyen régi;
+     - csak akkor szólunk, ha a szűkített mentés sem fér el. */
 function saveStateToStorageV76(){
-  try{ localStorage.setItem(KEY,JSON.stringify(state)); return true; }
-  catch(error){
-    console.warn('[V76] megtelt a tárhely, mellékletek eldobása',error);
-    try{ dropAllOrderAttachmentsV76(); }catch(inner){ /* nem kritikus */ }
-    try{ localStorage.setItem(KEY,JSON.stringify(state)); return true; }
-    catch(retryError){
-      console.error('[V76] a fuvarok mentése nem sikerült',retryError);
-      if(typeof alert==='function'&&!window.__storageWarnedV76){
-        window.__storageWarnedV76=true;
-        alert('Megtelt a böngésző tárhelye, ezért a fuvarok helyben nem mentődtek el.\n'
-          +'Az adat a szerveren megvan. Zárd be a felesleges lapokat, vagy jelentkezz ki és vissza.');
-      }
-      return false;
+  /* ismeretlen szerepkörnél (pl. belépés előtt) a teljes mentéssel kezdünk */
+  const role=storageRoleV154();
+  const attempts=(role&&role!=='admin')?[14]:[null,60,14];
+  let lastError=null,dropped=false;
+  for(let i=0;i<attempts.length;i++){
+    const days=attempts[i];
+    try{writeStateV154(days==null?state:trimmedStateV154(days));window.__storageTrimmedV154=days;return true}
+    catch(error){
+      lastError=error;
+      /* a mellékletek kényelmi másolatok (a szerveren megvannak): az első
+         hibánál eldobjuk őket, és ugyanazzal a szinttel még egyszer próbálunk */
+      if(!dropped){dropped=true;let n=0;try{n=dropAllOrderAttachmentsV76()}catch(_){}
+        if(n){i--;continue}}
     }
   }
+  console.error('[V154] a fuvarok helyi mentése nem sikerült',lastError,storageReportV154());
+  /* a régi, elavult gyorsítótár ne maradjon ott – betöltéskor a szerver úgyis
+     a friss adatot adja, és így a bejelentkezésnek is marad hely */
+  try{localStorage.removeItem(KEY)}catch(_){}
+  if(typeof alert==='function'&&!window.__storageWarnedV76){
+    window.__storageWarnedV76=true;
+    alert('A böngésző helyi tárhelye megtelt, ezért a fuvarok gyorsítótára ezen az eszközön nem mentődött el.\n'
+      +'Az adat a szerveren megvan, a program működik tovább. Ha gyakran látod ezt, töröld a böngészőben ennek az oldalnak a tárolt adatait.');
+  }
+  return false;
 }
+function storageRoleV154(){
+  try{const p=window.V44Online?.getProfile?.();if(p?.role)return p.role}catch(_){}
+  try{return localStorage.getItem('fuvarszervezo_last_role_v146')||''}catch(_){return''}
+}
+function trimmedStateV154(days){
+  const d=new Date(Date.now()-days*86400000),limit=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const unsynced=o=>!o.onlineUpdatedAt||(o.localUpdatedAt&&Date.parse(o.localUpdatedAt)>Date.parse(o.onlineUpdatedAt))||!!o.placementV148?.pending;
+  const keep=o=>String(o.scheduleDate||'')>=limit||unsynced(o);
+  const orders=(state.orders||[]).filter(keep);
+  const ids=new Set(orders.map(o=>String(o.id)));
+  const byDate=obj=>{if(!obj||typeof obj!=='object')return obj;const out={};for(const [k,v] of Object.entries(obj))if(!/^\d{4}-\d{2}-\d{2}$/.test(k)||k>=limit)out[k]=v;return out};
+  return {...state,orders,
+    backlog:(state.backlog||[]).filter(b=>b.undatedV139||ids.has(String(b.sourceOrderId))||ids.has(String(b.targetOrderId))||String(b.movedToDate||'')>=limit),
+    resolvedBacklog:(state.resolvedBacklog||[]).filter(b=>String(b.movedToDate||b.resolvedAt||'').slice(0,10)>=limit),
+    routePlans:byDate(state.routePlans),routeStats:byDate(state.routeStats),
+    geo:days<=14?{}:state.geo};
+}
+function writeStateV154(obj){localStorage.setItem(KEY,JSON.stringify(obj))}
+/* Mekkora helyet foglalnak a kulcsok (karakter) – hibakereséshez. */
+function storageReportV154(){
+  const out=[];
+  try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);out.push([k,(localStorage.getItem(k)||'').length])}}catch(_){}
+  return out.sort((a,b)=>b[1]-a[1]).slice(0,12);
+}
+window.saveStateToStorageV76=saveStateToStorageV76;
+window.storageReportV154=storageReportV154;
+/* A bejelentkezés mentésének nincs hely? Előbb a gyorsítótárat engedjük el. */
+window.freeStorageForSessionV154=function(){
+  let freed=false;
+  try{if(dropAllOrderAttachmentsV76())freed=true}catch(_){}
+  try{writeStateV154(trimmedStateV154(7));freed=true}catch(_){try{localStorage.removeItem(KEY);freed=true}catch(__){}}
+  return freed;
+};
 function dropAllOrderAttachmentsV76(){
   let removed=0;
   for(let i=localStorage.length-1;i>=0;i--){
@@ -2847,7 +2910,7 @@ async function drawMap(id){
     const line=L.polyline(coords,{weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[20,20]});
     state.routeStats=state.routeStats||{};state.routeStats[date]=state.routeStats[date]||{};
     state.routeStats[date][id]={km:rr?Math.round(rr.distance/100)/10:0,updatedAt:new Date().toISOString()};
-    localStorage.setItem(KEY,JSON.stringify(state));
+    saveStateToStorageV76();
     const el=$('#summary-'+id);if(el&&rr)el.textContent=(el.textContent?el.textContent+' · ':'')+`${Math.round(rr.distance/100)/10} km`;
   }
 }
@@ -2922,7 +2985,7 @@ function renderReports(){
     if(oldPickup&&saved&&oldPickup!==saved.pickupAddress)delete state.geo[oldPickup];
     if(oldDrop&&saved&&oldDrop!==saved.dropAddress)delete state.geo[oldDrop];
     if(saved){delete state.geo[saved.pickupAddress];delete state.geo[saved.dropAddress]}
-    localStorage.setItem(KEY,JSON.stringify(state));setTimeout(()=>{initMaps();renderReports()},50)
+    saveStateToStorageV76();setTimeout(()=>{initMaps();renderReports()},50)
   };
   $('#brandHome').onclick=resetToStartPage;
   $('#reportMonth').onchange=renderReports;$('#refreshReportBtn').onclick=renderReports;
@@ -3072,14 +3135,14 @@ function renderReports(){
       ].some(mezo => String(before[mezo] || '') !== String(saved[mezo] || ''));
       const csakNapValtozott = napValtozott && !egyebValtozott;
       if (csakNapValtozott) {
-        localStorage.setItem(KEY, JSON.stringify(state));
+        saveStateToStorageV76();
         render();
         return;
       }
       /* V110: a mentés után kapott azonosítóhoz tesszük a behúzott fájlokat. */
       flushOrderAttachmentsV110(String(saved.id)).catch(error=>console.warn('[V110] csatolmány',error));
       learnFromOrder(saved,before,draft);
-      localStorage.setItem(KEY,JSON.stringify(state));
+      saveStateToStorageV76();
       render();
     };
   }
@@ -4381,7 +4444,7 @@ async function resyncAllMasterData(showMessage=true){
     if(before!==after)changed++;
   }
   state.geo={};
-  localStorage.setItem(KEY,JSON.stringify(state));
+  saveStateToStorageV76();
   render();
   if(showMessage)alert(`Újraszinkronizálás kész. Frissített fuvarok: ${changed}. Hiányzó beszállítói cím: ${supplierMissing}. Hiányzó projektcím: ${projectMissing}.`);
 }
@@ -4418,7 +4481,7 @@ async function drawMap(id){
     if(drop){pts.push(drop);L.marker(drop,{title:`Lerakó: ${o.projectName||''}`}).addTo(map).bindPopup(`<b>Lerakó · ${esc((typeof orderLabelV145==='function'?orderLabelV145(o):(o?.orderNo||'')))} · ${esc(o.projectName||'Egyedi úticél')}</b><br>${esc(o.dropAddress||'')}${o.recipientName?`<br>Átvevő: ${esc(o.recipientName)}`:''}`)}
   }
   if(home)pts.push(home);
-  if(pts.length){const rr=await roadRoute(pts),coords=rr?rr.geometry.coordinates.map(c=>[c[1],c[0]]):pts;const line=L.polyline(coords,{weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[20,20]});state.routeStats=state.routeStats||{};state.routeStats[date]=state.routeStats[date]||{};state.routeStats[date][id]={km:rr?rr.distance/1000:coords.slice(1).reduce((s,p,i)=>s+dist(coords[i],p),0),minutes:rr?rr.duration/60:0};localStorage.setItem(KEY,JSON.stringify(state))}
+  if(pts.length){const rr=await roadRoute(pts),coords=rr?rr.geometry.coordinates.map(c=>[c[1],c[0]]):pts;const line=L.polyline(coords,{weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[20,20]});state.routeStats=state.routeStats||{};state.routeStats[date]=state.routeStats[date]||{};state.routeStats[date][id]={km:rr?rr.distance/1000:coords.slice(1).reduce((s,p,i)=>s+dist(coords[i],p),0),minutes:rr?rr.duration/60:0};saveStateToStorageV76()}
 }
 
 async function orderGeoProfile(o){return{pickup:await geo(o.pickupAddress),drop:await geo(o.dropAddress)}}
@@ -4537,7 +4600,7 @@ async function vehicleHome(v){return await geo(v?.homeAddress||v?.homeCity||stat
     try { window.V44Online?.syncMasterData?.(state, window.V44Online?.getProfile?.() || null); }
     catch(error){ console.warn('[V103] törzsadat feltöltése', error); }
   };
-  state.orders.forEach(o=>syncOrderFromMasters(o));localStorage.setItem(KEY,JSON.stringify(state));
+  state.orders.forEach(o=>syncOrderFromMasters(o));saveStateToStorageV76();
 })();
 
 /* ==================== V24 ==================== */
@@ -4582,7 +4645,7 @@ async function drawMap(id){
     if(drop)pts.push(drop);
   }
   if(home)pts.push(home);
-  if(pts.length){const rr=await roadRoute(pts),coords=rr?rr.geometry.coordinates.map(c=>[c[1],c[0]]):pts;const line=L.polyline(coords,{weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[20,20]});state.routeStats=state.routeStats||{};state.routeStats[date]=state.routeStats[date]||{};state.routeStats[date][id]={km:rr?rr.distance/1000:coords.slice(1).reduce((s,p,i)=>s+dist(coords[i],p),0),minutes:rr?rr.duration/60:0};localStorage.setItem(KEY,JSON.stringify(state))}
+  if(pts.length){const rr=await roadRoute(pts),coords=rr?rr.geometry.coordinates.map(c=>[c[1],c[0]]):pts;const line=L.polyline(coords,{weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[20,20]});state.routeStats=state.routeStats||{};state.routeStats[date]=state.routeStats[date]||{};state.routeStats[date][id]={km:rr?rr.distance/1000:coords.slice(1).reduce((s,p,i)=>s+dist(coords[i],p),0),minutes:rr?rr.duration/60:0};saveStateToStorageV76()}
 }
 async function v25InsertionCost(order, targetOrders, profiles, home){
   const p=profiles[order.id]||{},pickup=p.pickup,drop=p.drop;
@@ -5035,7 +5098,7 @@ drawMap=async function(id){
     if(e.type==='pickup')L.marker(e.point,{title:`Felrakó: ${e.name}`}).addTo(map).bindPopup(`<b>Felrakó</b><br>${esc(e.name)}<br>${esc(e.address||'')}`);
   }
   if(home)pts.push(home);
-  if(pts.length>1){const rr=await roadRoute(pts),coords=rr?rr.geometry.coordinates.map(c=>[c[1],c[0]]):pts;const line=L.polyline(coords,{weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[20,20]});state.routeStats=state.routeStats||{};state.routeStats[date]=state.routeStats[date]||{};state.routeStats[date][id]={km:rr?rr.distance/1000:coords.slice(1).reduce((s,p,i)=>s+dist(coords[i],p),0),minutes:rr?rr.duration/60:0};localStorage.setItem(KEY,JSON.stringify(state))}
+  if(pts.length>1){const rr=await roadRoute(pts),coords=rr?rr.geometry.coordinates.map(c=>[c[1],c[0]]):pts;const line=L.polyline(coords,{weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[20,20]});state.routeStats=state.routeStats||{};state.routeStats[date]=state.routeStats[date]||{};state.routeStats[date][id]={km:rr?rr.distance/1000:coords.slice(1).reduce((s,p,i)=>s+dist(coords[i],p),0),minutes:rr?rr.duration/60:0};saveStateToStorageV76()}
 };
 
 
@@ -5085,7 +5148,7 @@ function v28ResyncMasterRecord(type,record,oldRecord={}){
     if(!record)return;
     record.manualOverride=true;record.manualEditedAt=new Date().toISOString();
     v28ResyncMasterRecord(type,record,old);
-    localStorage.setItem(KEY,JSON.stringify(state));render();
+    saveStateToStorageV76();render();
     setTimeout(()=>{initMaps();renderReports()},50);
   };
 })();
@@ -5098,7 +5161,7 @@ function v28ResyncMasterRecord(type,record,oldRecord={}){
     previous(e);
     const saved=id?state.orders.find(x=>x.id===id):state.orders[state.orders.length-1];
     v28InvalidateRoutes([...before,saved?.pickupAddress,saved?.dropAddress]);
-    localStorage.setItem(KEY,JSON.stringify(state));render();
+    saveStateToStorageV76();render();
     setTimeout(()=>{initMaps();renderReports()},50);
   };
 })();
@@ -5108,7 +5171,7 @@ const v28OldChangeSupplierLocation=window.changeSupplierLocation;
 window.changeSupplierLocation=(orderId,supplierId)=>{
   const o=state.orders.find(x=>x.id===orderId),old=o?.pickupAddress;
   v28OldChangeSupplierLocation(orderId,supplierId);
-  v28InvalidateRoutes([old,o?.pickupAddress]);localStorage.setItem(KEY,JSON.stringify(state));render();setTimeout(initMaps,50);
+  v28InvalidateRoutes([old,o?.pickupAddress]);saveStateToStorageV76();render();setTimeout(initMaps,50);
 };
 
 // Szigorú beszállítói blokkok: egy sofőr ugyanazon a napon ugyanahhoz a cégnévhez csak egyszer térhet be.

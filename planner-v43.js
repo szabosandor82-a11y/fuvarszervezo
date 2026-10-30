@@ -146,7 +146,7 @@
     if (changed) {
       state.routePlans = {};
       state.routeStats = {};
-      if (typeof KEY !== 'undefined' && typeof localStorage !== 'undefined') localStorage.setItem(KEY, JSON.stringify(state));
+      if (typeof KEY !== 'undefined' && typeof localStorage !== 'undefined') ((typeof saveStateToStorageV76 === 'function') ? saveStateToStorageV76() : localStorage.setItem(KEY, JSON.stringify(state)));
     }
     return changed;
   }

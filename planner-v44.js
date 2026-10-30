@@ -23,7 +23,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '153';
+  const VERSION = '154';
   const CENTRAL_ADDRESS = '2310 Szigetszentmiklós, Kereskedő utca 2.';
   // Alapértelmezett indulási pontok. A törzsadat (SEED_DATA.vehicles) felülírja
   // őket, ha ott meg van adva a sofőr lakóhelye.
@@ -1741,7 +1741,7 @@
       if (result.applied) {
         console.info('[V145] törzsadat frissítve a 2026-10-16-i export szerint', result.counts);
         if (typeof KEY !== 'undefined' && typeof localStorage !== 'undefined') {
-          try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (error) { console.warn('[V145] a törzsadat mentése', error); }
+          try { ((typeof saveStateToStorageV76 === 'function') ? saveStateToStorageV76() : localStorage.setItem(KEY, JSON.stringify(state))); } catch (error) { console.warn('[V145] a törzsadat mentése', error); }
         }
       }
     }

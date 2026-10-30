@@ -2440,7 +2440,7 @@ ${entry.subject || ''}`) || project;
     for (const project of state.projects || []) if (/^(k[oö]zponti rakt[aá]r|szigetszentmikl[oó]s_rakt[aá]r)$/i.test(project.name || '') && nrm(project.address) !== nrm(CENTRAL_WAREHOUSE.address)) { project.address = CENTRAL_WAREHOUSE.address; changed = true; }
     state.settings = state.settings || {};
     if (!state.settings.baseAddress || /keresked[oő] utca(?:\s*$|\s*2)/i.test(state.settings.baseAddress)) state.settings.baseAddress = CENTRAL_WAREHOUSE.address;
-    if (changed) { state.routePlans = {}; state.routeStats = {}; if (typeof KEY !== 'undefined' && typeof localStorage !== 'undefined') localStorage.setItem(KEY, JSON.stringify(state)); }
+    if (changed) { state.routePlans = {}; state.routeStats = {}; if (typeof KEY !== 'undefined' && typeof localStorage !== 'undefined') ((typeof saveStateToStorageV76 === 'function') ? saveStateToStorageV76() : localStorage.setItem(KEY, JSON.stringify(state))); }
     return changed;
   }
 

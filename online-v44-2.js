@@ -40,10 +40,29 @@
     return null;
   };
 
+  /* V154: a bejelentkezés megújított kulcsa EGYSZER használható. Ha a mentése
+     a megtelt tárhely miatt elbukott, a telefon a következő megnyitáskor a
+     már elhasznált régi kulccsal próbálkozott – a szerver elutasította, és a
+     csevegő / frissítés kérései hibára futottak. Ezért a mentés soha nem dob
+     hibát: ha nincs hely, előbb a fuvarok gyorsítótárát engedjük el (az adat a
+     szerveren megvan), és újra próbáljuk. */
   function saveSession(value) {
     session = value || null;
-    if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    else localStorage.removeItem(SESSION_KEY);
+    try {
+      if (!session) { localStorage.removeItem(SESSION_KEY); return; }
+      const text = JSON.stringify(session);
+      try { localStorage.setItem(SESSION_KEY, text); }
+      catch (error) {
+        console.warn('[V154] a bejelentkezés mentéséhez nincs hely – a gyorsítótár felszabadítása', error);
+        try { global.freeStorageForSessionV154?.(); } catch (_) {}
+        try { localStorage.setItem(SESSION_KEY, text); }
+        catch (retryError) {
+          try { localStorage.removeItem(SESSION_KEY); } catch (_) {}
+          try { localStorage.setItem(SESSION_KEY, text); }
+          catch (finalError) { console.error('[V154] a bejelentkezés helyi mentése nem sikerült', finalError); }
+        }
+      }
+    } catch (error) { console.error('[V154] bejelentkezés mentése', error); }
   }
   function restoreSession() {
     for (const key of LEGACY_SESSION_KEYS) localStorage.removeItem(key);
@@ -1278,6 +1297,7 @@
     /* V147 */
     fetchVehiclesV147, pushConfigGetV147, pushConfigSetV147, pushSaveSubscriptionV147, pushSetMutedV147, pushDeleteSubscriptionV147, pushTestV147,
     /* V138 */
+    __saveSessionForTestV154: saveSession,
     chatMyEmailV138, chatFetchV138, chatSendV138, chatUpdateV138, chatReadsV138, chatMarkReadV138, chatUploadV138, chatSignV138
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -343,11 +343,18 @@
       st.initialised = true;
       render();
       await markVisibleRead();
+      st.failsV154 = 0;
     } catch (error) {
       console.warn('[V138] csevegő frissítése', error);
+      /* V154: hiba után (pl. épp megújuló bejelentkezés, ébredő telefon) nem
+         várunk 15–30 másodpercet: hamar újra próbáljuk, fokozatosan lassulva. */
+      st.failsV154 = (st.failsV154 || 0) + 1;
     } finally {
       st.busy = false;
-      schedule();
+      if (st.failsV154) {
+        clearTimeout(st.timer);
+        if (st.started) st.timer = setTimeout(tick, Math.min(FAST_MS * st.failsV154, SLOW_MS));
+      } else schedule();
     }
   }
 
@@ -767,6 +774,10 @@
 
   if (typeof document !== 'undefined' && document.addEventListener) {
     document.addEventListener('visibilitychange', () => { if (!document.hidden && st.started) tick(); });
+    /* V154: iPhone-on a böngésző a háttérben leállítja az időzítőt, és a lap
+       visszatérésekor nem mindig jelez láthatóságváltást (gyorsítótárból
+       visszaállított lap, újra elérhető hálózat) – ezekre is frissítünk. */
+    for (const type of ['pageshow', 'focus', 'online']) global.addEventListener?.(type, () => { if (st.started && !document.hidden) tick(); });
     setInterval(watch, 1500);
   }
 

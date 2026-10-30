@@ -484,7 +484,7 @@
       state.routeStats = state.routeStats || {};
       state.routeStats[date] = state.routeStats[date] || {};
       state.routeStats[date][vehicleId] = { km: route ? route.distance / 1000 : 0, minutes: route ? route.duration / 60 : 0, pickupOnly: true };
-      localStorage.setItem(KEY, JSON.stringify(state));
+      ((typeof saveStateToStorageV76 === 'function') ? saveStateToStorageV76() : localStorage.setItem(KEY, JSON.stringify(state)));
     }
   }
 

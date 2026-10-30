@@ -225,7 +225,7 @@
       state.routePlans = {};
       state.routeStats = {};
       for (const key of Object.keys(state.geo || {})) if (BAD_RYNG_RE.test(key) || /ryng/i.test(key)) delete state.geo[key];
-      localStorage.setItem(KEY, JSON.stringify(state));
+      ((typeof saveStateToStorageV76 === 'function') ? saveStateToStorageV76() : localStorage.setItem(KEY, JSON.stringify(state)));
     }
     return changed;
   }
