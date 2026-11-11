@@ -921,6 +921,52 @@
     });
     return { path, name: file.name || 'fájl', type, size: +file.size || 0 };
   }
+  /* V156: a függő rendelések mellékletei a szerveren (pending-files tároló,
+     csak admin). A fájlnév ékezetei visszafejthetően kódolva kerülnek az
+     útvonalba (a tároló csak ASCII-nevet fogad). */
+  const PENDING_BUCKET_V156 = 'pending-files';
+  const utf8V156 = text => (typeof TextEncoder !== 'undefined') ? new TextEncoder().encode(text)
+    : Uint8Array.from(unescape(encodeURIComponent(text)), c => c.charCodeAt(0));
+  const encNameV156 = name => Array.from(utf8V156(String(name || 'fajl')))
+    .map(b => (b >= 48 && b <= 57) || (b >= 65 && b <= 90) || (b >= 97 && b <= 122) || b === 46 || b === 95 || b === 45
+      ? String.fromCharCode(b) : '!' + b.toString(16).padStart(2, '0')).join('').slice(-200);
+  const decNameV156 = text => {
+    try {
+      const bytes = []; const s = String(text || '');
+      for (let i = 0; i < s.length; i++) {
+        if (s[i] === '!' && /^[0-9a-f]{2}$/.test(s.slice(i + 1, i + 3))) { bytes.push(parseInt(s.slice(i + 1, i + 3), 16)); i += 2; }
+        else bytes.push(s.charCodeAt(i));
+      }
+      return (typeof TextDecoder !== 'undefined') ? new TextDecoder().decode(new Uint8Array(bytes))
+        : decodeURIComponent(escape(String.fromCharCode(...bytes)));
+    } catch (_) { return String(text || ''); }
+  };
+  async function pendingFileUploadV156(folder, name, type, bytes) {
+    const path = `${safeName(folder)}/${encNameV156(name)}`;
+    await rawRequest(`${baseUrl()}/storage/v1/object/${PENDING_BUCKET_V156}/${pathEncode(path)}`, {
+      method: 'POST', body: new Blob([bytes], { type: type || 'application/octet-stream' }),
+      headers: { 'Content-Type': type || 'application/octet-stream', 'x-upsert': 'true' }
+    });
+    return path;
+  }
+  async function pendingFilesListV156(folder) {
+    const prefix = `${safeName(folder)}/`;
+    const rows = await rawRequest(`${baseUrl()}/storage/v1/object/list/${PENDING_BUCKET_V156}`, {
+      method: 'POST', body: { prefix, limit: 100, offset: 0, sortBy: { column: 'name', order: 'asc' } }
+    });
+    return (rows || []).filter(row => row && row.name && row.id)
+      .map(row => ({ path: prefix + row.name, name: decNameV156(row.name), type: row.metadata?.mimetype || '' }));
+  }
+  async function pendingFileBytesV156(path) {
+    const signed = await rawRequest(`${baseUrl()}/storage/v1/object/sign/${PENDING_BUCKET_V156}/${pathEncode(path)}`, { method: 'POST', body: { expiresIn: 600 } });
+    const p = signed?.signedURL || signed?.signedUrl || '';
+    if (!p) throw new Error('A melléklet nem tölthető le.');
+    const url = /^https?:/i.test(p) ? p : p.startsWith('/storage/v1') ? `${baseUrl()}${p}` : `${baseUrl()}/storage/v1${p.startsWith('/') ? '' : '/'}${p}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`A melléklet letöltése nem sikerült (${res.status}).`);
+    return new Uint8Array(await res.arrayBuffer());
+  }
+
   async function chatSignV138(path) {
     const signed = await rawRequest(`${baseUrl()}/storage/v1/object/sign/${CHAT_BUCKET_V138}/${pathEncode(path)}`, { method: 'POST', body: { expiresIn: 3600 } });
     const p = signed?.signedURL || signed?.signedUrl || '';
@@ -1298,6 +1344,7 @@
     fetchVehiclesV147, pushConfigGetV147, pushConfigSetV147, pushSaveSubscriptionV147, pushSetMutedV147, pushDeleteSubscriptionV147, pushTestV147,
     /* V138 */
     __saveSessionForTestV154: saveSession,
+    pendingFileUploadV156, pendingFilesListV156, pendingFileBytesV156, encNameV156, decNameV156,
     chatMyEmailV138, chatFetchV138, chatSendV138, chatUpdateV138, chatReadsV138, chatMarkReadV138, chatUploadV138, chatSignV138
   };
 })(typeof window !== 'undefined' ? window : globalThis);

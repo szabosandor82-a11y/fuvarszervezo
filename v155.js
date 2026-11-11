@@ -73,6 +73,16 @@
   }
   async function orderPdfV155(order) {
     const ids = [...new Set([order?.id, order?.attachFromOrderIdV153, order?.movedFromOrderId].filter(Boolean).map(String))];
+    /* V156: a függő rendelés melléklete a böngésző IndexedDB-tárában van (ha
+       ezen a gépen importálták), különben a szerver pending-files tárolójából
+       töltődik le. Eddig ezt nem néztük – ezért nyílt üres levél. */
+    if (order?.id) { try { await global.v156EnsureLocalFiles?.(order.id); } catch (_) {} }
+    for (const id of ids) {
+      let stored = [];
+      try { stored = (await global.mailAttachmentsV108?.(id)) || []; } catch (_) {}
+      const hitDb = pickPdf(stored.map(f => ({ name: f.name || '', bytes: f.bytes })));
+      if (hitDb?.bytes) return { name: hitDb.name, bytes: hitDb.bytes instanceof Uint8Array ? hitDb.bytes : new Uint8Array(hitDb.bytes) };
+    }
     for (const id of ids) {
       const local = typeof global.loadOrderAttachmentsV73 === 'function' ? global.loadOrderAttachmentsV73(id) : [];
       const hit = pickPdf((local || []).map(f => ({ name: f.name || f.fileName || '', dataUrl: f.dataUrl })));

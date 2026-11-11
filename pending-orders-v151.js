@@ -313,7 +313,10 @@
       d.close(); touch(rec); save(); if (typeof render === 'function') render();
       global.toastV147?.(`${labelOf(rec)} a fuvarok közé került: ${fmt(date)} · ${v.driverName || v.name}`);
       /* V152: a helyben tárolt levél és csatolmány fel a szerverre, hogy a sofőr is megnyithassa */
-      if (hasAttach(order)) setTimeout(async () => {
+      if (hasAttach(order) || rec.order?.pendingFilesV156) setTimeout(async () => {
+        /* V156: a melléklet ezen a gépen is legyen meg (a szerverről), és az
+           új azonosítójú fuvarhoz is (ha a visszatérő példány új id-t kapott) */
+        try { await global.v156EnsureLocalFiles?.(rec.order?.id, order.id); } catch (_) {}
         const r = await global.uploadOrderFilesV152?.(order);
         if (r && !r.ok) global.toastV147?.(`A csatolmány feltöltése nem sikerült (${r.error || 'ismeretlen hiba'}) – Beállítások → Hiányzó mellékletek feltöltése.`);
       }, 2500);
