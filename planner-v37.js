@@ -182,15 +182,16 @@
     }
     state.resolvedBacklog = stillResolved;
 
+    /* V155: a teljesítést (zöld) ez a függvény már NEM számolja a tételekből.
+       Az újrarajzoláskor is lefut, és eddig minden rajzoláskor visszatette a
+       kézzel levett zöldet. A zöldet a pipálás és a kézi gomb állítja. */
     const allReceived = (order.items || []).length > 0 && order.items.every(item => item.received);
-    order.completed = allReceived;
-    order.backlogResolved = allReceived && isBacklogOrder(order);
+    order.backlogResolved = !!order.completed && allReceived && isBacklogOrder(order);
     if (order.backlogResolved) {
       order.completedAt = order.completedAt || new Date().toISOString();
       order.resolvedBacklogAt = order.resolvedBacklogAt || new Date().toISOString();
     } else {
       order.resolvedBacklogAt = '';
-      if (!order.completed) order.completedAt = '';
     }
   }
 
@@ -1404,7 +1405,8 @@
     orders.forEach(order => {
       order.completed = !complete;
       order.completedAt = !complete ? new Date().toISOString() : '';
-      (order.items || []).forEach(item => { item.received = !complete; if (!complete) item.missingQty = ''; });
+      if (!complete) { delete order.manualOffV155; (order.items || []).forEach(item => { item.received = true; item.missingQty = ''; }); }
+      else order.manualOffV155 = new Date().toISOString();
       syncBacklogForOrder(order);
     });
     state.routePlans = state.routePlans || {}; state.routePlans[selectedDate()] = {};
@@ -1419,6 +1421,7 @@
       order.items[index].received = !!value;
       if (value) order.items[index].missingQty = '';
       order.completed = order.items.length > 0 && order.items.every(item => item.received);
+      if (order.completed) delete order.manualOffV155;
       syncBacklogForOrder(order);
       save(false);
       if (document.getElementById('itemsDialog')?.open) openItems(id);
@@ -1430,7 +1433,8 @@
       if (!order) return;
       order.completed = !order.completed;
       order.completedAt = order.completed ? new Date().toISOString() : '';
-      (order.items || []).forEach(item => { item.received = order.completed; if (order.completed) item.missingQty = ''; });
+      if (order.completed) { delete order.manualOffV155; (order.items || []).forEach(item => { item.received = true; item.missingQty = ''; }); }
+      else order.manualOffV155 = new Date().toISOString();
       syncBacklogForOrder(order);
       state.routePlans = state.routePlans || {}; state.routePlans[selectedDate()] = {};
       save();

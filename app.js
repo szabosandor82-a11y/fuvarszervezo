@@ -359,7 +359,7 @@ function saveStateToStorageV76(){
   let lastError=null,dropped=false;
   for(let i=0;i<attempts.length;i++){
     const days=attempts[i];
-    try{writeStateV154(days==null?state:trimmedStateV154(days));window.__storageTrimmedV154=days;return true}
+    try{writeStateV154(trimmedStateV154(days));window.__storageTrimmedV154=days;return true}
     catch(error){
       lastError=error;
       /* a mellékletek kényelmi másolatok (a szerveren megvannak): az első
@@ -384,10 +384,25 @@ function storageRoleV154(){
   try{return localStorage.getItem('fuvarszervezo_last_role_v146')||''}catch(_){return''}
 }
 function trimmedStateV154(days){
-  const d=new Date(Date.now()-days*86400000),limit=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  const unsynced=o=>!o.onlineUpdatedAt||(o.localUpdatedAt&&Date.parse(o.localUpdatedAt)>Date.parse(o.onlineUpdatedAt))||!!o.placementV148?.pending;
-  const keep=o=>String(o.scheduleDate||'')>=limit||unsynced(o);
-  const orders=(state.orders||[]).filter(keep);
+  /* V155: a „fel nem töltött” fuvart a szinkronizálás nyilvántartása adja
+     (orderUnsyncedV155). A V154 időbélyeg-alapú vizsgálata nem működött: a
+     betöltés utáni első mentés minden fuvart frissnek jelölt, így semmi nem
+     maradt ki. A már feltöltött fuvarból a levél SZÖVEGE sem kerül a helyi
+     mentésbe (a szerveren megvan, betöltéskor visszajön) – ez a fuvaradat
+     fele volt. */
+  const unsynced=typeof window.orderUnsyncedV155==='function'
+    ?o=>window.orderUnsyncedV155(o)
+    :o=>!o.onlineUpdatedAt||(o.localUpdatedAt&&Date.parse(o.localUpdatedAt)>Date.parse(o.onlineUpdatedAt))||!!o.placementV148?.pending;
+  let limit='';
+  if(days!=null){const d=new Date(Date.now()-days*86400000);limit=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+  const orders=[];
+  for(const o of state.orders||[]){
+    const dirty=unsynced(o);
+    if(limit&&String(o.scheduleDate||'')<limit&&!dirty)continue;
+    if(!dirty&&o.sourceMail&&o.sourceMail.body)orders.push({...o,sourceMail:{...o.sourceMail,body:''},sourceMailStrippedV155:true});
+    else orders.push(o);
+  }
+  if(!limit)return {...state,orders};
   const ids=new Set(orders.map(o=>String(o.id)));
   const byDate=obj=>{if(!obj||typeof obj!=='object')return obj;const out={};for(const [k,v] of Object.entries(obj))if(!/^\d{4}-\d{2}-\d{2}$/.test(k)||k>=limit)out[k]=v;return out};
   return {...state,orders,
@@ -396,6 +411,17 @@ function trimmedStateV154(days){
     routePlans:byDate(state.routePlans),routeStats:byDate(state.routeStats),
     geo:days<=14?{}:state.geo};
 }
+/* V155: a régi verziók tárolt adatai (fuvarszervezo_v2, _v3 …) feleslegesek. */
+function cleanupOldKeysV155(){
+  try{
+    const old=[];
+    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(/^fuvarszervezo_v\d+$/.test(k||'')&&k!==KEY)old.push(k)}
+    old.forEach(k=>localStorage.removeItem(k));
+    return old.length;
+  }catch(_){return 0}
+}
+window.cleanupOldKeysV155=cleanupOldKeysV155;
+cleanupOldKeysV155();
 function writeStateV154(obj){localStorage.setItem(KEY,JSON.stringify(obj))}
 /* Mekkora helyet foglalnak a kulcsok (karakter) – hibakereséshez. */
 function storageReportV154(){
@@ -1345,7 +1371,9 @@ async function balance(){const active=activeVehicles();if(!active.length)return 
 const homes={};for(const v of active)homes[v.id]=await vehicleHome(v);const loads=Object.fromEntries(active.map(v=>[v.id,orders.filter(o=>o.vehicleId===v.id&&o.longMaterialReason).length*2]));for(const o of orders.filter(o=>!o.longMaterialReason)){const p=await geo(o.pickupAddress||o.dropAddress);const ranked=active.map(v=>({v,score:(loads[v.id]||0)*12+dist(homes[v.id],p)})).sort((a,b)=>a.score-b.score);o.vehicleId=ranked[0].v.id;loads[o.vehicleId]=(loads[o.vehicleId]||0)+2}active.forEach(v=>dayOrders(v.id).forEach((o,i)=>o.sequence=i+1));save();alert('A fuvarokat az aktív autók, a sofőrök indulási helye és a terhelés alapján szétosztottam.')}
 async function optimizeAll(){for(const v of activeVehicles()){const orders=dayOrders(v.id);let current=await geo(state.settings.baseAddress),left=[];for(const o of orders)left.push({o,p:await geo(o.dropAddress)});const ordered=[];while(left.length){left.sort((a,b)=>dist(current,a.p)-dist(current,b.p));const n=left.shift();ordered.push(n.o);if(n.p)current=n.p}ordered.forEach((o,i)=>o.sequence=i+1)}save()}
 async function updateSummaries(){for(const v of activeVehicles()){const orders=dayOrders(v.id),pick=new Set(orders.map(o=>norm(o.pickupAddress)).filter(Boolean)),drop=new Set(orders.map(o=>norm(o.dropAddress)).filter(Boolean));const el=$('#summary-'+v.id);if(el)el.textContent=`${pick.size} felrakó · ${drop.size} lerakó · kb. ${Math.max(0,orders.length*35)} perc rakodás`}}
-function toggleComplete(id){const o=state.orders.find(x=>x.id===id);if(!o)return;o.completed=!o.completed;o.completedAt=o.completed?new Date().toISOString():'';(o.items||[]).forEach(i=>i.received=o.completed);save()}
+/* V155: a kézi levétel a tételek pipáihoz nem nyúl, és megjegyzi, hogy kézzel
+   vették le – az automatikus számítás (újrarajzolás, szerver) nem teszi vissza. */
+function toggleComplete(id){const o=state.orders.find(x=>x.id===id);if(!o)return;o.completed=!o.completed;o.completedAt=o.completed?new Date().toISOString():'';if(o.completed){delete o.manualOffV155;(o.items||[]).forEach(i=>i.received=true)}else o.manualOffV155=new Date().toISOString();save()}
 /* ===== V107 – A 16 ÓRÁS ÁTVITEL TÖRÖLVE =============================
 
    EZ OKOZTA, HOGY ELŐZŐ NAPI FUVAROK JELENTEK MEG AZ AKTUÁLIS NAPON.
@@ -1904,7 +1932,7 @@ window.editOrder=id=>{
   }
   document.querySelector('#orderDialog .v148-history-btn')?.classList.toggle('hidden',!id);
 };
-$('#orderForm').onsubmit=e=>{e.preventDefault();if(!syncScheduleDate())return alert('Adj meg érvényes szállítási dátumot.');if(!syncDateParts('deadline',false))return alert('Adj meg érvényes kért szállítási határidőt, vagy hagyd üresen.');const old=state.orders.find(x=>x.id===$('#orderId').value),s=findSupplierByInput($('#supplierSearch').value),p=findProjectByInput($('#projectSearch').value),r=state.recipients.find(x=>x.id===$('#recipientId').value);const o={...old,id:old?.id||uid(),scheduleDate:$('#scheduleDate').value,vehicleId:$('#vehicleId').value||marioVehicle()?.id||'',orderNo:last5($('#orderNo').value),requestedDeadline:$('#deadline').value,supplierId:s?.id||'',pickupName:s?.name||$('#supplierSearch').value.trim()||old?.pickupName||'',pickupAddress:$('#pickupAddress').value,pickupNote:$('#pickupNote').value,projectId:p?.id||'',projectName:p?.name||$('#projectSearch').value.trim()||'Egyedi úticél',dropAddress:$('#dropAddress').value,recipientId:p?(r?.id||''):'',recipientName:$('#recipientName').value.trim()||r?.name||'',recipientPhone:$('#recipientPhone').value,recipientEmail:$('#recipientEmail').value,pickupFrom:$('#pickupFrom').value,pickupTo:$('#pickupTo').value,dropFrom:$('#dropFrom').value,dropTo:$('#dropTo').value,note:$('#orderNote').value,
+$('#orderForm').onsubmit=e=>{e.preventDefault();if(!syncScheduleDate())return alert('Adj meg érvényes szállítási dátumot.');if(!syncDateParts('deadline',false))return alert('Adj meg érvényes kért szállítási határidőt, vagy hagyd üresen.');const old=state.orders.find(x=>x.id===$('#orderId').value),s=findSupplierByInput($('#supplierSearch').value),p=findProjectByInput($('#projectSearch').value),r=state.recipients.find(x=>x.id===$('#recipientId').value);const o={...old,...(old?{}:{linkFromV155:new Date().toISOString()}),id:old?.id||uid(),scheduleDate:$('#scheduleDate').value,vehicleId:$('#vehicleId').value||marioVehicle()?.id||'',orderNo:last5($('#orderNo').value),requestedDeadline:$('#deadline').value,supplierId:s?.id||'',pickupName:s?.name||$('#supplierSearch').value.trim()||old?.pickupName||'',pickupAddress:$('#pickupAddress').value,pickupNote:$('#pickupNote').value,projectId:p?.id||'',projectName:p?.name||$('#projectSearch').value.trim()||'Egyedi úticél',dropAddress:$('#dropAddress').value,recipientId:p?(r?.id||''):'',recipientName:$('#recipientName').value.trim()||r?.name||'',recipientPhone:$('#recipientPhone').value,recipientEmail:$('#recipientEmail').value,pickupFrom:$('#pickupFrom').value,pickupTo:$('#pickupTo').value,dropFrom:$('#dropFrom').value,dropTo:$('#dropTo').value,note:$('#orderNote').value,
   /* V73: a megjegyzés szerkesztésekor a RÉGI importált szöveget is
      felülírjuk, különben a buborékban a két érték egymás mellett maradna
      ("ÁTÍRT szöveg · régi importált szöveg"), és úgy tűnne, mintha nem
@@ -4103,7 +4131,7 @@ function renderBacklog() {
 function undatedLookbackDaysV139(){return 30}
 function orderHeaderV139(o){
   const h={...o};
-  for(const k of ['items','deliveryReports','deliveryReportsDeletedV133','sourceMailReportIdsV135','sourceUploadFailedV135','sourceUploadPartialV136','completedAtV111','completedUndoneAtV132','threadV115','movedByDriverV121','localUpdatedAt','onlineUpdatedAt'])delete h[k];
+  for(const k of ['items','deliveryReports','deliveryReportsDeletedV133','sourceMailReportIdsV135','sourceUploadFailedV135','sourceUploadPartialV136','completedAtV111','completedUndoneAtV132','threadV115','threadDeletedV115','sourceMail','sourceMailStrippedV155','movedByDriverV121','localUpdatedAt','onlineUpdatedAt'])delete h[k];
   return h;
 }
 function currentWorkdayV139(){return typeof normalizeWorkday==='function'?normalizeWorkday(today()):today()}

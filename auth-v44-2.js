@@ -93,6 +93,17 @@
     const id = String(order.id);
     return inflightV132.has(id) || syncedV132.get(id) !== orderKeyV132(order);
   }
+  /* V155: fel nem töltött-e a fuvar? A helyi tároló szűkítése ehhez igazodik.
+     Az időbélyeg (localUpdatedAt) erre nem jó: a betöltés utáni első mentés
+     minden fuvarra a mostani időt írja. Fel nem töltött: a szerver még nem
+     ismeri, függő áthelyezése van, vagy (az egyeztetés után) változott. */
+  global.orderUnsyncedV155 = order => {
+    const id = String(order?.id || '');
+    if (!id || !knownServerIdsV137.has(id)) return true;
+    if (order.placementV148?.pending) return true;
+    return syncedV132.size > 0 && isDirtyV132(order);
+  };
+  global.rememberServerIdsV155 = ids => rememberServerIdsV137(ids);
   /* Egyeztetett állapot rögzítése. A `keepDirty` halmazban lévő fuvarok
      korábbi kulcsa megmarad, hogy továbbra is felmenjenek. */
   function resetSnapshotV132(keepDirty = new Set()) {
@@ -1671,10 +1682,12 @@
       order.completed = true;
       order.completedAtV111 = new Date().toISOString();
       order.completedAt = order.completedAtV111;
+      delete order.manualOffV155;
     } else {
       if (!confirm('Visszavonjuk a teljesítést?')) return;
       order.completed = false;
       order.completedAt = '';
+      order.manualOffV155 = new Date().toISOString();
       delete order.completedAtV111;
       order.completedUndoneAtV132 = new Date().toISOString();
     }

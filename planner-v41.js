@@ -691,8 +691,27 @@
     return score;
   }
 
+  /* V155: ha egy beszállító neve egyben projektnév is (pl. Budapest_Cosmo_Residence
+     a beszállítók között is szerepel), a felismerés figyelmen kívül hagyja –
+     különben a rendelés-PDF „Raktár:” sora miatt a projekt lett a felrakó.
+     Csak a projektkód formájú név (aláhúzással) esik ki; a cégnév (Kft., Zrt. …) kivétel: sok cég beszállító ÉS projekt
+     (megrendelő) is egyben, pl. FOGARASI ÉP-GÉPÉSZ Kft. – ők maradnak. */
+  const COMPANY_FORM_V155 = /(^|[^a-z0-9])(kft|zrt|nyrt|bt|kkt|ev|ltd|gmbh|sro|kg|ag|co)([^a-z0-9]|$)/i;
+  function supplierCandidatesV155() {
+    if (typeof state === 'undefined') return [];
+    const projectNames = new Set((state.projects || []).map(item => nrm(item.name || '')).filter(Boolean));
+    return (state.suppliers || []).filter(item => {
+      const name = String(item.name || '');
+      if (!projectNames.has(nrm(name))) return true;
+      /* csak a projektkód formájú név (Város_Projekt) esik ki – a KRPR-hez
+         hasonló raktárnevek és a cégek maradnak */
+      if (!name.includes('_')) return true;
+      return COMPANY_FORM_V155.test(name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\./g, ''));
+    });
+  }
+
   function bestSupplier(sourceText) {
-    const suppliers = typeof state !== 'undefined' ? state.suppliers || [] : [];
+    const suppliers = supplierCandidatesV155();
     const explicit = extractExplicitPickup(sourceText);
     if (explicit?.name && explicit?.address) {
       /* V79 – A BIZONYLATRÓL CSAK A CÉGNÉV SZÁMÍT, A CÍM A TÖRZSADATBÓL JÖN
@@ -782,7 +801,7 @@
     const headerText = lines.join('\n');
     const sourceNorm = nrm(headerText);
     if (!sourceNorm) return null;
-    const suppliers = typeof state !== 'undefined' ? state.suppliers || [] : [];
+    const suppliers = supplierCandidatesV155();
     const candidates = suppliers.map(supplier => {
       let score = supplierScore(supplier, sourceNorm);
       const nameNorm = nrm(supplier.name || '');
@@ -2151,6 +2170,8 @@ ${entry.subject || ''}`) || project;
     return {
       id: id(), scheduleDate: normalizeWorkdayISO(entry.scheduleDate || selectedImportDate() || tomorrowISO()), vehicleId: entry.driverChoiceV150 || (isMartin ? (martin?.id || '') : (mario?.id || '')), sequence: 999,
       importDriverChosenV150: !!entry.driverChoiceV150,
+      /* V155: új felvétel – a korábban már teljesült példány nem pipálja ki */
+      linkFromV155: new Date().toISOString(),
       orderNo: entry.orderNo || sourceNos.join(', '), sourceOrderNos: sourceNos, fullOrderRefs: entry.fullOrderRefs || [], orderType: entry.orderType || 'SR0', isReturn: !!entry.isReturn,
       /* V145: ha a felrakó nincs a törzsben, a beírt név és cím marad –
          eddig ilyenkor kiürült, és a buborék „Nincs megadva” lett. */
@@ -2464,6 +2485,7 @@ ${entry.subject || ''}`) || project;
     }
     state.resolvedBacklog = stillResolved;
     order.completed = (order.items || []).length > 0 && order.items.every(item => item.received);
+    if (order.completed) delete order.manualOffV155;
     order.backlogResolved = order.completed && ((state.resolvedBacklog || []).some(record => record.targetOrderId === order.id) || !!order.movedFromOrderId);
     if (order.backlogResolved) order.resolvedBacklogAt = order.resolvedBacklogAt || new Date().toISOString();
   }
@@ -2555,6 +2577,7 @@ ${entry.subject || ''}`) || project;
     ensureSupplierMaster,
     migrateV41MasterData,
     syncBacklogItemState,
+    supplierCandidatesV155,
     parseDroppedFile,
     processFiles,
     commitImport,

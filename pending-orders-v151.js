@@ -157,6 +157,7 @@
         <button type="button" class="v151-primary" onclick="v151Promote('${id}')">Megjött → fuvarok közé</button>
         <button type="button" onclick="v151Retry('${id}')">Nem jött meg → új dátum</button>
         ${hasAttach(rec.order) ? `<button type="button" onclick="openSourceMail('${esc(rec.order.id)}')">📎 Levél / csatolmány</button>` : ''}
+        <button type="button" title="Hátralék információ – Outlook-levél a rendelés PDF-jével" onclick="v155MailPending('${id}')">✉ E-mail</button>
         <button type="button" onclick="v151EditPending('${id}')">Szerkesztés</button>
         <button type="button" class="v151-danger" onclick="v151DeletePending('${id}')">Törlés</button>
       </div>
@@ -342,7 +343,7 @@
      marad. A levél és a csatolmány az eredeti fuvarról nyílik meg. */
   function cleanCopyV153(order) {
     const { placementV148, localUpdatedAt, onlineUpdatedAt, threadV115, threadDeletedV115, deliveryReports, deliveryReportsDeletedV133,
-      removedItemIdsV153, midnightDoneV153, completedByV153, completedAtV111, completedUndoneAtV132, fromPendingV151, ...copy } = order;
+      removedItemIdsV153, midnightDoneV153, completedByV153, completedAtV111, completedUndoneAtV132, fromPendingV151, linkFromV155, manualOffV155, ...copy } = order;
     copy.id = uid();
     copy.attachFromOrderIdV153 = order.attachFromOrderIdV153 || order.id;
     copy.completed = false; copy.completedAt = '';
